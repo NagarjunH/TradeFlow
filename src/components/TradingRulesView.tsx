@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Shield, 
   Calendar as CalendarIcon, 
@@ -26,6 +26,7 @@ import {
 import { type Trade, type DayRecord, type AppSettings } from '../db/db';
 import { DatePickerDropdown } from './DatePickerDropdown';
 import { auditApi } from '../lib/api/auditApi';
+import { dailyApi } from '../lib/api/dailyApi';
 
 interface TradingRulesViewProps {
   currentDate?: string;
@@ -42,6 +43,7 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
   currentDate = '2026-10-05',
   onDateChange,
   trades,
+  days,
   settings,
   onRefresh,
   userId,
@@ -49,20 +51,51 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
   // Navigation tabs state
   const [activeTab, setActiveTab] = useState('daily-checklist');
 
-  // Checklist items state (Default all 7 checked matching user mockup)
+  // Checklist items state (Default unchecked until user saves or checks them)
   const [checklist, setChecklist] = useState({
-    rule1: true, // Risk 0.5 - 1% per trade
-    rule2: true, // Daily max loss limit respected
-    rule3: true, // SL pre-defined & never widened
-    rule4: true, // No setup = No trade
-    rule5: true, // SMC sequence verified (HTF -> Liquidity -> MSS -> POI)
-    rule6: true, // No FOMO / Revenge trading
-    rule7: true, // Economic calendar checked
+    rule1: false, // Risk 0.5 - 1% per trade
+    rule2: false, // Daily max loss limit respected
+    rule3: false, // SL pre-defined & never widened
+    rule4: false, // No setup = No trade
+    rule5: false, // SMC sequence verified (HTF -> Liquidity -> MSS -> POI)
+    rule6: false, // No FOMO / Revenge trading
+    rule7: false, // Economic calendar checked
   });
 
   const [dailyNotes, setDailyNotes] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+
+  // Active date from props
+  const activeDate = currentDate || '2026-10-05';
+
+  // Sync checklist state whenever activeDate or days changes
+  useEffect(() => {
+    const todayRecord = days.find((d) => d.date === activeDate);
+    if (todayRecord && todayRecord.rules) {
+      setChecklist({
+        rule1: Boolean(todayRecord.rules.riskManagement),
+        rule2: Boolean(todayRecord.rules.dailyLossLimit),
+        rule3: Boolean(todayRecord.rules.slPredefined),
+        rule4: Boolean(todayRecord.rules.noAveragingDown),
+        rule5: Boolean(todayRecord.rules.htfContextClear),
+        rule6: Boolean(todayRecord.rules.smcSequenceFollowed),
+        rule7: Boolean(todayRecord.rules.noEmotionalTrade),
+      });
+      setDailyNotes(todayRecord.closingNotes || '');
+    } else {
+      setChecklist({
+        rule1: false,
+        rule2: false,
+        rule3: false,
+        rule4: false,
+        rule5: false,
+        rule6: false,
+        rule7: false,
+      });
+      setDailyNotes('');
+    }
+  }, [activeDate, days]);
 
   // Violation tracker state
   const [selectedViolation, setSelectedViolation] = useState<string | null>(null);
@@ -78,13 +111,10 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
   const [maxOpenTrades, setMaxOpenTrades] = useState('1');
   const [hardLockToggle, setHardLockToggle] = useState(true);
 
-  // Active date from props
-  const activeDate = currentDate || '2026-10-05';
+  // Dynamic trades calculation for active date
   const todayTrades = trades.filter((t) => t.date === activeDate);
-  const todayTradesCount = todayTrades.length > 0 ? todayTrades.length : (activeDate === '2026-10-05' ? 3 : 0);
-  const todayPnlR = todayTrades.length > 0 
-    ? todayTrades.reduce((acc, t) => acc + (t.rMultiple || 0), 0) 
-    : (activeDate === '2026-10-05' ? 1.5 : 0);
+  const todayTradesCount = todayTrades.length;
+  const todayPnlR = todayTrades.reduce((acc, t) => acc + (t.rMultiple || 0), 0);
 
   const formatDateDisplay = (isoDate: string) => {
     try {
@@ -129,16 +159,36 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
   const handleSaveDailyRules = async () => {
     try {
       if (userId) {
+        // Save directly to Supabase daily_records table
+        await dailyApi.upsert({
+          date: activeDate,
+          rules: {
+            riskManagement: checklist.rule1,
+            dailyLossLimit: checklist.rule2,
+            slPredefined: checklist.rule3,
+            noAveragingDown: checklist.rule4,
+            htfContextClear: checklist.rule5,
+            smcSequenceFollowed: checklist.rule6,
+            noEmotionalTrade: checklist.rule7,
+            newsChecked: false,
+          },
+          isNoTradeDay: false,
+          isDayClosed: false,
+          closingNotes: dailyNotes,
+          updatedAt: new Date().toISOString(),
+        }, userId);
+
         await auditApi.add(
           userId,
           'UPDATE',
-          `Saved daily checklist: ${checkedCount}/7 rules followed (${percentage}%). Notes: ${dailyNotes || 'None'}`
+          `Saved daily checklist for ${activeDate}: ${checkedCount}/7 rules followed (${percentage}%). Notes: ${dailyNotes || 'None'}`
         );
       }
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2500);
       onRefresh();
-    } catch {
+    } catch (err) {
+      console.error('Failed to save daily checklist:', err);
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2500);
     }

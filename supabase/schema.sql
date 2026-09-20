@@ -155,6 +155,7 @@ CREATE INDEX idx_audit_user ON public.audit_logs(user_id, created_at DESC);
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can read own audit logs"   ON public.audit_logs FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own audit logs" ON public.audit_logs FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete own audit logs" ON public.audit_logs FOR DELETE USING (auth.uid() = user_id);
 
 -- ============================================================
 -- 7. AUTO-CREATE PROFILE ON SIGNUP

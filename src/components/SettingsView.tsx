@@ -107,8 +107,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         throw new Error('Email does not match current logged-in account.');
       }
 
-      // 2. Wipe all user data from Supabase
-      await Promise.all([
+      // 2. Wipe all user data from Supabase (trades, daily checklist records, violations, audit logs)
+      await Promise.allSettled([
         supabase.from('trades').delete().eq('user_id', userId),
         supabase.from('daily_records').delete().eq('user_id', userId),
         supabase.from('rule_violations').delete().eq('user_id', userId),
@@ -122,7 +122,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         .eq('id', userId);
 
       // 4. Log the reset event
-      await auditApi.add(userId, 'RESET', 'User wiped all trading journal records and reset balance.');
+      try {
+        await auditApi.add(userId, 'RESET', 'User wiped all trading journal records and reset balance.');
+      } catch (logErr) {
+        console.warn('Could not write reset audit log:', logErr);
+      }
 
       setResetSuccess(true);
       setTimeout(() => {

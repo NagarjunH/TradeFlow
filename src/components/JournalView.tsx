@@ -62,6 +62,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   trades,
   settings: _settings,
   onEditTrade,
+  onOpenQuickTrade,
   onViewImage,
   selectedDateFilter,
   onClearDateFilter,
@@ -76,220 +77,6 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [filterExitType, setFilterExitType] = useState<string>('ALL');
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
-
-  // Exact 10 prototype rows matching media_1789918080937.png
-  const mockScreenshotTrades: TradeRow[] = [
-    {
-      id: 1,
-      num: 1,
-      dateTime: '05 Oct 10:12',
-      rawDate: '2026-10-05',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'BUY' as const,
-      entry: '2650.32',
-      sl: '2646.10',
-      tp: '2658.80',
-      pnl: '+138.20',
-      r: '+2.5R',
-      pips: 85,
-      exitType: 'TP' as const,
-      emotion: 'Calm',
-      execution: 'Clean' as const,
-      setup: 'MSS + FVG',
-      htf: 'Bullish' as const,
-      note: 'Perfect execution',
-    },
-    {
-      id: 2,
-      num: 2,
-      dateTime: '05 Oct 11:03',
-      rawDate: '2026-10-05',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'SELL' as const,
-      entry: '2658.10',
-      sl: '2662.80',
-      tp: '2650.40',
-      pnl: '-55.40',
-      r: '-1R',
-      pips: 40,
-      exitType: 'SL' as const,
-      emotion: 'Calm',
-      execution: 'Clean' as const,
-      setup: 'Liquidity',
-      htf: 'Bearish' as const,
-      note: 'SL hit as planned',
-    },
-    {
-      id: 3,
-      num: 3,
-      dateTime: '04 Oct 14:28',
-      rawDate: '2026-10-04',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'SELL' as const,
-      entry: '2654.00',
-      sl: '2656.50',
-      tp: '2651.50',
-      pnl: '-55.10',
-      r: '-1R',
-      pips: 25,
-      exitType: 'SL' as const,
-      emotion: 'FOMO',
-      execution: 'Violation' as const,
-      setup: 'No Setup',
-      htf: 'Bearish' as const,
-      note: 'Chased entry',
-    },
-    {
-      id: 4,
-      num: 4,
-      dateTime: '04 Oct 16:05',
-      rawDate: '2026-10-04',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'BUY' as const,
-      entry: '2650.30',
-      sl: '2648.30',
-      tp: '2652.50',
-      pnl: '+54.80',
-      r: '+1R',
-      pips: 20,
-      exitType: 'TP' as const,
-      emotion: 'Focused',
-      execution: 'Clean' as const,
-      setup: 'FVG',
-      htf: 'Bullish' as const,
-      note: 'Good patience',
-    },
-    {
-      id: 5,
-      num: 5,
-      dateTime: '03 Oct 10:22',
-      rawDate: '2026-10-03',
-      pair: 'XAUUSD',
-      lot: '0.02',
-      order: 'BUY' as const,
-      entry: '2648.20',
-      sl: '2645.50',
-      tp: '2654.00',
-      pnl: '+162.30',
-      r: '+3R',
-      pips: 60,
-      exitType: 'TP' as const,
-      emotion: 'Calm',
-      execution: 'Clean' as const,
-      setup: 'MSS',
-      htf: 'Bullish' as const,
-      note: 'Captured full move',
-    },
-    {
-      id: 6,
-      num: 6,
-      dateTime: '03 Oct 13:40',
-      rawDate: '2026-10-03',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'SELL' as const,
-      entry: '2652.10',
-      sl: '2654.10',
-      tp: '2650.10',
-      pnl: '-110.60',
-      r: '-1R',
-      pips: 20,
-      exitType: 'SL' as const,
-      emotion: 'Revenge',
-      execution: 'Violation' as const,
-      setup: 'Liquidity',
-      htf: 'Bearish' as const,
-      note: 'Revenge trade',
-    },
-    {
-      id: 7,
-      num: 7,
-      dateTime: '02 Oct 15:18',
-      rawDate: '2026-10-02',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'BUY' as const,
-      entry: '2646.80',
-      sl: '2644.80',
-      tp: '2646.80',
-      pnl: '0.00',
-      r: 'BE',
-      pips: 0,
-      exitType: 'BE' as const,
-      emotion: 'Calm',
-      execution: 'Clean' as const,
-      setup: 'POI',
-      htf: 'Neutral' as const,
-      note: 'Moved to BE',
-    },
-    {
-      id: 8,
-      num: 8,
-      dateTime: '02 Oct 09:05',
-      rawDate: '2026-10-02',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'SELL' as const,
-      entry: '2644.50',
-      sl: '2646.50',
-      tp: '2640.50',
-      pnl: '+109.20',
-      r: '+2R',
-      pips: 40,
-      exitType: 'TP' as const,
-      emotion: 'Focused',
-      execution: 'Clean' as const,
-      setup: 'MSS + FVG',
-      htf: 'Bearish' as const,
-      note: 'Nice setup',
-    },
-    {
-      id: 9,
-      num: 9,
-      dateTime: '01 Oct 11:22',
-      rawDate: '2026-10-01',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'BUY' as const,
-      entry: '2638.20',
-      sl: '2635.20',
-      tp: '2644.20',
-      pnl: '+165.10',
-      r: '+3R',
-      pips: 60,
-      exitType: 'TP' as const,
-      emotion: 'Calm',
-      execution: 'Clean' as const,
-      setup: 'FVG',
-      htf: 'Bullish' as const,
-      note: 'Textbook trade',
-    },
-    {
-      id: 10,
-      num: 10,
-      dateTime: '01 Oct 14:10',
-      rawDate: '2026-10-01',
-      pair: 'XAUUSD',
-      lot: '0.01',
-      order: 'SELL' as const,
-      entry: '2642.00',
-      sl: '2644.50',
-      tp: '2638.00',
-      pnl: '-82.40',
-      r: '-1.5R',
-      pips: 35,
-      exitType: 'Manual' as const,
-      emotion: 'Frustrated',
-      execution: 'Violation' as const,
-      setup: 'No Setup',
-      htf: 'Bearish' as const,
-      note: 'Should have waited',
-    },
-  ];
 
   // Helper for date formatting
   const formatTradeDate = (dateStr?: string) => {
@@ -361,8 +148,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
     rawTrade: t,
   }));
 
-  // Active pool of trades: prefer live database trades, fallback to mock only if database is brand new and empty
-  let poolOfTrades: TradeRow[] = dbMappedTrades.length > 0 ? dbMappedTrades : mockScreenshotTrades;
+  // Active pool of trades: only live cloud database trades
+  let poolOfTrades: TradeRow[] = dbMappedTrades;
   if (selectedDateFilter) {
     poolOfTrades = poolOfTrades.filter((t) => t.rawDate === selectedDateFilter);
   }
@@ -732,7 +519,37 @@ export const JournalView: React.FC<JournalViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E7E0D6]/60 dark:divide-[#242D3D]">
-              {paginatedTrades.map((t, idx) => {
+              {paginatedTrades.length === 0 ? (
+                <tr>
+                  <td colSpan={19} className="py-16 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#10B981] flex items-center justify-center shadow-xs">
+                        <BookOpen className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                          {trades.length === 0 ? 'No Trades In Journal' : 'No Trades Match Your Filters'}
+                        </h4>
+                        <p className="text-xs text-[#786F66] dark:text-[#94A3B8] max-w-sm mt-0.5">
+                          {trades.length === 0
+                            ? 'Your journal is clean. Click "+ Add Trade" or press N to record your first trade into Supabase cloud.'
+                            : 'Try adjusting your filter settings or reset filters to see your recorded trades.'}
+                        </p>
+                      </div>
+                      {trades.length === 0 && onOpenQuickTrade && (
+                        <button
+                          type="button"
+                          onClick={onOpenQuickTrade}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#10B981] hover:bg-[#059669] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+                        >
+                          + Add Trade
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedTrades.map((t, idx) => {
                 const isWin = t.r.startsWith('+');
                 const isLoss = t.r.startsWith('-');
 
@@ -937,7 +754,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>
