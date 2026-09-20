@@ -304,6 +304,39 @@ export const JournalView: React.FC<JournalViewProps> = ({
     return dateStr;
   };
 
+  // Dynamic KPI calculation from live trades
+  const perf = React.useMemo(() => {
+    const total = trades.length;
+    const wins = trades.filter((t) => (t.rMultiple || 0) > 0);
+    const losses = trades.filter((t) => (t.rMultiple || 0) < 0);
+    const bes = trades.filter((t) => (t.rMultiple || 0) === 0);
+    const winRate = total > 0 ? (wins.length / total) * 100 : 0;
+    const netPnl = trades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+    const netR = trades.reduce((sum, t) => sum + (t.rMultiple || 0), 0);
+    const totalWinR = wins.reduce((sum, t) => sum + (t.rMultiple || 0), 0);
+    const totalLossR = Math.abs(losses.reduce((sum, t) => sum + (t.rMultiple || 0), 0));
+    const profitFactor = totalLossR > 0 ? totalWinR / totalLossR : totalWinR > 0 ? 99 : 1.0;
+    const avgWinR = wins.length > 0 ? totalWinR / wins.length : 0;
+    const avgLossR = losses.length > 0 ? totalLossR / losses.length : 0;
+    const cleanTrades = trades.filter((t) => t.execution === 'CLEAN').length;
+    const disciplineScore = total > 0 ? Math.round((cleanTrades / total) * 100) : 100;
+
+    return {
+      total,
+      wins: wins.length,
+      losses: losses.length,
+      bes: bes.length,
+      winRate,
+      netPnl,
+      netR,
+      profitFactor,
+      avgWinR,
+      avgLossR,
+      cleanTrades,
+      disciplineScore,
+    };
+  }, [trades]);
+
   // Convert db trades
   const dbMappedTrades: TradeRow[] = trades.map((t, idx) => ({
     id: t.id || idx + 1,
@@ -328,23 +361,10 @@ export const JournalView: React.FC<JournalViewProps> = ({
     rawTrade: t,
   }));
 
-  const hasOctInDb = dbMappedTrades.some((t) => t.rawDate.startsWith('2026-10'));
-
-  // Active pool of trades based on date filter:
-  let poolOfTrades: TradeRow[] = mockScreenshotTrades;
+  // Active pool of trades: prefer live database trades, fallback to mock only if database is brand new and empty
+  let poolOfTrades: TradeRow[] = dbMappedTrades.length > 0 ? dbMappedTrades : mockScreenshotTrades;
   if (selectedDateFilter) {
-    poolOfTrades = dbMappedTrades.some(t => t.rawDate === selectedDateFilter)
-      ? dbMappedTrades.filter(t => t.rawDate === selectedDateFilter)
-      : mockScreenshotTrades.filter(t => t.rawDate === selectedDateFilter);
-  } else if (filterDateRange.startsWith('2026-10-')) {
-    poolOfTrades = mockScreenshotTrades.filter(t => t.rawDate === filterDateRange);
-  } else if (filterDateRange === 'OCT_2026') {
-    poolOfTrades = hasOctInDb ? dbMappedTrades.filter(t => t.rawDate.startsWith('2026-10')) : mockScreenshotTrades;
-  } else if (filterDateRange === 'DEC_2025') {
-    poolOfTrades = dbMappedTrades.filter(t => t.rawDate.startsWith('2025-12'));
-  } else {
-    // ALL
-    poolOfTrades = hasOctInDb ? dbMappedTrades : [...mockScreenshotTrades, ...dbMappedTrades];
+    poolOfTrades = poolOfTrades.filter((t) => t.rawDate === selectedDateFilter);
   }
 
   // Filter application
@@ -420,84 +440,70 @@ export const JournalView: React.FC<JournalViewProps> = ({
       {/* 2. Top 6 KPI Metric Cards (Matching uploaded image) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Card 1: Total Trades */}
-        <div className="bg-[#FAF6EE] border border-[#E7E0D6] rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66]">Total Trades</span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] text-[#DB9F35] flex items-center justify-center">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8]">Total Trades</span>
+            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#10B981] flex items-center justify-center">
               <Users className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="flex items-baseline justify-between mt-2">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black text-[#1F1A16]">42</span>
-              <span className="text-[10px] font-bold text-[#16A34A] flex items-center">
-                ↑ 12%
+              <span className="text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8]">{perf.total}</span>
+              <span className="text-[10px] font-bold text-[#10B981] flex items-center">
+                Live
               </span>
-            </div>
-            {/* Green mini ascending bars */}
-            <div className="flex items-end gap-0.5 h-5">
-              <div className="w-1 bg-[#16A34A] h-2 rounded-t" />
-              <div className="w-1 bg-[#16A34A] h-3.5 rounded-t" />
-              <div className="w-1 bg-[#16A34A] h-4.5 rounded-t" />
-              <div className="w-1 bg-[#16A34A] h-5 rounded-t" />
             </div>
           </div>
         </div>
 
         {/* Card 2: Net P&L */}
-        <div className="bg-[#FAF6EE] border border-[#E7E0D6] rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66]">Net P&amp;L</span>
-            <div className="w-7 h-7 rounded-lg bg-[#E8F8EE] text-[#15803D] flex items-center justify-center">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8]">Net P&amp;L</span>
+            <div className="w-7 h-7 rounded-lg bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399] flex items-center justify-center">
               <Activity className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="flex items-baseline justify-between mt-2">
             <div>
-              <div className="text-2xl font-black text-[#15803D] leading-none">+8.2R</div>
-              <div className="text-[10px] font-bold text-[#15803D] mt-1">+$412.30</div>
+              <div className={`text-2xl font-black leading-none ${perf.netR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                {perf.netR >= 0 ? '+' : ''}{perf.netR.toFixed(1)}R
+              </div>
+              <div className={`text-[10px] font-bold mt-1 ${perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                {perf.netPnl >= 0 ? '+' : ''}${perf.netPnl.toFixed(2)}
+              </div>
             </div>
-            {/* Smooth green sparkline */}
-            <svg className="w-12 h-5 text-[#16A34A]" viewBox="0 0 48 20" fill="none">
-              <path
-                d="M 2 16 Q 14 14, 24 9 T 36 8 T 46 2"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                fill="none"
-              />
-            </svg>
           </div>
         </div>
 
         {/* Card 3: Win Rate */}
-        <div className="bg-[#FAF6EE] border border-[#E7E0D6] rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66]">Win Rate</span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] text-[#DB9F35] flex items-center justify-center">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8]">Win Rate</span>
+            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#10B981] flex items-center justify-center">
               <RotateCcw className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="flex items-center justify-between mt-2">
             <div>
-              <div className="text-2xl font-black text-[#1F1A16] leading-none">62%</div>
-              <div className="text-[9px] font-mono text-[#786F66] mt-1">26W • 14L • 2BE</div>
+              <div className="text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">{perf.winRate.toFixed(0)}%</div>
+              <div className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-1">{perf.wins}W • {perf.losses}L • {perf.bes}BE</div>
             </div>
-            {/* Dark teal donut ring */}
             <div className="relative w-8 h-8 shrink-0">
               <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
                 <path
-                  className="text-[#E7E0D6]"
+                  className="text-[#E7E0D6] dark:text-[#242D3D]"
                   stroke="currentColor"
                   strokeWidth="4"
                   fill="none"
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
                 <path
-                  className="text-[#0D9488]"
+                  className="text-[#10B981]"
                   stroke="currentColor"
                   strokeWidth="4"
-                  strokeDasharray="62, 100"
+                  strokeDasharray={`${perf.winRate}, 100`}
                   strokeLinecap="round"
                   fill="none"
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -507,82 +513,73 @@ export const JournalView: React.FC<JournalViewProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Avg R / Trade */}
-        <div className="bg-[#FAF6EE] border border-[#E7E0D6] rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+        {/* Card 4: Avg Win / Loss */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66]">Avg R / Trade</span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] text-[#DB9F35] flex items-center justify-center">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8]">Avg Win / Loss</span>
+            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#10B981] flex items-center justify-center">
               <BarChart2 className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="flex items-baseline justify-between mt-2">
-            <div className="text-2xl font-black text-[#1F1A16] leading-none">+0.12R</div>
-            {/* Mini bars */}
-            <div className="flex items-end gap-0.5 h-5">
-              <div className="w-1 bg-[#16A34A] h-2 rounded-t" />
-              <div className="w-1 bg-[#16A34A] h-3.5 rounded-t" />
-              <div className="w-1 bg-[#16A34A] h-5 rounded-t" />
+            <div className="text-sm font-black font-mono leading-none">
+              <span className="text-[#10B981]">+{perf.avgWinR.toFixed(1)}R</span> / <span className="text-[#DC2626]">-{perf.avgLossR.toFixed(1)}R</span>
             </div>
           </div>
         </div>
 
-        {/* Card 5: Expectancy */}
-        <div className="bg-[#FAF6EE] border border-[#E7E0D6] rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+        {/* Card 5: Profit Factor */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66]">Expectancy</span>
-            <div className="w-7 h-7 rounded-lg bg-[#FEECEB] text-[#DC2626] flex items-center justify-center">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8]">Profit Factor</span>
+            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#10B981] flex items-center justify-center">
               <TrendingUp className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-black text-[#1F1A16] leading-none">+0.12R</div>
-            <div className="text-[10px] text-[#786F66] mt-1">PF: 1.16</div>
+            <div className="text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">{perf.profitFactor.toFixed(2)}</div>
+            <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8] mt-1">Ratio</div>
           </div>
         </div>
 
         {/* Card 6: Discipline Score */}
-        <div className="bg-[#FAF6EE] border border-[#E7E0D6] rounded-2xl p-4 shadow-2xs flex flex-col justify-between">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66]">Discipline Score</span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] text-[#DB9F35] flex items-center justify-center">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8]">Discipline Score</span>
+            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#10B981] flex items-center justify-center">
               <ShieldCheck className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-black text-[#1F1A16] leading-none">87%</div>
-            <div className="text-[10px] font-bold text-[#15803D] mt-1">36/42 Clean</div>
+            <div className="text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">{perf.disciplineScore}%</div>
+            <div className="text-[10px] font-bold text-[#10B981] mt-1">{perf.cleanTrades}/{perf.total} Clean</div>
           </div>
         </div>
       </div>
 
-      {/* 3. Filter Toolbar Strip (Matching image) */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#FAF6EE] border border-[#E7E0D6] p-2 rounded-2xl shadow-2xs">
+      {/* 3. Filter Toolbar Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] p-2 rounded-2xl shadow-2xs transition-colors">
         <div className="flex flex-wrap items-center gap-2">
           {/* Date range filter */}
           <div className="relative">
             <select
               value={selectedDateFilter ? 'CUSTOM' : filterDateRange}
               onChange={(e) => {
-                if (selectedDateFilter) onClearDateFilter?.();
                 setFilterDateRange(e.target.value);
                 setCurrentPage(1);
+                if (e.target.value !== 'CUSTOM') onClearDateFilter?.();
               }}
-              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] border border-[#DFD5C6] rounded-xl text-xs font-semibold text-[#1F1A16] outline-none cursor-pointer hover:bg-[#ECE4D5]"
+              className="appearance-none pl-8 pr-8 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
-              <option value="OCT_2026">Oct 01, 2026 - Oct 31, 2026 (Full Month)</option>
-              <option value="2026-10-05">05 Oct 2026 (Mon • Active Session)</option>
-              <option value="2026-10-04">04 Oct 2026 (Sun)</option>
-              <option value="2026-10-03">03 Oct 2026 (Sat)</option>
-              <option value="2026-10-02">02 Oct 2026 (Fri)</option>
-              <option value="2026-10-01">01 Oct 2026 (Thu)</option>
+              <option value="OCT_2026">Oct 01, 2026 - Oct 31, 2026</option>
               <option value="DEC_2025">Dec 01, 2025 - Dec 31, 2025</option>
               <option value="ALL">All Dates (Full History)</option>
               {selectedDateFilter && (
                 <option value="CUSTOM">Custom Date: {selectedDateFilter}</option>
               )}
             </select>
-            <Calendar className="w-3.5 h-3.5 text-[#786F66] absolute left-2.5 top-2.5 pointer-events-none" />
-            <ChevronDown className="w-3 h-3 text-[#786F66] absolute right-2.5 top-2.5 pointer-events-none" />
+            <Calendar className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
           </div>
 
           {/* Pair filter */}
@@ -593,7 +590,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 setFilterPair(e.target.value);
                 setCurrentPage(1);
               }}
-              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] border border-[#DFD5C6] rounded-xl text-xs font-semibold text-[#1F1A16] outline-none cursor-pointer hover:bg-[#ECE4D5]"
+              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
               <option value="ALL">All Pairs</option>
               <option value="XAUUSD">XAUUSD</option>
@@ -601,8 +598,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
               <option value="ETHUSD">ETHUSD</option>
               <option value="GBPUSD">GBPUSD</option>
             </select>
-            <Filter className="w-3.5 h-3.5 text-[#786F66] absolute left-2.5 top-2.5 pointer-events-none" />
-            <ChevronDown className="w-3 h-3 text-[#786F66] absolute right-2.5 top-2.5 pointer-events-none" />
+            <Filter className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
           </div>
 
           {/* Setup filter */}
@@ -613,7 +610,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 setFilterSetup(e.target.value);
                 setCurrentPage(1);
               }}
-              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] border border-[#DFD5C6] rounded-xl text-xs font-medium text-[#1F1A16] outline-none cursor-pointer hover:bg-[#ECE4D5]"
+              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
               <option value="ALL">All Setups</option>
               <option value="MSS">MSS</option>
@@ -623,8 +620,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
               <option value="Chased Move">Chased Move</option>
               <option value="No Setup">No Setup</option>
             </select>
-            <Layers className="w-3.5 h-3.5 text-[#786F66] absolute left-2.5 top-2.5 pointer-events-none" />
-            <ChevronDown className="w-3 h-3 text-[#786F66] absolute right-2.5 top-2.5 pointer-events-none" />
+            <Layers className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
           </div>
 
           {/* Emotion filter */}
@@ -635,7 +632,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 setFilterEmotion(e.target.value);
                 setCurrentPage(1);
               }}
-              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] border border-[#DFD5C6] rounded-xl text-xs font-medium text-[#1F1A16] outline-none cursor-pointer hover:bg-[#ECE4D5]"
+              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
               <option value="ALL">All Emotions</option>
               <option value="Calm">Calm</option>
@@ -644,8 +641,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
               <option value="Revenge">Revenge</option>
               <option value="Frustrated">Frustrated</option>
             </select>
-            <Smile className="w-3.5 h-3.5 text-[#786F66] absolute left-2.5 top-2.5 pointer-events-none" />
-            <ChevronDown className="w-3 h-3 text-[#786F66] absolute right-2.5 top-2.5 pointer-events-none" />
+            <Smile className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
           </div>
 
           {/* Execution filter */}
@@ -656,14 +653,14 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 setFilterExecution(e.target.value);
                 setCurrentPage(1);
               }}
-              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] border border-[#DFD5C6] rounded-xl text-xs font-medium text-[#1F1A16] outline-none cursor-pointer hover:bg-[#ECE4D5]"
+              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
               <option value="ALL">All Execution</option>
               <option value="Clean">Clean</option>
               <option value="Violation">Violation</option>
             </select>
-            <Zap className="w-3.5 h-3.5 text-[#786F66] absolute left-2.5 top-2.5 pointer-events-none" />
-            <ChevronDown className="w-3 h-3 text-[#786F66] absolute right-2.5 top-2.5 pointer-events-none" />
+            <Zap className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
           </div>
 
           {/* Exit Type filter */}
@@ -674,7 +671,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 setFilterExitType(e.target.value);
                 setCurrentPage(1);
               }}
-              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] border border-[#DFD5C6] rounded-xl text-xs font-medium text-[#1F1A16] outline-none cursor-pointer hover:bg-[#ECE4D5]"
+              className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
               <option value="ALL">All Exit Types</option>
               <option value="TP">TP</option>
@@ -682,8 +679,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
               <option value="BE">BE</option>
               <option value="Manual">Manual</option>
             </select>
-            <Crosshair className="w-3.5 h-3.5 text-[#786F66] absolute left-2.5 top-2.5 pointer-events-none" />
-            <ChevronDown className="w-3 h-3 text-[#786F66] absolute right-2.5 top-2.5 pointer-events-none" />
+            <Crosshair className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
           </div>
         </div>
 
@@ -692,12 +689,12 @@ export const JournalView: React.FC<JournalViewProps> = ({
           onClick={handleResetFilters}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-2xs ml-auto ${
             hasActiveFilters
-              ? 'bg-[#DB9F35] text-[#1F1A16] font-bold hover:bg-[#C98E2A] shadow-xs cursor-pointer'
-              : 'bg-[#F2ECE0] hover:bg-[#ECE4D5] text-[#786F66] hover:text-[#1F1A16] border border-[#DFD5C6] cursor-pointer'
+              ? 'bg-[#10B981] text-white font-bold hover:bg-[#059669] shadow-xs cursor-pointer'
+              : 'bg-[#F2ECE0] dark:bg-[#1C2331] hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] border border-[#DFD5C6] dark:border-[#2E384D] cursor-pointer'
           }`}
           title="Reset all filters to default"
         >
-          <RotateCcw className={`w-3.5 h-3.5 ${hasActiveFilters ? 'text-[#1F1A16]' : 'text-[#786F66]'}`} />
+          <RotateCcw className="w-3.5 h-3.5" />
           <span>Reset</span>
           {activeFilterCount > 0 && (
             <span className="w-4 h-4 rounded-full bg-[#1F1A16] text-[#FAF6EE] text-[9px] flex items-center justify-center font-bold">
@@ -708,11 +705,11 @@ export const JournalView: React.FC<JournalViewProps> = ({
       </div>
 
       {/* 4. Detailed Trades Table */}
-      <div className="bg-[#FAF6EE] border border-[#E7E0D6] rounded-2xl overflow-hidden shadow-2xs">
+      <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl overflow-hidden shadow-2xs transition-colors">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
             <thead>
-              <tr className="bg-[#F2ECE0] border-b border-[#E7E0D6] text-[10px] font-bold text-[#786F66] uppercase tracking-wider">
+              <tr className="bg-[#F2ECE0] dark:bg-[#1A2230] border-b border-[#E7E0D6] dark:border-[#242D3D] text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
                 <th className="py-3 px-3 text-center w-8">#</th>
                 <th className="py-3 px-3 font-bold">Date &amp; Time</th>
                 <th className="py-3 px-3 font-bold">Pair</th>
@@ -734,7 +731,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 <th className="py-3 px-3 text-center">···</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E7E0D6]/60">
+            <tbody className="divide-y divide-[#E7E0D6]/60 dark:divide-[#242D3D]">
               {paginatedTrades.map((t, idx) => {
                 const isWin = t.r.startsWith('+');
                 const isLoss = t.r.startsWith('-');
@@ -742,25 +739,25 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 return (
                   <tr
                     key={t.id}
-                    className="hover:bg-[#F2ECE0]/70 transition-colors text-[11px]"
+                    className="hover:bg-[#F2ECE0]/70 dark:hover:bg-[#1A2230]/70 transition-colors text-[11px] text-[#1F1A16] dark:text-[#F0F4F8]"
                   >
                     {/* # Index */}
-                    <td className="py-2.5 px-3 text-center font-bold text-[#9E958C]">
+                    <td className="py-2.5 px-3 text-center font-bold text-[#9E958C] dark:text-[#64748B]">
                       {t.num || startIndex + idx + 1}
                     </td>
 
                     {/* Date & Time */}
-                    <td className="py-2.5 px-3 font-medium text-[#1F1A16]">
+                    <td className="py-2.5 px-3 font-medium text-[#1F1A16] dark:text-[#F0F4F8]">
                       {t.dateTime}
                     </td>
 
                     {/* Pair */}
-                    <td className="py-2.5 px-3 font-bold text-[#1F1A16]">
+                    <td className="py-2.5 px-3 font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
                       {t.pair}
                     </td>
 
                     {/* Lot */}
-                    <td className="py-2.5 px-2 font-mono text-[#786F66]">
+                    <td className="py-2.5 px-2 font-mono text-[#786F66] dark:text-[#94A3B8]">
                       {t.lot}
                     </td>
 

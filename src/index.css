@@ -1,55 +1,66 @@
 @import "tailwindcss";
 
-@theme {
-  --color-linen-bg: #F6F1EA;
-  --color-linen-card: #FAF6EE;
-  --color-linen-card-subtle: #F2ECE0;
-  --color-linen-border: #E7E0D6;
-  --color-linen-border-subtle: #EFE9E0;
-  --color-honey-gold: #DB9F35;
-  --color-honey-gold-hover: #CCA030;
-  --color-honey-gold-light: #F0E5D3;
-  --color-text-primary: #1F1A16;
-  --color-text-secondary: #786F66;
-  --color-text-muted: #9E958C;
-  --color-emerald-profit: #16A34A;
-  --color-emerald-profit-bg: #E8F8EE;
-  --color-emerald-profit-border: #B7ECC8;
-  --color-coral-loss: #DC2626;
-  --color-coral-loss-bg: #FEECEB;
-  --color-coral-loss-border: #FBC5C2;
+:root {
+  --bg-main: #F6F1EA;
+  --bg-card: #FAF6EE;
+  --bg-card-subtle: #F2ECE0;
+  --bg-card-hover: #F0E8DC;
+  --bg-input: #FFFFFF;
+  --border-subtle: #E7E0D6;
+  --border-strong: #D5CBBD;
+  --text-primary: #1F1A16;
+  --text-secondary: #786F66;
+  --text-muted: #9E958C;
+  --brand-green: #10B981;
+  --brand-green-hover: #059669;
+  --honey-gold: #DB9F35;
+  --honey-gold-hover: #C98E2A;
+  color-scheme: light;
 }
 
-:root {
-  background-color: #F6F1EA;
-  color: #1F1A16;
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light;
+.dark {
+  --bg-main: #0B0E14;
+  --bg-card: #131822;
+  --bg-card-subtle: #1C2331;
+  --bg-card-hover: #222B3C;
+  --bg-input: #0E121B;
+  --border-subtle: #242D3D;
+  --border-strong: #333F54;
+  --text-primary: #F0F4F8;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --brand-green: #10B981;
+  --brand-green-hover: #059669;
+  --honey-gold: #F59E0B;
+  --honey-gold-hover: #D97706;
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #F6F1EA;
-  color: #1F1A16;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Warm Linen luxury scrollbar */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #F6F1EA;
+  background: var(--bg-main);
 }
 ::-webkit-scrollbar-thumb {
-  background: #D8CEBF;
+  background: var(--border-strong);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #C4B8A5;
+  background: var(--text-muted);
 }
 
 /* Number input spinner hide */

@@ -251,25 +251,25 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-in">
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-in">
         <div 
-          className="relative max-w-2xl w-full bg-white border border-[#E7E0D6] rounded-2xl overflow-hidden shadow-2xl my-auto text-[#1F1A16]"
+          className="relative max-w-2xl w-full bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl overflow-hidden shadow-2xl my-auto text-[#1F1A16] dark:text-[#F0F4F8] transition-colors"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#E7E0D6] bg-[#FAF7F2]">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#E7E0D6] dark:border-[#242D3D] bg-[#FAF7F2] dark:bg-[#1A2230]">
             <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#DB9F35] animate-pulse" />
-              <h2 className="text-base font-bold text-[#1F1A16] tracking-wide flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse" />
+              <h2 className="text-base font-bold text-[#1F1A16] dark:text-[#F0F4F8] tracking-wide flex items-center gap-2">
                 {editTrade ? `Edit Trade #${editTrade.tradeNumber}` : '+ Quick Trade Entry'}
-                <span className="text-xs px-2 py-0.5 rounded-md bg-[#F0E5D3] border border-[#E2D1B8] text-[#9B671B] font-mono font-semibold">
-                  5-10s Fast Logger
+                <span className="text-xs px-2 py-0.5 rounded-md bg-[#10B981]/15 border border-[#10B981]/30 text-[#059669] dark:text-[#34D399] font-mono font-semibold">
+                  Fast Logger
                 </span>
               </h2>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-[#786F66] hover:text-[#1F1A16] hover:bg-[#F3EDE2] transition-colors"
+              className="p-1.5 rounded-lg text-[#786F66] hover:text-[#1F1A16] dark:text-[#94A3B8] dark:hover:text-white hover:bg-[#F3EDE2] dark:hover:bg-[#252E40] transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

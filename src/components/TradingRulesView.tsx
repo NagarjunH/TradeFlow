@@ -23,8 +23,9 @@ import {
   Check,
   ChevronDown
 } from 'lucide-react';
-import { db, type Trade, type DayRecord, type AppSettings } from '../db/db';
+import { type Trade, type DayRecord, type AppSettings } from '../db/db';
 import { DatePickerDropdown } from './DatePickerDropdown';
+import { auditApi } from '../lib/api/auditApi';
 
 interface TradingRulesViewProps {
   currentDate?: string;
@@ -34,6 +35,7 @@ interface TradingRulesViewProps {
   settings: AppSettings;
   onRefresh: () => void;
   onOpenDailyClose: () => void;
+  userId?: string;
 }
 
 export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
@@ -42,6 +44,7 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
   trades,
   settings,
   onRefresh,
+  userId,
 }) => {
   // Navigation tabs state
   const [activeTab, setActiveTab] = useState('daily-checklist');
@@ -125,11 +128,13 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
 
   const handleSaveDailyRules = async () => {
     try {
-      await db.auditLogs.add({
-        action: 'UPDATE',
-        details: `Saved daily checklist: ${checkedCount}/7 rules followed (${percentage}%). Notes: ${dailyNotes || 'None'}`,
-        timestamp: new Date().toISOString(),
-      });
+      if (userId) {
+        await auditApi.add(
+          userId,
+          'UPDATE',
+          `Saved daily checklist: ${checkedCount}/7 rules followed (${percentage}%). Notes: ${dailyNotes || 'None'}`
+        );
+      }
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2500);
       onRefresh();
@@ -142,11 +147,13 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
   const handleLogViolation = async () => {
     if (!selectedViolation && !violationDetails) return;
     try {
-      await db.auditLogs.add({
-        action: 'UPDATE',
-        details: `Logged violation: ${selectedViolation || 'Unspecified'} - ${violationDetails || 'No additional details'}`,
-        timestamp: new Date().toISOString(),
-      });
+      if (userId) {
+        await auditApi.add(
+          userId,
+          'UPDATE',
+          `Logged violation: ${selectedViolation || 'Unspecified'} - ${violationDetails || 'No additional details'}`
+        );
+      }
       setViolationLogged(true);
       setTimeout(() => {
         setViolationLogged(false);

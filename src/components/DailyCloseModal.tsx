@@ -84,20 +84,20 @@ export const DailyCloseModal: React.FC<DailyCloseModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-fade-in">
       <div 
-        className="max-w-md w-full bg-white border border-[#E7E0D6] rounded-2xl overflow-hidden shadow-2xl text-[#1F1A16]"
+        className="max-w-md w-full bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl overflow-hidden shadow-2xl text-[#1F1A16] dark:text-[#F0F4F8] transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E7E0D6] bg-[#FAF7F2]">
-          <div className="flex items-center gap-2 text-[#DB9F35]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E7E0D6] dark:border-[#242D3D] bg-[#FAF7F2] dark:bg-[#1A2230]">
+          <div className="flex items-center gap-2 text-[#10B981]">
             <Award className="w-5 h-5" />
-            <h3 className="text-base font-bold text-[#1F1A16]">Daily Closing Ritual</h3>
+            <h3 className="text-base font-bold text-[#1F1A16] dark:text-[#F0F4F8]">Daily Closing Ritual</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#786F66] hover:text-[#1F1A16] hover:bg-[#F3EDE2] transition-colors"
+            className="p-1.5 rounded-lg text-[#786F66] hover:text-[#1F1A16] dark:text-[#94A3B8] dark:hover:text-white hover:bg-[#F3EDE2] dark:hover:bg-[#252E40] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -106,7 +106,7 @@ export const DailyCloseModal: React.FC<DailyCloseModalProps> = ({
         {/* Content */}
         <div className="p-6 space-y-5">
           {/* Day Scorecard */}
-          <div className="bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl p-4 text-center space-y-3">
+          <div className="bg-[#FAF7F2] dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-4 text-center space-y-3">
             <span className="text-xs font-semibold text-[#786F66] uppercase tracking-wider block">
               Day Summary ({todayStr})
             </span>
