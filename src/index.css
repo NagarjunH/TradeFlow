@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-linen-bg: #F6F1EA;
+  --color-linen-card: #FAF6EE;
+  --color-linen-card-subtle: #F2ECE0;
+  --color-linen-border: #E7E0D6;
+  --color-linen-border-subtle: #EFE9E0;
+  --color-honey-gold: #DB9F35;
+  --color-honey-gold-hover: #CCA030;
+  --color-honey-gold-light: #F0E5D3;
+  --color-text-primary: #1F1A16;
+  --color-text-secondary: #786F66;
+  --color-text-muted: #9E958C;
+  --color-emerald-profit: #16A34A;
+  --color-emerald-profit-bg: #E8F8EE;
+  --color-emerald-profit-border: #B7ECC8;
+  --color-coral-loss: #DC2626;
+  --color-coral-loss-bg: #FEECEB;
+  --color-coral-loss-border: #FBC5C2;
+}
+
+:root {
+  background-color: #F6F1EA;
+  color: #1F1A16;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #F6F1EA;
+  color: #1F1A16;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Warm Linen luxury scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F6F1EA;
+}
+::-webkit-scrollbar-thumb {
+  background: #D8CEBF;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C4B8A5;
+}
+
+/* Number input spinner hide */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
