@@ -17,6 +17,7 @@ import { NHCycleView } from './components/NHCycleView';
 import { EquityChart } from './components/EquityChart';
 import { AnalyticsView } from './components/AnalyticsView';
 import { Challenge21View } from './components/Challenge21View';
+import { NotesView } from './components/NotesView';
 import { SettingsView } from './components/SettingsView';
 import { QuickTradeModal } from './components/QuickTradeModal';
 import { DailyCloseModal } from './components/DailyCloseModal';
@@ -256,19 +257,10 @@ function AppInner() {
           )}
 
           {currentTab === 'notes' && (
-            <JournalView
+            <NotesView
               trades={trades}
               settings={settings}
-              onEditTrade={handleEditTrade}
-              onDeleteTrade={handleDeleteTrade}
-              onUpdateTrade={handleUpdateTrade}
-              onOpenQuickTrade={() => {
-                setEditTrade(null);
-                setIsQuickTradeOpen(true);
-              }}
-              onViewImage={handleViewImage}
-              selectedDateFilter={journalDateFilter}
-              onClearDateFilter={() => setJournalDateFilter(undefined)}
+              onSelectDateForJournal={handleSelectDateForJournal}
               onTabChange={setCurrentTab}
             />
           )}
