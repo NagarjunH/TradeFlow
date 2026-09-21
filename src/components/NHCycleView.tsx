@@ -39,7 +39,8 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
     'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
   ];
 
-  const daysInCycle = 31;
+  const [challengeMode, setChallengeMode] = useState<'21_DAY' | '31_DAY'>('21_DAY');
+  const daysInCycle = challengeMode === '21_DAY' ? 21 : 31;
 
   const cycleTrades = trades.filter((t) => {
     const [y, m] = t.date.split('-').map(Number);
@@ -52,31 +53,57 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
   const currSymbol = settings.currency === 'USD' ? '$' : '₹';
 
   return (
-    <div className="space-y-6 animate-fade-in pb-16">
+    <div className="space-y-6 animate-fade-in pb-16 text-[#1F1A16] dark:text-[#F0F4F8]">
       {/* 1. Cycle Poster Header */}
-      <div className="bg-white border border-[#E7E0D6] rounded-2xl p-6 sm:p-8 relative overflow-hidden shadow-2xs">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-[#E7E0D6] pb-6">
+      <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-6 sm:p-8 relative overflow-hidden shadow-2xs transition-colors">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-[#E7E0D6] dark:border-[#242D3D] pb-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono tracking-widest text-[#15803D] uppercase font-bold">
+              <span className="text-xs font-mono tracking-widest text-[#15803D] dark:text-[#34D399] uppercase font-bold">
                 PLAN • EXECUTE • IMPROVE
               </span>
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-[#1F1A16] uppercase">
+            <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-[#1F1A16] dark:text-[#F0F4F8] uppercase">
               NH <span className="text-[#DB9F35]">TRADERS</span>{' '}
-              <span className="text-[#9B671B]">
-                {monthNames[cycleMonth - 1]} {cycleYear}
+              <span className="text-[#9B671B] dark:text-[#F59E0B]">
+                {challengeMode === '21_DAY' ? '21-DAY CHALLENGE' : `${monthNames[cycleMonth - 1]} ${cycleYear}`}
               </span>
             </h1>
-            <div className="flex items-center gap-2 text-xs text-[#786F66] font-medium tracking-wide">
-              <span>TRADING CYCLE</span>
+            <div className="flex items-center gap-2 text-xs text-[#786F66] dark:text-[#94A3B8] font-medium tracking-wide">
+              <span>{challengeMode === '21_DAY' ? 'DISCIPLINE CHALLENGE' : 'MONTHLY TRADING CYCLE'}</span>
               <span>|</span>
-              <span className="text-[#1F1A16] font-bold">DISCIPLINE TODAY • PROFITS TOMORROW</span>
+              <span className="text-[#1F1A16] dark:text-[#F0F4F8] font-bold">DISCIPLINE TODAY • PROFITS TOMORROW</span>
             </div>
           </div>
 
-          {/* Month Selector */}
-          <div className="flex items-center gap-2">
+          {/* Mode Selector & Month Selector */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 21-Day Challenge vs 31-Day Cycle Mode Toggle */}
+            <div className="flex items-center bg-[#F2ECE0] dark:bg-[#1A2230] border border-[#DFD5C6] dark:border-[#283244] p-1 rounded-xl text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setChallengeMode('21_DAY')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  challengeMode === '21_DAY'
+                    ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
+                    : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
+                }`}
+              >
+                🔥 21-Day Challenge
+              </button>
+              <button
+                type="button"
+                onClick={() => setChallengeMode('31_DAY')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  challengeMode === '31_DAY'
+                    ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
+                    : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
+                }`}
+              >
+                📅 31-Day Cycle
+              </button>
+            </div>
+
             <select
               value={cycleMonth}
               onChange={(e) => setCycleMonth(Number(e.target.value))}

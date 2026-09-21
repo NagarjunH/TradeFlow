@@ -27,7 +27,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'journal' as TabType, label: 'Trading Journal', icon: BookOpen },
     { id: 'rules' as TabType, label: 'Trading Rules', icon: ShieldCheck },
-    { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarDays },
+    { id: 'cycle' as TabType, label: '21-Day Challenge', icon: CalendarDays },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart2 },
     { id: 'settings' as TabType, label: 'Settings', icon: SettingsIcon },
   ];
@@ -115,34 +115,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               “
             </span>
             
-            {currentTab === 'rules' ? (
-              <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-black text-[15px] leading-[1.2] tracking-tight select-none">
-                <div>Small</div>
-                <div>Disciplines</div>
-                <div>Create</div>
-                <div className="flex items-baseline gap-0.5">
-                  <span>Big Freedom.</span>
-                  <span className="text-[#10B981] font-serif text-xl font-black leading-none select-none ml-0.5">
-                    ”
-                  </span>
-                </div>
+            <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-black text-[14px] sm:text-[15px] leading-[1.2] tracking-tight select-none">
+              <div>“Discipline</div>
+              <div>turns goals</div>
+              <div className="flex items-baseline gap-0.5">
+                <span>into results.”</span>
               </div>
-            ) : (
-              <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-black text-[15px] leading-[1.2] tracking-tight select-none">
-                <div>Better</div>
-                <div>Decisions</div>
-                <div>Consistent</div>
-                <div className="flex items-baseline gap-0.5">
-                  <span>Edge.</span>
-                  <span className="text-[#10B981] font-serif text-xl font-black leading-none select-none ml-0.5">
-                    ”
-                  </span>
-                </div>
-              </div>
-            )}
+            </div>
 
             <p className="text-[10px] font-bold tracking-wider text-[#5A5043] dark:text-[#CBD5E1] uppercase mt-2 select-none flex items-center gap-1.5">
-              <span className="text-[#10B981] font-normal">—</span> TradeFlow
+              <span className="text-[#DB9F35] font-normal">—</span> NH TRADERS
             </p>
           </div>
         </div>
