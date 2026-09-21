@@ -9,12 +9,15 @@ import {
   History,
   Trash2,
   AlertTriangle,
-  X
+  X,
+  Smartphone,
+  CheckCircle2
 } from 'lucide-react';
 import { type AppSettings } from '../db/db';
 import { settingsApi } from '../lib/api/settingsApi';
 import { auditApi } from '../lib/api/auditApi';
 import { supabase } from '../lib/supabase';
+import { onInstallAvailabilityChange, promptPWAInstall } from '../registerServiceWorker';
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -30,6 +33,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [formData, setFormData] = useState<AppSettings>(settings);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [auditLogs, setAuditLogs] = useState<{ id: string; action: string; details: string; created_at: string }[]>([]);
+  const [canInstall, setCanInstall] = useState(false);
+  const [installSuccess, setInstallSuccess] = useState(false);
 
   // Reset Modal state
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -38,6 +43,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [resetError, setResetError] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+
+  useEffect(() => {
+    return onInstallAvailabilityChange((avail) => {
+      setCanInstall(avail);
+    });
+  }, []);
 
   useEffect(() => {
     setFormData(settings);
@@ -343,7 +354,79 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* 4. Discipline Audit Trail Log */}
+      {/* 4. Progressive Web App (PWA) & Offline Access */}
+      <div className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 space-y-4 shadow-2xs transition-colors">
+        <div className="flex items-center justify-between border-b border-[#E7E0D6] dark:border-[#242D3D] pb-3">
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-5 h-5 text-[#DB9F35]" />
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[#1F1A16] dark:text-[#F0F4F8]">
+                TradeFlow App &amp; Offline Access
+              </h3>
+              <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                Progressive Web App (PWA) with native desktop &amp; mobile installation
+              </p>
+            </div>
+          </div>
+
+          <span className="px-2.5 py-1 rounded-full bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399] text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> PWA Enabled
+          </span>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-[#FAF7F2] dark:bg-[#1C2331] p-4 rounded-xl border border-[#E7E0D6] dark:border-[#283244]">
+          <img 
+            src="/pwa-192x192.png" 
+            alt="TradeFlow App Logo" 
+            className="w-14 h-14 rounded-2xl shadow-md border border-[#E7E0D6] dark:border-[#2E384D] object-cover shrink-0" 
+          />
+          <div className="flex-1">
+            <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+              Standalone Trading Terminal Experience
+            </h4>
+            <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8] mt-0.5 leading-relaxed">
+              Install TradeFlow directly onto your PC, Mac, iPhone, iPad, or Android device. Enjoy full-screen distraction-free journaling with offline caching and instant cloud sync.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              const accepted = await promptPWAInstall();
+              if (accepted) {
+                setInstallSuccess(true);
+                setTimeout(() => setInstallSuccess(false), 3500);
+              }
+            }}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+              installSuccess
+                ? 'bg-[#10B981] text-white shadow-sm'
+                : 'bg-[#DB9F35] hover:bg-[#C98E2A] text-[#1F1A16] shadow-sm'
+            }`}
+          >
+            {installSuccess ? (
+              <>
+                <Check className="w-4 h-4" />
+                App Installed!
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                {canInstall ? 'Install TradeFlow App' : 'Add to Home Screen'}
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="text-[11px] text-[#786F66] dark:text-[#94A3B8] space-y-1 pl-1">
+          <p className="font-semibold text-[#1F1A16] dark:text-[#F0F4F8]">Quick Installation Tips:</p>
+          <p>• <strong>Chrome / Edge (Desktop)</strong>: Click the install icon in your browser URL address bar or click "Install TradeFlow App" above.</p>
+          <p>• <strong>iPhone / iPad (Safari)</strong>: Tap the Share button <span className="font-mono">[↑]</span> at the bottom of Safari, then tap <strong>"Add to Home Screen"</strong>.</p>
+          <p>• <strong>Android (Chrome)</strong>: Tap the menu (⋮) in Chrome, then tap <strong>"Install app"</strong> or <strong>"Add to Home Screen"</strong>.</p>
+        </div>
+      </div>
+
+      {/* 5. Discipline Audit Trail Log */}
       <div className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 space-y-3 shadow-2xs transition-colors">
         <div className="flex items-center gap-2 border-b border-[#E7E0D6] dark:border-[#242D3D] pb-3">
           <History className="w-5 h-5 text-[#10B981]" />

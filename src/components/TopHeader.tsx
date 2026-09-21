@@ -8,11 +8,14 @@ import {
   Plus, 
   ChevronDown,
   LogOut,
-  Menu
+  Menu,
+  Download,
+  Smartphone
 } from 'lucide-react';
 import type { DayStatus } from '../utils/TradingEngine';
 import { DatePickerDropdown } from './DatePickerDropdown';
 import { useTheme } from '../contexts/ThemeContext';
+import { onInstallAvailabilityChange, promptPWAInstall } from '../registerServiceWorker';
 
 interface TopHeaderProps {
   currentDate?: string;
@@ -38,6 +41,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [timeStr, setTimeStr] = useState('07:18 PM');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
+
+  // Subscribe to PWA install availability
+  useEffect(() => {
+    return onInstallAvailabilityChange((available) => {
+      setCanInstall(available);
+    });
+  }, []);
 
   // Live time ticker
   useEffect(() => {
@@ -132,6 +143,19 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             />
           </div>
 
+          {/* PWA Install Button */}
+          {canInstall && (
+            <button
+              onClick={() => promptPWAInstall()}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] border border-[#E8DCC8] dark:border-[#2E384D] text-[#DB9F35] text-xs font-bold shadow-2xs hover:bg-[#DB9F35] hover:text-[#1F1A16] transition-all cursor-pointer"
+              title="Install TradeFlow as desktop or mobile app"
+              aria-label="Install App"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Install App</span>
+            </button>
+          )}
+
           {/* Theme Toggle Button (Light/Dark) */}
           <button 
             onClick={toggleTheme}
@@ -176,6 +200,16 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     <p className="text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] truncate">{userEmail}</p>
                   </div>
                 )}
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    promptPWAInstall();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] hover:bg-[#FAF7F2] dark:hover:bg-[#131822] transition-colors border-b border-[#E7E0D6]/60 dark:border-[#283244] font-medium cursor-pointer"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-[#DB9F35]" />
+                  Install TradeFlow App
+                </button>
                 <button
                   onClick={() => { setShowUserMenu(false); onSignOut?.(); }}
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-[#DC2626] dark:text-[#F87171] hover:bg-[#FEECEB] dark:hover:bg-[#321B1B] transition-colors font-semibold cursor-pointer"
