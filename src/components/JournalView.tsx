@@ -23,7 +23,9 @@ import {
   Trash2,
   Edit3,
   MessageSquare,
-  Check
+  Check,
+  ZoomIn,
+  Image as ImageIcon
 } from 'lucide-react';
 import type { Trade, AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
@@ -48,6 +50,7 @@ export interface TradeRow {
   setup: string;
   htf: 'Bullish' | 'Bearish' | 'Neutral';
   note: string;
+  chart?: string;
   rawTrade?: Trade;
 }
 
@@ -175,6 +178,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     setup: t.setupType || 'MSS + FVG',
     htf: (t.htfContext || 'Bullish') as 'Bullish' | 'Bearish' | 'Neutral',
     note: t.notes || t.entryReason || '',
+    chart: t.chartScreenshot || '',
     rawTrade: t,
   }));
 
@@ -759,31 +763,36 @@ export const JournalView: React.FC<JournalViewProps> = ({
                       </span>
                     </td>
 
-                    {/* Chart Thumbnail (Candlestick Graphic) */}
+                    {/* Chart Thumbnail */}
                     <td className="py-2.5 px-3 text-center">
-                      <div
-                        onClick={() =>
-                          onViewImage(
-                            'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="100%" height="100%" fill="%23161B22"/><text x="50%" y="50%" fill="%23DB9F35" font-size="20" text-anchor="middle" font-family="sans-serif">XAUUSD Trade Setup Chart</text></svg>',
-                            `Trade #${t.num} Chart Preview`
-                          )
-                        }
-                        className="w-10 h-6 bg-[#161B22] rounded border border-[#30363D] mx-auto flex items-center justify-center p-0.5 cursor-pointer hover:border-[#DB9F35] transition-colors shadow-2xs"
-                        title="Click to view chart"
-                      >
-                        <svg className="w-full h-full" viewBox="0 0 40 24" fill="none">
-                          <line x1="0" y1="12" x2="40" y2="12" stroke="#21262D" strokeWidth="0.8" strokeDasharray="2 2" />
-                          <line x1="6" y1="4" x2="6" y2="18" stroke="#3FB950" strokeWidth="1" />
-                          <rect x="4.5" y="8" width="3" height="7" fill="#3FB950" rx="0.5" />
-                          <line x1="14" y1="6" x2="14" y2="20" stroke="#F85149" strokeWidth="1" />
-                          <rect x="12.5" y="10" width="3" height="6" fill="#F85149" rx="0.5" />
-                          <line x1="22" y1="5" x2="22" y2="17" stroke="#3FB950" strokeWidth="1" />
-                          <rect x="20.5" y="7" width="3" height="7" fill="#3FB950" rx="0.5" />
-                          <line x1="30" y1="2" x2="30" y2="15" stroke="#3FB950" strokeWidth="1" />
-                          <rect x="28.5" y="4" width="3" height="8" fill="#3FB950" rx="0.5" />
-                          <polyline points="6,12 14,14 22,10 30,6" fill="none" stroke="#58A6FF" strokeWidth="1.2" strokeLinecap="round" />
-                        </svg>
-                      </div>
+                      {t.chart ? (
+                        <div
+                          onClick={() => onViewImage(t.chart!, `Trade #${t.num} Chart Preview`)}
+                          className="relative group w-12 h-7 rounded-md border border-[#DFD5C6] dark:border-[#2E384D] overflow-hidden mx-auto cursor-pointer hover:border-[#DB9F35] shadow-2xs hover:scale-105 transition-all bg-[#161B22]"
+                          title="Click to view full chart screenshot"
+                        >
+                          <img
+                            src={t.chart}
+                            alt={`Trade #${t.num} Chart`}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                            <ZoomIn className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (t.rawTrade) onEditTrade(t.rawTrade);
+                          }}
+                          className="px-2 py-1 rounded-md text-[10px] font-medium text-[#9E958C] hover:text-[#DB9F35] border border-dashed border-[#DFD5C6] dark:border-[#2E384D] hover:border-[#DB9F35] transition-colors cursor-pointer inline-flex items-center gap-1"
+                          title="No chart screenshot attached. Click to upload or paste one."
+                        >
+                          <ImageIcon className="w-3 h-3" />
+                          <span>+ Chart</span>
+                        </button>
+                      )}
                     </td>
 
                     {/* Note */}

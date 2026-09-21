@@ -8,7 +8,8 @@ import {
   Lock, 
   ShieldAlert,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Upload
 } from 'lucide-react';
 import { 
   type Trade, 
@@ -76,10 +77,45 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const dropZoneRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const dayStatus = getDayStatus(date, trades, settings);
   const isLockedOut = dayStatus.status === 'LOCKED' && !editTrade;
   const isHardLock = settings.protectionMode === 'HARD_LOCK';
+
+  const processImageFile = (file: File | Blob) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawData = event.target?.result as string;
+      if (rawData) {
+        // Compress pasted/uploaded TradingView screenshot (max 1280px, quality 0.75 JPEG)
+        const img = new Image();
+        img.onload = () => {
+          const maxWidth = 1280;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxWidth) {
+            h = Math.round((h * maxWidth) / w);
+            w = maxWidth;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h);
+            setChartScreenshot(canvas.toDataURL('image/jpeg', 0.75));
+          } else {
+            setChartScreenshot(rawData);
+          }
+        };
+        img.onerror = () => setChartScreenshot(rawData);
+        img.src = rawData;
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (editTrade) {
@@ -131,36 +167,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         if (items[i].type.indexOf('image') !== -1) {
           const blob = items[i].getAsFile();
           if (blob) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              const rawData = event.target?.result as string;
-              if (rawData) {
-                // Compress pasted TradingView screenshot (max 1280px, quality 0.75 JPEG)
-                const img = new Image();
-                img.onload = () => {
-                  const maxWidth = 1280;
-                  let w = img.width;
-                  let h = img.height;
-                  if (w > maxWidth) {
-                    h = Math.round((h * maxWidth) / w);
-                    w = maxWidth;
-                  }
-                  const canvas = document.createElement('canvas');
-                  canvas.width = w;
-                  canvas.height = h;
-                  const ctx = canvas.getContext('2d');
-                  if (ctx) {
-                    ctx.drawImage(img, 0, 0, w, h);
-                    setChartScreenshot(canvas.toDataURL('image/jpeg', 0.75));
-                  } else {
-                    setChartScreenshot(rawData);
-                  }
-                };
-                img.onerror = () => setChartScreenshot(rawData);
-                img.src = rawData;
-              }
-            };
-            reader.readAsDataURL(blob);
+            processImageFile(blob);
           }
         }
       }
@@ -699,15 +706,39 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               />
             </div>
 
-            {/* Row 8: Ctrl + V Clipboard Chart */}
+            {/* Row 8: Chart Screenshot (Upload / Paste / Drop) */}
             <div>
-              <label className="block text-xs font-semibold text-[#786F66] uppercase tracking-wider mb-1.5">
-                Chart Screenshot (TradingView)
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+                  Chart Screenshot (TradingView)
+                </label>
+                <span className="text-[10px] text-[#9E958C]">Ctrl+V paste, drag &amp; drop, or browse</span>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) processImageFile(file);
+                }}
+              />
+
               <div 
                 ref={dropZoneRef}
+                onClick={() => !chartScreenshot && fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) processImageFile(file);
+                }}
                 className={`border-2 border-dashed rounded-xl p-3 text-center transition-all ${
-                  chartScreenshot ? 'border-[#DB9F35] bg-[#F0E5D3]/40' : 'border-[#E7E0D6] bg-[#FAF7F2] hover:border-[#DB9F35]'
+                  chartScreenshot 
+                    ? 'border-[#DB9F35] bg-[#F0E5D3]/40 dark:bg-[#1A2230]' 
+                    : 'border-[#E7E0D6] dark:border-[#2E384D] bg-[#FAF7F2] dark:bg-[#131822] hover:border-[#DB9F35] cursor-pointer'
                 }`}
               >
                 {chartScreenshot ? (
@@ -715,27 +746,43 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                     <img
                       src={chartScreenshot}
                       alt="Trade Chart"
-                      className="max-h-36 rounded-xl border border-[#E7E0D6] mx-auto shadow-xs"
+                      className="max-h-36 rounded-xl border border-[#E7E0D6] dark:border-[#2E384D] mx-auto shadow-xs"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setChartScreenshot('')}
-                      className="absolute top-2 right-2 p-1.5 bg-white text-[#DC2626] hover:bg-[#DC2626] hover:text-white rounded-lg border border-[#FBC5C2] transition-colors shadow-xs"
-                      title="Remove Screenshot"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fileInputRef.current?.click();
+                        }}
+                        className="p-1.5 bg-white dark:bg-[#1C2331] text-[#786F66] dark:text-[#94A3B8] hover:text-[#DB9F35] rounded-lg border border-[#E7E0D6] dark:border-[#2E384D] transition-colors shadow-xs cursor-pointer"
+                        title="Replace Screenshot"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setChartScreenshot('');
+                        }}
+                        className="p-1.5 bg-white dark:bg-[#1C2331] text-[#DC2626] hover:bg-[#DC2626] hover:text-white rounded-lg border border-[#FBC5C2] dark:border-[#521C1C] transition-colors shadow-xs cursor-pointer"
+                        title="Remove Screenshot"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="py-2 space-y-1">
+                  <div className="py-2.5 space-y-1">
                     <div className="flex justify-center text-[#DB9F35]">
                       <ImageIcon className="w-6 h-6" />
                     </div>
-                    <p className="text-xs text-[#1F1A16] font-medium">
-                      Press <kbd className="px-1.5 py-0.5 rounded bg-white border border-[#E7E0D6] text-[#DB9F35] font-mono shadow-2xs">Ctrl + V</kbd> to paste chart from TradingView
+                    <p className="text-xs text-[#1F1A16] dark:text-[#F0F4F8] font-medium">
+                      Press <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] text-[#DB9F35] font-mono shadow-2xs">Ctrl + V</kbd> to paste or <span className="text-[#DB9F35] underline font-bold">click to browse</span>
                     </p>
-                    <p className="text-[11px] text-[#786F66]">
-                      Saved locally in IndexedDB with zero compression loss
+                    <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                      Supports PNG, JPG, TradingView screenshots, and file drop
                     </p>
                   </div>
                 )}
