@@ -39,7 +39,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
     'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
   ];
 
-  const [challengeMode, setChallengeMode] = useState<'21_DAY' | '31_DAY'>('21_DAY');
+  const [challengeMode, setChallengeMode] = useState<'21_DAY' | '31_DAY'>('31_DAY');
   const daysInCycle = challengeMode === '21_DAY' ? 21 : 31;
 
   const cycleTrades = trades.filter((t) => {

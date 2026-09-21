@@ -17,6 +17,7 @@ import { TradingRulesView } from './components/TradingRulesView';
 import { NHCycleView } from './components/NHCycleView';
 import { EquityChart } from './components/EquityChart';
 import { AnalyticsView } from './components/AnalyticsView';
+import { Challenge21View } from './components/Challenge21View';
 import { SettingsView } from './components/SettingsView';
 import { QuickTradeModal } from './components/QuickTradeModal';
 import { DailyCloseModal } from './components/DailyCloseModal';
@@ -247,6 +248,43 @@ function AppInner() {
               days={days}
               settings={settings}
               onSelectDayForJournal={handleSelectDateForJournal}
+            />
+          )}
+
+          {currentTab === 'challenge21' && (
+            <Challenge21View
+              trades={trades}
+              days={days}
+              settings={settings}
+              onSelectDate={handleSelectDateForJournal}
+              onTabChange={setCurrentTab}
+            />
+          )}
+
+          {currentTab === 'calendar' && (
+            <NHCycleView
+              trades={trades}
+              days={days}
+              settings={settings}
+              onSelectDayForJournal={handleSelectDateForJournal}
+            />
+          )}
+
+          {currentTab === 'notes' && (
+            <JournalView
+              trades={trades}
+              settings={settings}
+              onEditTrade={handleEditTrade}
+              onDeleteTrade={handleDeleteTrade}
+              onUpdateTrade={handleUpdateTrade}
+              onOpenQuickTrade={() => {
+                setEditTrade(null);
+                setIsQuickTradeOpen(true);
+              }}
+              onViewImage={handleViewImage}
+              selectedDateFilter={journalDateFilter}
+              onClearDateFilter={() => setJournalDateFilter(undefined)}
+              onTabChange={setCurrentTab}
             />
           )}
 

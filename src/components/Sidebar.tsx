@@ -4,7 +4,10 @@ import {
   BookOpen, 
   ShieldCheck, 
   CalendarDays, 
+  Trophy,
   BarChart2,
+  Calendar,
+  FileText,
   Settings as SettingsIcon,
   X
 } from 'lucide-react';
@@ -27,8 +30,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'journal' as TabType, label: 'Trading Journal', icon: BookOpen },
     { id: 'rules' as TabType, label: 'Trading Rules', icon: ShieldCheck },
-    { id: 'cycle' as TabType, label: '21-Day Challenge', icon: CalendarDays },
+    { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarDays },
+    { id: 'challenge21' as TabType, label: '21 Days Challenge', icon: Trophy },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart2 },
+    { id: 'calendar' as TabType, label: 'Calendar', icon: Calendar },
+    { id: 'notes' as TabType, label: 'Notes', icon: FileText },
     { id: 'settings' as TabType, label: 'Settings', icon: SettingsIcon },
   ];
 
@@ -48,15 +54,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <img 
               src="/tradeflow-logo.jpg" 
-              alt="TradeFlow Logo" 
-              className="w-9 h-9 rounded-xl object-cover shadow-sm group-hover:scale-105 transition-transform border border-[#E7E0D6] dark:border-[#2E384D]"
+              alt="NH TRADERS Logo" 
+              className="w-9 h-9 rounded-xl object-cover shadow-xs group-hover:scale-105 transition-transform border border-[#E7E0D6] dark:border-[#2E384D]"
             />
             <div>
               <h1 className="text-base font-black tracking-tight text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
-                Trade<span className="text-[#10B981]">Flow</span>
+                NH <span className="text-[#DB9F35]">TRADERS</span>
               </h1>
               <p className="text-[8px] text-[#786F66] dark:text-[#94A3B8] tracking-wider uppercase mt-1 font-semibold">
-                Journal • Review • Improve
+                Discipline Today | Profits Tomorrow
               </p>
             </div>
           </div>
@@ -65,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-[#786F66] hover:text-[#1F1A16] dark:text-[#94A3B8] dark:hover:text-white md:hidden transition-colors"
+              className="p-1.5 rounded-lg text-[#786F66] hover:text-[#1F1A16] dark:text-[#94A3B8] dark:hover:text-white md:hidden transition-colors cursor-pointer"
               aria-label="Close sidebar"
             >
               <X className="w-5 h-5" />
@@ -78,17 +84,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
+            const isChallenge = item.id === 'challenge21';
+
             return (
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-[#10B981]/15 text-[#059669] dark:text-[#34D399] border border-[#10B981]/30 shadow-xs'
+                    ? isChallenge
+                      ? 'bg-[#FCECD7] dark:bg-[#2C1D0E] text-[#9A5B13] dark:text-[#FBBF24] border border-[#F5D8B4] dark:border-[#523A1B] shadow-xs'
+                      : 'bg-[#10B981]/15 text-[#059669] dark:text-[#34D399] border border-[#10B981]/30 shadow-xs'
                     : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] hover:bg-[#F3EDE2] dark:hover:bg-[#1A2230] border border-transparent'
                 }`}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#10B981]' : 'text-[#9E958C] dark:text-[#64748B]'}`} />
+                <Icon
+                  className={`w-4 h-4 shrink-0 ${
+                    isActive
+                      ? isChallenge
+                        ? 'text-[#D97706]'
+                        : 'text-[#10B981]'
+                      : 'text-[#9E958C] dark:text-[#64748B]'
+                  }`}
+                />
                 <span className="truncate">{item.label}</span>
               </button>
             );
@@ -97,36 +115,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom Quote & Motivation Panel */}
-      <div className="relative mt-auto w-full min-h-[190px] overflow-hidden select-none flex flex-col justify-end">
-        {/* Soft top gradient */}
-        <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-[#FAF7F2] dark:from-[#121722] via-[#FAF7F2]/80 dark:via-[#121722]/80 to-transparent z-10 pointer-events-none" />
-        
-        {/* Mountain Landscape Background */}
-        <img
-          src="/mountain-sidebar.jpg"
-          alt="TradeFlow Motivation"
-          className="absolute inset-0 w-full h-full object-cover object-bottom block opacity-85 dark:opacity-40 pointer-events-none select-none"
-        />
+      <div className="relative mt-auto w-full select-none flex flex-col justify-end">
+        <div className="relative min-h-[170px] overflow-hidden flex flex-col justify-end">
+          {/* Soft top gradient */}
+          <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-[#FAF7F2] dark:from-[#121722] via-[#FAF7F2]/80 dark:via-[#121722]/80 to-transparent z-10 pointer-events-none" />
+          
+          {/* Mountain Landscape Background */}
+          <img
+            src="/mountain-sidebar.jpg"
+            alt="NH TRADERS Mountain"
+            className="absolute inset-0 w-full h-full object-cover object-bottom block opacity-90 dark:opacity-45 pointer-events-none select-none"
+          />
 
-        {/* Crisp Typography Quote */}
-        <div className="relative z-20 px-5 py-4 pb-5">
-          <div className="relative pl-3">
-            <span className="absolute -left-1 -top-1 text-[#10B981] font-serif text-2xl font-black leading-none select-none pointer-events-none">
-              “
-            </span>
-            
-            <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-black text-[14px] sm:text-[15px] leading-[1.2] tracking-tight select-none">
-              <div>“Discipline</div>
-              <div>turns goals</div>
-              <div className="flex items-baseline gap-0.5">
-                <span>into results.”</span>
+          {/* Typography Quote */}
+          <div className="relative z-20 px-4 py-3 pb-3">
+            <div className="relative pl-3">
+              <span className="absolute -left-1 -top-1 text-[#DB9F35] font-serif text-2xl font-black leading-none select-none pointer-events-none">
+                “
+              </span>
+              
+              <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-black text-[13px] leading-[1.2] tracking-tight select-none">
+                <div>“Discipline</div>
+                <div>turns goals</div>
+                <div className="flex items-baseline gap-0.5">
+                  <span>into results.”</span>
+                </div>
               </div>
-            </div>
 
-            <p className="text-[10px] font-bold tracking-wider text-[#5A5043] dark:text-[#CBD5E1] uppercase mt-2 select-none flex items-center gap-1.5">
-              <span className="text-[#DB9F35] font-normal">—</span> NH TRADERS
-            </p>
+              <p className="text-[9px] font-bold tracking-wider text-[#5A5043] dark:text-[#CBD5E1] uppercase mt-1 select-none flex items-center gap-1.5">
+                <span className="text-[#DB9F35] font-normal">—</span> NH TRADERS
+              </p>
+            </div>
           </div>
+        </div>
+
+        {/* Footer Version Info */}
+        <div className="px-5 py-2 border-t border-[#E7E0D6]/40 dark:border-[#232B3A] text-[9px] font-mono text-[#9E958C] dark:text-[#64748B] flex items-center justify-between">
+          <span className="font-bold">NH TRADERS</span>
+          <span>v1.0.0</span>
         </div>
       </div>
     </div>
