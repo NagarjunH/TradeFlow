@@ -900,13 +900,9 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
                   Challenge Rules
                 </h3>
               </div>
-              <button
-                type="button"
-                onClick={() => onTabChange?.('rules')}
-                className="text-[11px] font-bold text-[#D97706] hover:underline flex items-center gap-0.5 cursor-pointer"
-              >
-                View All →
-              </button>
+              <span className="text-[10px] font-mono font-bold text-[#D97706] bg-[#D97706]/10 px-2 py-0.5 rounded-md">
+                8 Core Rules
+              </span>
             </div>
 
             {/* List of 8 Rules */}

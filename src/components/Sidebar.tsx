@@ -2,7 +2,6 @@ import React from 'react';
 import { 
   LayoutDashboard, 
   BookOpen, 
-  ShieldCheck, 
   CalendarDays, 
   Trophy,
   BarChart2,
@@ -29,7 +28,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'journal' as TabType, label: 'Trading Journal', icon: BookOpen },
-    { id: 'rules' as TabType, label: 'Trading Rules', icon: ShieldCheck },
     { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarDays },
     { id: 'challenge21' as TabType, label: '21 Days Challenge', icon: Trophy },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart2 },

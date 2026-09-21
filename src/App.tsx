@@ -13,7 +13,6 @@ import { TopHeader } from './components/TopHeader';
 import type { TabType } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { JournalView } from './components/JournalView';
-import { TradingRulesView } from './components/TradingRulesView';
 import { NHCycleView } from './components/NHCycleView';
 import { EquityChart } from './components/EquityChart';
 import { AnalyticsView } from './components/AnalyticsView';
@@ -226,21 +225,7 @@ function AppInner() {
             />
           )}
 
-          {currentTab === 'rules' && (
-            <TradingRulesView
-              currentDate={systemDate}
-              onDateChange={(newDate) => {
-                setSystemDate(newDate);
-                setJournalDateFilter(newDate);
-              }}
-              trades={trades}
-              days={days}
-              settings={settings}
-              onRefresh={loadAllData}
-              onOpenDailyClose={() => setIsDailyCloseOpen(true)}
-              userId={user?.id}
-            />
-          )}
+
 
           {currentTab === 'cycle' && (
             <NHCycleView

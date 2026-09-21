@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   BookOpen, 
-  ShieldCheck, 
   CalendarDays, 
   Settings as SettingsIcon, 
   Plus, 
@@ -50,7 +49,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const navItems = [
     { id: 'dashboard' as TabType, label: 'Performance Dashboard', icon: BarChart3 },
     { id: 'journal' as TabType, label: 'Trading Journal & Ledger', icon: BookOpen },
-    { id: 'rules' as TabType, label: 'Trading Rules & Engine', icon: ShieldCheck },
     { id: 'cycle' as TabType, label: '31-Day Trading Cycle', icon: CalendarDays },
     { id: 'settings' as TabType, label: 'Settings & Risk Config', icon: SettingsIcon },
   ];

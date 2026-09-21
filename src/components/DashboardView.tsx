@@ -757,7 +757,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => navigate('rules')}
+                onClick={() => navigate('challenge21')}
                 className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
               >
                 <span>View All</span>
@@ -1026,7 +1026,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => navigate('rules')}
+                onClick={() => navigate('challenge21')}
                 className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
               >
                 <span>View Details</span>
@@ -1086,7 +1086,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => navigate('rules')}
+                onClick={() => navigate('challenge21')}
                 className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
               >
                 <span>View Details</span>
