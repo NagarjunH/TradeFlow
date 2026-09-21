@@ -2,7 +2,7 @@
 // TradeFlow — Supabase Daily Records API
 // ============================================================
 import { supabase } from '../supabase';
-import type { DayRecord } from '../../db/db';
+import { db, type DayRecord } from '../../db/db';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToDayRecord(row: any): DayRecord {
@@ -44,18 +44,45 @@ function dayRecordToRow(record: DayRecord, userId: string) {
 }
 
 export const dailyApi = {
-  async getAll(): Promise<DayRecord[]> {
-    const { data, error } = await supabase
-      .from('daily_records')
-      .select('*')
-      .order('record_date', { ascending: false });
+  /** Read immediately from local Dexie (<50ms) */
+  async getLocal(): Promise<DayRecord[]> {
+    try {
+      return await db.days.toArray();
+    } catch {
+      return [];
+    }
+  },
 
-    if (error) throw error;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((data ?? []) as any[]).map(rowToDayRecord);
+  async getAll(): Promise<DayRecord[]> {
+    try {
+      const { data, error } = await supabase
+        .from('daily_records')
+        .select('*')
+        .order('record_date', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapped = ((data ?? []) as any[]).map(rowToDayRecord);
+        try {
+          await db.days.clear();
+          if (mapped.length > 0) {
+            await db.days.bulkPut(mapped);
+          }
+        } catch (_) {}
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('[dailyApi] Cloud getAll failed, falling back to local DB:', err);
+    }
+
+    return await this.getLocal();
   },
 
   async upsert(record: DayRecord, userId: string): Promise<void> {
+    try {
+      await db.days.put(record);
+    } catch (_) {}
+
     const { error } = await supabase
       .from('daily_records')
       .upsert(dayRecordToRow(record, userId) as never, { onConflict: 'user_id,record_date' });

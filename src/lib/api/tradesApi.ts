@@ -71,7 +71,16 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
 }
 
 export const tradesApi = {
-  /** Fetch all trades for the current user */
+  /** Read immediately from local Dexie (<50ms) */
+  async getLocal(): Promise<Trade[]> {
+    try {
+      return await db.trades.orderBy('tradeNumber').toArray();
+    } catch {
+      return [];
+    }
+  },
+
+  /** Fetch all trades for the current user from cloud, syncing with local Dexie */
   async getAll(): Promise<Trade[]> {
     try {
       const { data, error } = await supabase
@@ -81,23 +90,22 @@ export const tradesApi = {
         .order('trade_date', { ascending: true })
         .order('created_at', { ascending: true });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         const mapped = data.map(rowToTrade);
-        for (const t of mapped) {
-          try { await db.trades.put(t); } catch (_) {}
-        }
+        try {
+          await db.trades.clear();
+          if (mapped.length > 0) {
+            await db.trades.bulkPut(mapped);
+          }
+        } catch (_) {}
         return mapped;
       }
     } catch (cloudErr) {
       console.warn('[tradesApi] Cloud getAll failed, falling back to local DB:', cloudErr);
     }
 
-    // Fallback to local Dexie trades (1 to 3 ascending)
-    try {
-      return await db.trades.orderBy('tradeNumber').toArray();
-    } catch {
-      return [];
-    }
+    // Fallback to local Dexie trades
+    return await this.getLocal();
   },
 
   /** Create a new trade, returns the created Trade with id */

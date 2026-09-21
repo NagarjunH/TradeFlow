@@ -16,13 +16,36 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 });
 
+function getCachedSession(): { user: User | null; session: Session | null } {
+  try {
+    if (typeof window === 'undefined') return { user: null, session: null };
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.endsWith('-auth-token') || key.includes('supabase.auth.token'))) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const sess = parsed?.currentSession || parsed;
+          if (sess && sess.user && sess.access_token) {
+            return { user: sess.user, session: sess };
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[AuthContext] Cache parse error:', err);
+  }
+  return { user: null, session: null };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const cached = getCachedSession();
+  const [user, setUser] = useState<User | null>(cached.user);
+  const [session, setSession] = useState<Session | null>(cached.session);
+  const [isLoading, setIsLoading] = useState(!cached.user);
 
   useEffect(() => {
-    // Get initial session
+    // Verify & refresh session in background
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);

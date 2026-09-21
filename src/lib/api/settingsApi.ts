@@ -2,34 +2,55 @@
 // TradeFlow — Supabase Settings API
 // ============================================================
 import { supabase } from '../supabase';
-import type { AppSettings } from '../../db/db';
+import { db, defaultSettings, type AppSettings } from '../../db/db';
 
 export const settingsApi = {
+  /** Read immediately from local Dexie (<50ms) */
+  async getLocal(): Promise<AppSettings> {
+    try {
+      const s = await db.settings.get('settings');
+      return s || defaultSettings;
+    } catch {
+      return defaultSettings;
+    }
+  },
+
   async get(userId: string): Promise<AppSettings | null> {
-    const [profileRes, settingsRes] = (await Promise.all([
-      supabase.from('profiles').select('*').eq('id', userId).single(),
-      supabase.from('user_settings').select('*').eq('user_id', userId).single(),
-    ])) as [any, any]; // eslint-disable-line @typescript-eslint/no-explicit-any
+    try {
+      const [profileRes, settingsRes] = (await Promise.all([
+        supabase.from('profiles').select('*').eq('id', userId).single(),
+        supabase.from('user_settings').select('*').eq('user_id', userId).single(),
+      ])) as [any, any]; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-    if (settingsRes.error || !settingsRes.data) return null;
-    if (profileRes.error || !profileRes.data) return null;
+      if (settingsRes.error || !settingsRes.data) return await this.getLocal();
+      if (profileRes.error || !profileRes.data) return await this.getLocal();
 
-    const s = settingsRes.data;
-    const p = profileRes.data;
+      const s = settingsRes.data;
+      const p = profileRes.data;
 
-    return {
-      id: 'settings',
-      initialCapital: Number(p.initial_capital),
-      currentBalance: Number(p.current_balance),
-      currency: p.base_currency as 'USD' | 'INR',
-      defaultPair: s.default_pair,
-      defaultLot: Number(s.default_lot),
-      riskPerTradePercent: Number(s.risk_per_trade),
-      dailyLossLimitR: Number(s.daily_loss_limit_r),
-      protectionMode: s.protection_mode as AppSettings['protectionMode'],
-      defaultSession: s.default_session as AppSettings['defaultSession'],
-      theme: 'Dark',
-    };
+      const mapped: AppSettings = {
+        id: 'settings',
+        initialCapital: Number(p.initial_capital),
+        currentBalance: Number(p.current_balance),
+        currency: p.base_currency as 'USD' | 'INR',
+        defaultPair: s.default_pair,
+        defaultLot: Number(s.default_lot),
+        riskPerTradePercent: Number(s.risk_per_trade),
+        dailyLossLimitR: Number(s.daily_loss_limit_r),
+        protectionMode: s.protection_mode as AppSettings['protectionMode'],
+        defaultSession: s.default_session as AppSettings['defaultSession'],
+        theme: 'Dark',
+      };
+
+      try {
+        await db.settings.put(mapped);
+      } catch (_) {}
+
+      return mapped;
+    } catch (err) {
+      console.warn('[settingsApi] Cloud get failed, falling back to local DB:', err);
+      return await this.getLocal();
+    }
   },
 
   async save(userId: string, settings: AppSettings): Promise<void> {

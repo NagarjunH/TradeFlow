@@ -27,6 +27,7 @@ interface TopHeaderProps {
   userEmail?: string;
   onSignOut?: () => void;
   onOpenMobileSidebar?: () => void;
+  isSyncing?: boolean;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -36,6 +37,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   userEmail,
   onSignOut,
   onOpenMobileSidebar,
+  isSyncing = false,
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [timeStr, setTimeStr] = useState('07:18 PM');
@@ -116,6 +118,25 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Right Controls */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Cloud Sync Status Indicator */}
+          {isSyncing ? (
+            <span 
+              className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-[#DB9F35] bg-[#FAF2E6] dark:bg-[#1C2331] px-2.5 py-1 rounded-xl border border-[#E8DCC8] dark:border-[#2E384D] shadow-2xs animate-pulse"
+              title="Synchronizing live changes with Supabase Cloud"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#DB9F35] animate-ping" />
+              Syncing...
+            </span>
+          ) : (
+            <span 
+              className="hidden lg:flex items-center gap-1.5 text-[10px] font-mono text-[#10B981] bg-[#E8F8EE] dark:bg-[#132A1C] px-2.5 py-1 rounded-xl border border-[#B7ECC8]/60 dark:border-[#1E432A] shadow-2xs"
+              title="All data saved & synced with Supabase Cloud"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
+              Cloud Live
+            </span>
+          )}
+
           {/* Interactive Date & Time Dropdown Badge */}
           <div className="relative">
             <button

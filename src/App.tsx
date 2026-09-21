@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AuthPage } from './components/AuthPage';
@@ -12,16 +12,32 @@ import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import type { TabType } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
-import { JournalView } from './components/JournalView';
-import { NHCycleView } from './components/NHCycleView';
-import { EquityChart } from './components/EquityChart';
-import { AnalyticsView } from './components/AnalyticsView';
-import { Challenge21View } from './components/Challenge21View';
-import { NotesView } from './components/NotesView';
-import { SettingsView } from './components/SettingsView';
-import { QuickTradeModal } from './components/QuickTradeModal';
-import { DailyCloseModal } from './components/DailyCloseModal';
-import { ImageViewerModal } from './components/ImageViewerModal';
+
+// ─── Code-Split Secondary Views & Modals (loaded on-demand) ─────────────────
+const JournalView = lazy(() => import('./components/JournalView').then((m) => ({ default: m.JournalView })));
+const NHCycleView = lazy(() => import('./components/NHCycleView').then((m) => ({ default: m.NHCycleView })));
+const EquityChart = lazy(() => import('./components/EquityChart').then((m) => ({ default: m.EquityChart })));
+const AnalyticsView = lazy(() => import('./components/AnalyticsView').then((m) => ({ default: m.AnalyticsView })));
+const Challenge21View = lazy(() => import('./components/Challenge21View').then((m) => ({ default: m.Challenge21View })));
+const NotesView = lazy(() => import('./components/NotesView').then((m) => ({ default: m.NotesView })));
+const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
+const QuickTradeModal = lazy(() => import('./components/QuickTradeModal').then((m) => ({ default: m.QuickTradeModal })));
+const DailyCloseModal = lazy(() => import('./components/DailyCloseModal').then((m) => ({ default: m.DailyCloseModal })));
+const ImageViewerModal = lazy(() => import('./components/ImageViewerModal').then((m) => ({ default: m.ImageViewerModal })));
+
+function TabSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="h-8 bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl w-44" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="h-28 bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl" />
+        <div className="h-28 bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl" />
+        <div className="h-28 bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl" />
+      </div>
+      <div className="h-64 bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl" />
+    </div>
+  );
+}
 
 // ─── Inner app (only renders when user is logged in) ───────────────────────
 function AppInner() {
@@ -40,15 +56,36 @@ function AppInner() {
   const [journalDateFilter, setJournalDateFilter] = useState<string | undefined>(undefined);
   const [systemDate, setSystemDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
-  // ── Cloud data state (reactive Supabase data) ──────────────────────
+  // ── Cloud & Local data state (SWR reactive data) ──────────────────────
   const [trades, setTrades] = useState<Trade[]>([]);
   const [days, setDays] = useState<DayRecord[]>([]);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [_isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Load all data from Supabase / IndexedDB on mount
+  // Load all data with Stale-While-Revalidate:
+  // 1. Instant local read (<50ms)
+  // 2. Silent cloud fetch in background
   const loadAllData = useCallback(async () => {
     if (!user) return;
+
+    // Step 1: Fast local read
+    try {
+      const [localTrades, localDays, localSettings] = await Promise.all([
+        tradesApi.getLocal(),
+        dailyApi.getLocal(),
+        settingsApi.getLocal(),
+      ]);
+      if (localTrades.length > 0) setTrades(localTrades);
+      if (localDays.length > 0) setDays(localDays);
+      setSettings(localSettings);
+      setIsDataLoaded(true);
+    } catch (localErr) {
+      console.warn('[TradeFlow] Local cache load warning:', localErr);
+    }
+
+    // Step 2: Background cloud sync
+    setIsSyncing(true);
     try {
       const [tradesRes, daysRes, settingsRes] = await Promise.allSettled([
         tradesApi.getAll(),
@@ -65,10 +102,11 @@ function AppInner() {
       if (settingsRes.status === 'fulfilled' && settingsRes.value) {
         setSettings(settingsRes.value);
       }
-      setIsDataLoaded(true);
     } catch (err) {
-      console.error('[TradeFlow] Failed to load data:', err);
+      console.error('[TradeFlow] Cloud sync warning:', err);
+    } finally {
       setIsDataLoaded(true);
+      setIsSyncing(false);
     }
   }, [user]);
 
@@ -140,30 +178,17 @@ function AppInner() {
     setImageModal({ isOpen: true, url, title });
   };
 
-  if (!isDataLoaded) {
-    return (
-      <div className="min-h-screen bg-[#F6F1EA] dark:bg-[#0B0E14] text-[#1F1A16] dark:text-[#F0F4F8] flex items-center justify-center font-mono text-sm transition-colors">
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-[#10B981] animate-ping" />
-            <span className="font-bold tracking-wider">SYNCING TRADEFLOW DATA...</span>
-          </div>
-          <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Connected to Supabase PostgreSQL cloud</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Dynamic calculations reacting instantly to data updates
-  const dayStatus = getDayStatus(systemDate, trades, settings);
-  const todayRecord = days.find((d) => d.date === systemDate);
-  const isDayClosedToday = !!todayRecord?.isDayClosed;
+  // Performance computations
   const perf = calculatePerformance(trades, settings);
+  const dayStatus = getDayStatus(systemDate, trades, settings);
   const equityPoints = generateEquityCurve(trades, settings);
 
+  const isDayClosedToday = days.some((d) => d.date === systemDate && d.isDayClosed);
+
   return (
-    <div className="min-h-screen bg-[#F6F1EA] dark:bg-[#0B0E14] text-[#1F1A16] dark:text-[#F0F4F8] flex font-sans transition-colors selection:bg-[#10B981]/30 selection:text-white">
-      {/* 1. Sidebar with mobile drawer support */}
+    <div className="flex h-screen bg-[#F6F1EA] dark:bg-[#0B0E14] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors overflow-hidden">
+      
+      {/* 1. Permanent Desktop & Slide-out Mobile Sidebar */}
       <Sidebar
         currentTab={currentTab}
         onTabChange={(tab) => {
@@ -191,6 +216,7 @@ function AppInner() {
           userEmail={user?.email}
           onSignOut={signOut}
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
+          isSyncing={isSyncing}
         />
 
         <main className="flex-1 p-3 sm:p-6 lg:p-7 max-w-[1400px] w-full mx-auto">
@@ -208,125 +234,134 @@ function AppInner() {
             />
           )}
 
-          {currentTab === 'journal' && (
-            <JournalView
-              trades={trades}
-              settings={settings}
-              onEditTrade={handleEditTrade}
-              onDeleteTrade={handleDeleteTrade}
-              onUpdateTrade={handleUpdateTrade}
-              onOpenQuickTrade={() => {
-                setEditTrade(null);
-                setIsQuickTradeOpen(true);
-              }}
-              onViewImage={handleViewImage}
-              selectedDateFilter={journalDateFilter}
-              onClearDateFilter={() => setJournalDateFilter(undefined)}
-              onTabChange={setCurrentTab}
-            />
-          )}
-
-
-          {currentTab === 'cycle' && (
-            <NHCycleView
-              trades={trades}
-              days={days}
-              settings={settings}
-              onSelectDayForJournal={handleSelectDateForJournal}
-            />
-          )}
-
-          {currentTab === 'challenge21' && (
-            <Challenge21View
-              trades={trades}
-              days={days}
-              settings={settings}
-              onSelectDate={handleSelectDateForJournal}
-              onTabChange={setCurrentTab}
-            />
-          )}
-
-          {currentTab === 'calendar' && (
-            <NHCycleView
-              trades={trades}
-              days={days}
-              settings={settings}
-              onSelectDayForJournal={handleSelectDateForJournal}
-            />
-          )}
-
-          {currentTab === 'notes' && (
-            <NotesView
-              trades={trades}
-              settings={settings}
-              onSelectDateForJournal={handleSelectDateForJournal}
-              onTabChange={setCurrentTab}
-            />
-          )}
-
-          {currentTab === 'analytics' && (
-            <div className="space-y-6">
-              <AnalyticsView
+          <Suspense fallback={<TabSkeleton />}>
+            {currentTab === 'journal' && (
+              <JournalView
                 trades={trades}
                 settings={settings}
+                onEditTrade={handleEditTrade}
+                onDeleteTrade={handleDeleteTrade}
+                onUpdateTrade={handleUpdateTrade}
+                onOpenQuickTrade={() => {
+                  setEditTrade(null);
+                  setIsQuickTradeOpen(true);
+                }}
+                onViewImage={handleViewImage}
+                selectedDateFilter={journalDateFilter}
+                onClearDateFilter={() => setJournalDateFilter(undefined)}
+                onTabChange={setCurrentTab}
               />
-              <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs transition-colors">
-                <EquityChart
-                  points={equityPoints}
-                  perf={perf}
-                  currency={settings.currency}
-                />
-              </div>
-            </div>
-          )}
+            )}
 
-          {currentTab === 'settings' && (
-            <SettingsView
-              settings={settings}
-              onSettingsUpdated={loadAllData}
-              userId={user?.id}
-            />
-          )}
+            {currentTab === 'cycle' && (
+              <NHCycleView
+                trades={trades}
+                days={days}
+                settings={settings}
+                onSelectDayForJournal={handleSelectDateForJournal}
+              />
+            )}
+
+            {currentTab === 'challenge21' && (
+              <Challenge21View
+                trades={trades}
+                days={days}
+                settings={settings}
+                onSelectDate={handleSelectDateForJournal}
+                onTabChange={setCurrentTab}
+              />
+            )}
+
+            {currentTab === 'calendar' && (
+              <NHCycleView
+                trades={trades}
+                days={days}
+                settings={settings}
+                onSelectDayForJournal={handleSelectDateForJournal}
+              />
+            )}
+
+            {currentTab === 'notes' && (
+              <NotesView
+                trades={trades}
+                settings={settings}
+                onSelectDateForJournal={handleSelectDateForJournal}
+                onTabChange={setCurrentTab}
+              />
+            )}
+
+            {currentTab === 'analytics' && (
+              <div className="space-y-6">
+                <AnalyticsView
+                  trades={trades}
+                  settings={settings}
+                />
+                <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs transition-colors">
+                  <EquityChart
+                    points={equityPoints}
+                    perf={perf}
+                    currency={settings.currency}
+                  />
+                </div>
+              </div>
+            )}
+
+            {currentTab === 'settings' && (
+              <SettingsView
+                settings={settings}
+                onSettingsUpdated={loadAllData}
+                userId={user?.id}
+              />
+            )}
+          </Suspense>
         </main>
       </div>
 
-      {/* 3. Global Modals */}
-      <QuickTradeModal
-        isOpen={isQuickTradeOpen}
-        onClose={() => {
-          setIsQuickTradeOpen(false);
-          setEditTrade(null);
-        }}
-        trades={trades}
-        settings={settings}
-        onTradeSaved={() => {
-          setIsQuickTradeOpen(false);
-          setEditTrade(null);
-          loadAllData();
-        }}
-        editTrade={editTrade}
-        userId={user?.id}
-        onTradesChange={setTrades}
-      />
+      {/* 3. Global Lazy Modals */}
+      <Suspense fallback={null}>
+        {isQuickTradeOpen && (
+          <QuickTradeModal
+            isOpen={isQuickTradeOpen}
+            onClose={() => {
+              setIsQuickTradeOpen(false);
+              setEditTrade(null);
+            }}
+            trades={trades}
+            settings={settings}
+            onTradeSaved={() => {
+              setIsQuickTradeOpen(false);
+              setEditTrade(null);
+              loadAllData();
+            }}
+            editTrade={editTrade}
+            userId={user?.id}
+            onTradesChange={setTrades}
+          />
+        )}
 
-      <DailyCloseModal
-        isOpen={isDailyCloseOpen}
-        onClose={() => setIsDailyCloseOpen(false)}
-        trades={trades}
-        settings={settings}
-        onDayClosed={() => {
-          setIsDailyCloseOpen(false);
-          loadAllData();
-        }}
-        userId={user?.id}
-      />
+        {isDailyCloseOpen && (
+          <DailyCloseModal
+            isOpen={isDailyCloseOpen}
+            onClose={() => setIsDailyCloseOpen(false)}
+            trades={trades}
+            settings={settings}
+            onDayClosed={() => {
+              setIsDailyCloseOpen(false);
+              loadAllData();
+            }}
+            userId={user?.id}
+          />
+        )}
 
-      <ImageViewerModal
-        isOpen={imageModal.isOpen}
-        onClose={() => setImageModal({ isOpen: false, url: '', title: '' })}
-        imageUrl={imageModal.url}
-        title={imageModal.title}
-      />
+        {imageModal.isOpen && (
+          <ImageViewerModal
+            isOpen={imageModal.isOpen}
+            onClose={() => setImageModal({ isOpen: false, url: '', title: '' })}
+            imageUrl={imageModal.url}
+            title={imageModal.title}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
