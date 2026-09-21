@@ -100,7 +100,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setEmotion(editTrade.emotion);
       setSetupType(editTrade.setupType || 'MSS + FVG');
       setHtfContext(editTrade.htfContext || 'Bullish');
-      setEntryReason(editTrade.entryReason || '');
+      setEntryReason(editTrade.notes || editTrade.entryReason || '');
       setSession(editTrade.session || 'London/NY Overlap');
       setChartScreenshot(editTrade.chartScreenshot || '');
     } else {
@@ -115,6 +115,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setExecution('CLEAN');
       setViolationReason('None');
       setEmotion('CALM');
+      setEntryReason('');
       setChartScreenshot('');
     }
   }, [editTrade, isOpen, settings]);
@@ -245,7 +246,8 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         violationReason: execution === 'VIOLATION' ? violationReason : 'None',
         setupType,
         htfContext,
-        entryReason,
+        entryReason: entryReason.trim(),
+        notes: entryReason.trim(),
         session,
         chartScreenshot: chartScreenshot || undefined,
         createdAt: editTrade ? editTrade.createdAt : new Date().toISOString(),
@@ -265,7 +267,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       } else {
         const created = await tradesApi.create(tradeData, userId);
         const createdUuid = (created as Trade & { _uuid?: string })._uuid;
-        onTradesChange?.((prev) => [created, ...prev.filter((t) => t.id !== created.id)]);
+        onTradesChange?.((prev) => [...prev.filter((t) => t.id !== created.id), created]);
         if (isLockedOut && overrideReason) {
           await auditApi.add(
             userId,
@@ -680,7 +682,24 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               </div>
             </div>
 
-            {/* Row 7: Ctrl + V Clipboard Chart */}
+            {/* Row 7: Manual Trade Notes */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider">
+                  Trade Notes (Manual Notes)
+                </label>
+                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Entry reasoning, plan execution or observations</span>
+              </div>
+              <textarea
+                rows={2}
+                value={entryReason}
+                onChange={(e) => setEntryReason(e.target.value)}
+                placeholder="Write your trade notes manually here (e.g. Clean 15m MSS retest on London open, followed plan, TP hit cleanly)..."
+                className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors resize-y placeholder:text-[#9E958C]"
+              />
+            </div>
+
+            {/* Row 8: Ctrl + V Clipboard Chart */}
             <div>
               <label className="block text-xs font-semibold text-[#786F66] uppercase tracking-wider mb-1.5">
                 Chart Screenshot (TradingView)

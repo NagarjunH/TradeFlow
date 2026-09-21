@@ -77,8 +77,9 @@ export const tradesApi = {
       const { data, error } = await supabase
         .from('trades')
         .select('*')
-        .order('trade_date', { ascending: false })
-        .order('created_at', { ascending: false });
+        .order('trade_number', { ascending: true })
+        .order('trade_date', { ascending: true })
+        .order('created_at', { ascending: true });
 
       if (!error && Array.isArray(data) && data.length > 0) {
         const mapped = data.map(rowToTrade);
@@ -91,9 +92,9 @@ export const tradesApi = {
       console.warn('[tradesApi] Cloud getAll failed, falling back to local DB:', cloudErr);
     }
 
-    // Fallback to local Dexie trades
+    // Fallback to local Dexie trades (1 to 3 ascending)
     try {
-      return await db.trades.orderBy('tradeNumber').reverse().toArray();
+      return await db.trades.orderBy('tradeNumber').toArray();
     } catch {
       return [];
     }

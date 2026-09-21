@@ -102,6 +102,39 @@ function AppInner() {
     setIsQuickTradeOpen(true);
   };
 
+  const handleDeleteTrade = async (trade: Trade) => {
+    const tradeId = trade.id;
+    const tradeUuid = (trade as any)._uuid;
+
+    // Optimistically remove from state
+    setTrades((prev) => prev.filter((t) => t.id !== tradeId && (!tradeUuid || (t as any)._uuid !== tradeUuid)));
+
+    try {
+      if (tradeUuid) {
+        await tradesApi.delete(tradeUuid);
+      } else if (tradeId) {
+        await tradesApi.delete(String(tradeId));
+      }
+    } catch (err) {
+      console.error('[TradeFlow] Failed to delete trade:', err);
+    }
+  };
+
+  const handleUpdateTrade = async (uuid: string, updates: Partial<Trade>) => {
+    // Optimistically update state
+    setTrades((prev) =>
+      prev.map((t) =>
+        (t as any)._uuid === uuid || String(t.id) === uuid ? { ...t, ...updates } : t
+      )
+    );
+
+    try {
+      await tradesApi.update(uuid, updates);
+    } catch (err) {
+      console.error('[TradeFlow] Failed to update trade:', err);
+    }
+  };
+
   const handleViewImage = (url: string, title?: string) => {
     setImageModal({ isOpen: true, url, title });
   };
@@ -179,6 +212,8 @@ function AppInner() {
               trades={trades}
               settings={settings}
               onEditTrade={handleEditTrade}
+              onDeleteTrade={handleDeleteTrade}
+              onUpdateTrade={handleUpdateTrade}
               onOpenQuickTrade={() => {
                 setEditTrade(null);
                 setIsQuickTradeOpen(true);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, 
   Calendar, 
@@ -19,7 +19,11 @@ import {
   Layers,
   Smile,
   Zap,
-  Crosshair
+  Crosshair,
+  Trash2,
+  Edit3,
+  MessageSquare,
+  Check
 } from 'lucide-react';
 import type { Trade, AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
@@ -51,6 +55,8 @@ interface JournalViewProps {
   trades: Trade[];
   settings: AppSettings;
   onEditTrade: (trade: Trade) => void;
+  onDeleteTrade?: (trade: Trade) => void | Promise<void>;
+  onUpdateTrade?: (uuid: string, updates: Partial<Trade>) => void | Promise<void>;
   onOpenQuickTrade: () => void;
   onViewImage: (url: string, title?: string) => void;
   selectedDateFilter?: string;
@@ -62,6 +68,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
   trades,
   settings: _settings,
   onEditTrade,
+  onDeleteTrade,
+  onUpdateTrade,
   onOpenQuickTrade,
   onViewImage,
   selectedDateFilter,
@@ -77,6 +85,28 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [filterExitType, setFilterExitType] = useState<string>('ALL');
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Sorting State: 1 to 3 ascending by default (user request #1)
+  const [sortAscending, setSortAscending] = useState<boolean>(true);
+
+  // Row Action Menu (3 dots) & Delete Confirmation (user request #2)
+  const [activeMenuId, setActiveMenuId] = useState<number | string | null>(null);
+  const [tradeToDelete, setTradeToDelete] = useState<Trade | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // Manual Note Quick-Editor Modal (user request #3)
+  const [noteModalTrade, setNoteModalTrade] = useState<Trade | null>(null);
+  const [noteText, setNoteText] = useState<string>('');
+  const [isSavingNote, setIsSavingNote] = useState<boolean>(false);
+
+  // Dismiss dropdown when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = () => setActiveMenuId(null);
+    if (activeMenuId !== null) {
+      window.addEventListener('click', handleOutsideClick);
+      return () => window.removeEventListener('click', handleOutsideClick);
+    }
+  }, [activeMenuId]);
 
   // Helper for date formatting
   const formatTradeDate = (dateStr?: string) => {
@@ -144,7 +174,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     execution: (t.execution === 'CLEAN' ? 'Clean' : 'Violation') as 'Clean' | 'Violation',
     setup: t.setupType || 'MSS + FVG',
     htf: (t.htfContext || 'Bullish') as 'Bullish' | 'Bearish' | 'Neutral',
-    note: t.entryReason || t.notes || 'Executed trade plan',
+    note: t.notes || t.entryReason || '',
     rawTrade: t,
   }));
 
@@ -166,11 +196,23 @@ export const JournalView: React.FC<JournalViewProps> = ({
     return true;
   });
 
-  const totalTradesCount = filteredList.length;
+  // Sort trades: strictly 1 to 3 ascending by default (user request #1)
+  const sortedList = [...filteredList].sort((a, b) => {
+    const numA = Number(a.num) || 0;
+    const numB = Number(b.num) || 0;
+    if (numA !== numB) {
+      return sortAscending ? numA - numB : numB - numA;
+    }
+    return sortAscending
+      ? (a.rawDate + a.dateTime).localeCompare(b.rawDate + b.dateTime)
+      : (b.rawDate + b.dateTime).localeCompare(a.rawDate + a.dateTime);
+  });
+
+  const totalTradesCount = sortedList.length;
   const totalPages = Math.max(1, Math.ceil(totalTradesCount / pageSize));
   const validCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (validCurrentPage - 1) * pageSize;
-  const paginatedTrades = filteredList.slice(startIndex, startIndex + pageSize);
+  const paginatedTrades = sortedList.slice(startIndex, startIndex + pageSize);
 
   const hasActiveFilters = 
     filterDateRange !== 'ALL' ||
@@ -499,7 +541,16 @@ export const JournalView: React.FC<JournalViewProps> = ({
           <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
             <thead>
               <tr className="bg-[#F2ECE0] dark:bg-[#1A2230] border-b border-[#E7E0D6] dark:border-[#242D3D] text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-                <th className="py-3 px-3 text-center w-8">#</th>
+                <th 
+                  onClick={() => setSortAscending((prev) => !prev)}
+                  className="py-3 px-3 text-center w-14 cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors select-none group"
+                  title="Click to toggle sort sequence (1 to 3 / 3 to 1)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>#</span>
+                    <span className="text-[9px] font-mono text-[#DB9F35] font-bold">{sortAscending ? '1→3' : '3→1'}</span>
+                  </div>
+                </th>
                 <th className="py-3 px-3 font-bold">Date &amp; Time</th>
                 <th className="py-3 px-3 font-bold">Pair</th>
                 <th className="py-3 px-2 font-bold">Lot</th>
@@ -736,23 +787,85 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     </td>
 
                     {/* Note */}
-                    <td className="py-2.5 px-4 text-[#786F66] text-[11px] max-w-xs truncate">
-                      {t.note}
+                    <td 
+                      className="py-2.5 px-4 text-[#786F66] dark:text-[#94A3B8] text-[11px] max-w-xs truncate cursor-pointer hover:text-[#DB9F35] transition-colors"
+                      title={t.note ? `Note: ${t.note} (Click to edit)` : 'Click to add note'}
+                      onClick={() => {
+                        if (t.rawTrade) {
+                          setNoteModalTrade(t.rawTrade);
+                          setNoteText(t.rawTrade.notes || t.rawTrade.entryReason || '');
+                        }
+                      }}
+                    >
+                      {t.note ? (
+                        <span className="text-[#1F1A16] dark:text-[#F0F4F8] font-normal hover:underline">{t.note}</span>
+                      ) : (
+                        <span className="text-[10px] text-[#DB9F35] font-medium inline-flex items-center gap-1 hover:underline">
+                          + Add Note
+                        </span>
+                      )}
                     </td>
 
-                    {/* Actions Menu */}
-                    <td className="py-2.5 px-3 text-center">
+                    {/* Actions Menu (3 dots) */}
+                    <td className="py-2.5 px-3 text-center relative">
                       <button
-                        onClick={() => {
-                          if ('rawTrade' in t && t.rawTrade) {
-                            onEditTrade(t.rawTrade as Trade);
-                          }
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuId(activeMenuId === t.id ? null : t.id);
                         }}
-                        className="p-1 rounded-md text-[#9E958C] hover:text-[#1F1A16] hover:bg-[#F2ECE0] transition-colors"
+                        className="p-1 rounded-md text-[#9E958C] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] hover:bg-[#F2ECE0] dark:hover:bg-[#1C2331] transition-colors cursor-pointer"
                         title="Trade actions"
                       >
                         <MoreVertical className="w-3.5 h-3.5" />
                       </button>
+
+                      {/* Dropdown Menu */}
+                      {activeMenuId === t.id && (
+                        <div
+                          className="absolute right-3 top-8 z-30 w-36 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl shadow-lg py-1 text-left animate-fade-in"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              if (t.rawTrade) onEditTrade(t.rawTrade);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] hover:bg-[#FAF6EE] dark:hover:bg-[#1C2331] transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-[#DB9F35]" />
+                            <span>Edit Trade</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              if (t.rawTrade) {
+                                setNoteModalTrade(t.rawTrade);
+                                setNoteText(t.rawTrade.notes || t.rawTrade.entryReason || '');
+                              }
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] hover:bg-[#FAF6EE] dark:hover:bg-[#1C2331] transition-colors cursor-pointer"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-[#10B981]" />
+                            <span>Edit Note</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              if (t.rawTrade) setTradeToDelete(t.rawTrade);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-[#DC2626] hover:bg-[#FEECEB] dark:hover:bg-[#2A1616] transition-colors cursor-pointer border-t border-[#E7E0D6]/50 dark:border-[#242D3D]"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Trade</span>
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -880,12 +993,146 @@ export const JournalView: React.FC<JournalViewProps> = ({
         {/* View Analytics CTA */}
         <button
           onClick={() => onTabChange?.('analytics')}
-          className="px-4 py-2 rounded-xl bg-[#DB9F35] hover:bg-[#C98E2A] text-[#1F1A16] font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all hover:scale-102 shrink-0"
+          className="px-4 py-2 rounded-xl bg-[#DB9F35] hover:bg-[#C98E2A] text-[#1F1A16] font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all hover:scale-102 shrink-0 cursor-pointer"
         >
           <span>View Analytics</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* 6. Delete Trade Confirmation Dialog (User Request #2) */}
+      {tradeToDelete && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => !isDeleting && setTradeToDelete(null)}
+        >
+          <div 
+            className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#FEECEB] dark:bg-[#2A1616] text-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                  Delete Trade #{tradeToDelete.tradeNumber || tradeToDelete.id}?
+                </h3>
+                <p className="text-xs text-[#786F66] dark:text-[#94A3B8] mt-1 leading-relaxed">
+                  Permanently delete this <strong className="text-[#1F1A16] dark:text-white">{tradeToDelete.pair} {tradeToDelete.order}</strong> trade (${tradeToDelete.pnl.toFixed(2)}) from your journal? All statistics and KPIs will update immediately.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E7E0D6] dark:border-[#242D3D]">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setTradeToDelete(null)}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-[#786F66] hover:text-[#1F1A16] dark:text-[#94A3B8] dark:hover:text-white bg-[#F2ECE0] dark:bg-[#1C2331] hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    await onDeleteTrade?.(tradeToDelete);
+                  } finally {
+                    setIsDeleting(false);
+                    setTradeToDelete(null);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#DC2626] hover:bg-[#B91C1C] transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'Deleting...' : 'Yes, Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Quick Note Editor Modal (User Request #3) */}
+      {noteModalTrade && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => !isSavingNote && setNoteModalTrade(null)}
+        >
+          <div 
+            className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-[#E7E0D6] dark:border-[#242D3D]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                    Trade #{noteModalTrade.tradeNumber || noteModalTrade.id} Notes
+                  </h3>
+                  <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+                    {noteModalTrade.pair} • {noteModalTrade.order} • {noteModalTrade.date}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNoteModalTrade(null)}
+                className="text-xs text-[#786F66] hover:text-[#1F1A16] dark:hover:text-white p-1 rounded-lg hover:bg-[#F2ECE0] dark:hover:bg-[#1C2331] transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] mb-1.5">
+                Manual Trade Notes &amp; Observations
+              </label>
+              <textarea
+                rows={4}
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="Write your trade reasoning, thoughts, or mistakes here..."
+                className="w-full px-3 py-2 bg-white dark:bg-[#0B0E14] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors resize-y placeholder:text-[#9E958C]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E7E0D6] dark:border-[#242D3D]">
+              <button
+                type="button"
+                disabled={isSavingNote}
+                onClick={() => setNoteModalTrade(null)}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-[#786F66] hover:text-[#1F1A16] dark:text-[#94A3B8] dark:hover:text-white bg-[#F2ECE0] dark:bg-[#1C2331] hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingNote}
+                onClick={async () => {
+                  setIsSavingNote(true);
+                  try {
+                    const trimmed = noteText.trim();
+                    const uuid = (noteModalTrade as any)._uuid || String(noteModalTrade.id);
+                    await onUpdateTrade?.(uuid, { notes: trimmed, entryReason: trimmed });
+                  } finally {
+                    setIsSavingNote(false);
+                    setNoteModalTrade(null);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#10B981] hover:bg-[#059669] transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>{isSavingNote ? 'Saving...' : 'Save Note'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
