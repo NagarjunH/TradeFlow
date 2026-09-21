@@ -227,7 +227,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             “Better decisions today, stronger results tomorrow.”
           </p>
           <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] tracking-wider block uppercase mt-0.5">
-            — NH TRADERS
+            — TradeFlow
           </span>
         </div>
       </div>
@@ -1149,7 +1149,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* 6. Footer (Matching exact text in mockup) */}
       <footer className="pt-4 border-t border-[#E7E0D6] dark:border-[#242D3D] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#786F66] dark:text-[#94A3B8] transition-colors">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8]">NH TRADERS</span>
+          <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8]">TradeFlow</span>
           <span>|</span>
           <span>Trade Better. Be Better.</span>
         </div>

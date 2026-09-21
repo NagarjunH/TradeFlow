@@ -1,5 +1,5 @@
 // ============================================================
-// NH Traders — Supabase Trade API
+// TradeFlow — Supabase Trade API
 // Replaces: db.trades.add / update / toArray from Dexie
 // ============================================================
 import { supabase } from '../supabase';
@@ -113,7 +113,7 @@ export const tradesApi = {
       if (!profile) {
         await supabase.from('profiles').upsert({
           id: userId,
-          name: 'NH Trader',
+          name: 'TradeFlow Trader',
           base_currency: 'USD',
           initial_capital: 10000,
           current_balance: 10000,

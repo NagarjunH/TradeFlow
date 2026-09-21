@@ -18,6 +18,7 @@ import { EquityChart } from './components/EquityChart';
 import { AnalyticsView } from './components/AnalyticsView';
 import { Challenge21View } from './components/Challenge21View';
 import { NotesView } from './components/NotesView';
+import { TradingRulesView } from './components/TradingRulesView';
 import { SettingsView } from './components/SettingsView';
 import { QuickTradeModal } from './components/QuickTradeModal';
 import { DailyCloseModal } from './components/DailyCloseModal';
@@ -227,6 +228,19 @@ function AppInner() {
           )}
 
 
+
+          {currentTab === 'rules' && (
+            <TradingRulesView
+              currentDate={systemDate}
+              onDateChange={setSystemDate}
+              trades={trades}
+              days={days}
+              settings={settings}
+              onRefresh={loadAllData}
+              onOpenDailyClose={() => setIsDailyCloseOpen(true)}
+              userId={user?.id}
+            />
+          )}
 
           {currentTab === 'cycle' && (
             <NHCycleView

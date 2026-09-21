@@ -64,7 +64,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
               </span>
             </div>
             <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-[#1F1A16] dark:text-[#F0F4F8] uppercase">
-              NH <span className="text-[#DB9F35]">TRADERS</span>{' '}
+              TRADE<span className="text-[#DB9F35]">FLOW</span>{' '}
               <span className="text-[#9B671B] dark:text-[#F59E0B]">
                 {challengeMode === '21_DAY' ? '21-DAY CHALLENGE' : `${monthNames[cycleMonth - 1]} ${cycleYear}`}
               </span>
@@ -255,7 +255,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
             <span className="text-xs font-mono font-bold text-[#DB9F35] uppercase tracking-wider block">
               Trade Better, Be Better
             </span>
-            <span className="text-[11px] text-[#786F66]">NH Traders Official Methodology</span>
+            <span className="text-[11px] text-[#786F66]">TradeFlow Official Methodology</span>
           </div>
         </div>
 

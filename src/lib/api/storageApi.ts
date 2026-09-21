@@ -1,5 +1,5 @@
 // ============================================================
-// NH Traders — Supabase Chart Screenshot Storage API
+// TradeFlow — Supabase Chart Screenshot Storage API
 // Replaces: base64 chartScreenshot string in trades
 // ============================================================
 import { supabase } from '../supabase';

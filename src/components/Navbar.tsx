@@ -55,7 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-[#E5E7EB] shadow-xs transition-all">
-      {/* 1. Main Top Header Bar (Matching NH QUANT Screenshot) */}
+      {/* 1. Main Top Header Bar (Matching TradeFlow Header) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
           {/* Logo & Brand */}
@@ -63,18 +63,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onTabChange('dashboard')}
             className="cursor-pointer flex items-center gap-3 shrink-0"
           >
-            {/* NH TRADERS honey gold badge */}
+            {/* TradeFlow honey gold badge */}
             <div className="w-10 h-10 rounded-xl bg-[#F0E5D3] border border-[#E2D1B8] flex items-center justify-center font-mono font-black text-[#DB9F35] text-base tracking-tighter shadow-xs">
-              NH
+              TF
             </div>
 
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-lg font-black tracking-tight text-[#1F1A16]">
-                  NH
+                  Trade
                 </span>
                 <span className="text-lg font-black tracking-tight text-[#DB9F35]">
-                  TRADERS
+                  Flow
                 </span>
                 <span className="text-xs text-[#786F66] hidden lg:inline font-normal">
                   — Discipline Today • Profits Tomorrow
@@ -163,7 +163,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* 3. Ticker / Market Bar (Matching NH QUANT Lower Bar) */}
+      {/* 3. Ticker / Market Bar (Matching TradeFlow Lower Bar) */}
       <div className="border-t border-[#E5E7EB] bg-white py-2">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between text-xs gap-4">
           <div className="flex items-center gap-3">

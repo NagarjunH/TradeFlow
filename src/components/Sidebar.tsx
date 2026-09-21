@@ -2,7 +2,8 @@ import React from 'react';
 import { 
   LayoutDashboard, 
   BookOpen, 
-  CalendarDays, 
+  ShieldCheck,
+  CalendarCheck,
   Trophy,
   BarChart2,
   Calendar,
@@ -28,7 +29,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'journal' as TabType, label: 'Trading Journal', icon: BookOpen },
-    { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarDays },
+    { id: 'rules' as TabType, label: 'Trading Rules', icon: ShieldCheck },
+    { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarCheck },
     { id: 'challenge21' as TabType, label: '21 Days Challenge', icon: Trophy },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart2 },
     { id: 'calendar' as TabType, label: 'Calendar', icon: Calendar },
@@ -52,12 +54,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <img 
               src="/tradeflow-logo.jpg" 
-              alt="NH TRADERS Logo" 
+              alt="TradeFlow Logo" 
               className="w-9 h-9 rounded-xl object-cover shadow-xs group-hover:scale-105 transition-transform border border-[#E7E0D6] dark:border-[#2E384D]"
             />
             <div>
               <h1 className="text-base font-black tracking-tight text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
-                NH <span className="text-[#DB9F35]">TRADERS</span>
+                Trade<span className="text-[#DB9F35]">Flow</span>
               </h1>
               <p className="text-[8px] text-[#786F66] dark:text-[#94A3B8] tracking-wider uppercase mt-1 font-semibold">
                 Discipline Today | Profits Tomorrow
@@ -88,21 +90,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`relative w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-semibold transition-all cursor-pointer text-left overflow-hidden ${
                   isActive
                     ? isChallenge
-                      ? 'bg-[#FCECD7] dark:bg-[#2C1D0E] text-[#9A5B13] dark:text-[#FBBF24] border border-[#F5D8B4] dark:border-[#523A1B] shadow-xs'
-                      : 'bg-[#10B981]/15 text-[#059669] dark:text-[#34D399] border border-[#10B981]/30 shadow-xs'
-                    : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] hover:bg-[#F3EDE2] dark:hover:bg-[#1A2230] border border-transparent'
+                      ? 'bg-[#FCEFD8] dark:bg-[#342416] text-[#6E3C12] dark:text-[#FBBF24] font-bold shadow-2xs'
+                      : 'bg-[#F4ECE1] dark:bg-[#1E2638] text-[#1F1A16] dark:text-[#F0F4F8] font-bold shadow-2xs'
+                    : 'text-[#624E3D] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] hover:bg-[#F3EDE2]/70 dark:hover:bg-[#1A2230]'
                 }`}
               >
+                {/* Left orange accent bar indicator */}
+                {isActive && (
+                  <span
+                    className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-md ${
+                      isChallenge ? 'bg-[#E08A2B]' : 'bg-[#10B981]'
+                    }`}
+                  />
+                )}
                 <Icon
                   className={`w-4 h-4 shrink-0 ${
                     isActive
                       ? isChallenge
-                        ? 'text-[#D97706]'
+                        ? 'text-[#C8681A] dark:text-[#F59E0B]'
                         : 'text-[#10B981]'
-                      : 'text-[#9E958C] dark:text-[#64748B]'
+                      : 'text-[#6E5845] dark:text-[#78869E]'
                   }`}
                 />
                 <span className="truncate">{item.label}</span>
@@ -112,45 +122,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
       </div>
 
-      {/* Bottom Quote & Motivation Panel */}
-      <div className="relative mt-auto w-full select-none flex flex-col justify-end">
-        <div className="relative min-h-[170px] overflow-hidden flex flex-col justify-end">
-          {/* Soft top gradient */}
-          <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-[#FAF7F2] dark:from-[#121722] via-[#FAF7F2]/80 dark:via-[#121722]/80 to-transparent z-10 pointer-events-none" />
-          
-          {/* Mountain Landscape Background */}
-          <img
-            src="/mountain-sidebar.jpg"
-            alt="NH TRADERS Mountain"
-            className="absolute inset-0 w-full h-full object-cover object-bottom block opacity-90 dark:opacity-45 pointer-events-none select-none"
-          />
+      {/* Bottom Mountain Landscape & Motivation Panel */}
+      <div className="relative flex-1 min-h-[300px] sm:min-h-[340px] flex flex-col justify-end overflow-hidden mt-auto">
+        {/* Soft top gradient blending from menu into mountain */}
+        <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-[#FAF7F2] dark:from-[#121722] via-[#FAF7F2]/60 dark:via-[#121722]/60 to-transparent z-10 pointer-events-none" />
 
-          {/* Typography Quote */}
-          <div className="relative z-20 px-4 py-3 pb-3">
-            <div className="relative pl-3">
-              <span className="absolute -left-1 -top-1 text-[#DB9F35] font-serif text-2xl font-black leading-none select-none pointer-events-none">
-                “
-              </span>
-              
-              <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-black text-[13px] leading-[1.2] tracking-tight select-none">
-                <div>“Discipline</div>
-                <div>turns goals</div>
-                <div className="flex items-baseline gap-0.5">
-                  <span>into results.”</span>
-                </div>
-              </div>
+        {/* Mountain Landscape Background Image - Centered on peak */}
+        <img
+          src="/mountain-sidebar.jpg"
+          alt="TradeFlow Mountain Landscape"
+          className="absolute inset-0 w-full h-full object-cover object-[center_42%] block opacity-95 dark:opacity-40 pointer-events-none select-none"
+        />
 
-              <p className="text-[9px] font-bold tracking-wider text-[#5A5043] dark:text-[#CBD5E1] uppercase mt-1 select-none flex items-center gap-1.5">
-                <span className="text-[#DB9F35] font-normal">—</span> NH TRADERS
-              </p>
+        {/* Bottom subtle gradient for text contrast over misty trees */}
+        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-[#FAF7F2]/90 dark:from-[#121722]/95 via-[#FAF7F2]/50 dark:via-[#121722]/60 to-transparent z-10 pointer-events-none" />
+
+        {/* Typography Quote & TradeFlow Branding */}
+        <div className="relative z-20 px-5 pb-5">
+          <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-serif font-black italic text-[15px] sm:text-[16px] leading-[1.2] tracking-tight select-none">
+            <span className="text-[#C8681A] font-serif not-italic mr-0.5">“</span>Discipline<br />
+            turns goals<br />
+            into results.<span className="text-[#C8681A] font-serif not-italic ml-0.5">”</span>
+          </div>
+
+          <p className="text-[10px] font-bold tracking-wider text-[#4A3E31] dark:text-[#CBD5E1] uppercase mt-2 select-none flex items-center gap-1.5">
+            <span className="text-[#C8681A] font-bold">—</span> TradeFlow
+          </p>
+
+          <div className="mt-5 select-none">
+            <div className="text-xs font-black text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight">
+              TradeFlow
+            </div>
+            <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8]">
+              v1.0.0
             </div>
           </div>
-        </div>
-
-        {/* Footer Version Info */}
-        <div className="px-5 py-2 border-t border-[#E7E0D6]/40 dark:border-[#232B3A] text-[9px] font-mono text-[#9E958C] dark:text-[#64748B] flex items-center justify-between">
-          <span className="font-bold">NH TRADERS</span>
-          <span>v1.0.0</span>
         </div>
       </div>
     </div>

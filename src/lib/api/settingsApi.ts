@@ -1,5 +1,5 @@
 // ============================================================
-// NH Traders — Supabase Settings API
+// TradeFlow — Supabase Settings API
 // ============================================================
 import { supabase } from '../supabase';
 import type { AppSettings } from '../../db/db';

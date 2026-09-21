@@ -1,5 +1,5 @@
 // ============================================================
-// NH Traders — Supabase Audit Logs API
+// TradeFlow — Supabase Audit Logs API
 // ============================================================
 import { supabase } from '../supabase';
 

@@ -984,7 +984,7 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
                 the results will take care of themselves.”
               </p>
               <p className="text-[9px] font-bold text-[#786F66] tracking-wider uppercase mt-1.5">
-                — NH TRADERS
+                — TradeFlow
               </p>
             </div>
           </div>
@@ -1273,7 +1273,7 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
                 <ul className="text-xs text-[#5A5043] space-y-1.5 leading-relaxed list-disc list-inside">
                   <li>Save entry/exit TradingView chart links.</li>
                   <li>Log trade setup, emotions, and R in Journal.</li>
-                  <li>Complete Daily Close checklist in NH TRADERS.</li>
+                  <li>Complete Daily Close checklist in TradeFlow.</li>
                   <li>Close terminal and disengage until next session.</li>
                 </ul>
               </div>
@@ -1356,7 +1356,7 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-[#1F1A16]">NH TRADERS 1-Page Master Playbook</h2>
+                  <h2 className="text-base font-bold text-[#1F1A16]">TradeFlow 1-Page Master Playbook</h2>
                   <p className="text-xs text-[#786F66]">“Discipline Today | Profits Tomorrow” — Personal Trading Constitution.</p>
                 </div>
               </div>
@@ -1399,7 +1399,7 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
                   My discipline today guarantees my financial freedom tomorrow.”
                 </p>
                 <p className="text-[10px] font-bold text-[#7A541A] tracking-wider uppercase mt-2">
-                  — NH TRADERS CONSTITUTION
+                  — TRADEFLOW CONSTITUTION
                 </p>
               </div>
             </div>

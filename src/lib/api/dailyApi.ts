@@ -1,5 +1,5 @@
 // ============================================================
-// NH Traders — Supabase Daily Records API
+// TradeFlow — Supabase Daily Records API
 // ============================================================
 import { supabase } from '../supabase';
 import type { DayRecord } from '../../db/db';
