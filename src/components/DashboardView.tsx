@@ -111,13 +111,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return maxDd;
   }, [trades]);
 
-  // Current month & year metadata
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonthIdx = now.getMonth();
-  const currentMonthStr = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
-  const currentMonthName = now.toLocaleString('en-US', { month: 'long' });
-  const daysInCurrentMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+  // Current month & year metadata (memoized so it does not trigger re-render cascades)
+  const { currentYear, currentMonthIdx, currentMonthStr, currentMonthName, daysInCurrentMonth, currentDayOfMonth } = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const monthIdx = d.getMonth();
+    const monthStr = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
+    const monthName = d.toLocaleString('en-US', { month: 'long' });
+    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+    const dayOfMonth = d.getDate();
+    return {
+      currentYear: year,
+      currentMonthIdx: monthIdx,
+      currentMonthStr: monthStr,
+      currentMonthName: monthName,
+      daysInCurrentMonth: daysInMonth,
+      currentDayOfMonth: dayOfMonth,
+    };
+  }, []);
 
   // Filter trades for Equity Curve by timeframe
   const filteredTradesForCurve = useMemo(() => {
@@ -126,11 +137,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return trades.filter(t => t.date && t.date.startsWith(currentMonthStr));
     }
     if (timeframe === 'Last 30 Days') {
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       return trades.filter(t => t.date && t.date >= thirtyDaysAgo);
     }
     return trades;
-  }, [trades, timeframe, currentMonthStr, now]);
+  }, [trades, timeframe, currentMonthStr]);
 
   // Equity Curve Points & SVG geometry
   const equityChartData = useMemo(() => {
@@ -335,9 +346,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
     });
 
-    const dayOfMonth = now.getDate();
     const activeDays = profitableDays + losingDays + beDays;
-    const noTradeDays = Math.max(markedNoTradeDays, Math.max(0, dayOfMonth - activeDays));
+    const noTradeDays = Math.max(markedNoTradeDays, Math.max(0, currentDayOfMonth - activeDays));
     const percent = activeDays > 0 ? Math.round((profitableDays / activeDays) * 100) : (trades.length > 0 ? Math.round(perf.winRate) : 0);
 
     return {
@@ -346,10 +356,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       losingDays,
       beDays,
       noTradeDays,
-      totalDaysPassed: dayOfMonth,
+      totalDaysPassed: currentDayOfMonth,
       daysInMonth: daysInCurrentMonth,
     };
-  }, [trades, days, currentMonthStr, now, daysInCurrentMonth, perf.winRate]);
+  }, [trades, days, currentMonthStr, currentDayOfMonth, daysInCurrentMonth, perf.winRate]);
 
   // Recent 5 trades
   const recentTradesList = useMemo(() => {
@@ -710,44 +720,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 {/* Data Points (Green = win, Red = loss, Gray = BE) */}
                 {equityChartData.points.map((pt, idx) => {
-                  if (idx === 0 && equityChartData.points.length > 1) {
-                    // Baseline origin point
-                    return (
-                      <circle
-                        key={idx}
-                        cx={pt.x}
-                        cy={pt.y}
-                        r="3.5"
-                        className="fill-[#9E958C] stroke-white dark:stroke-[#131822] stroke-1 cursor-pointer"
-                        onMouseEnter={() =>
-                          setHoveredPoint({
-                            date: pt.date,
-                            time: pt.time,
-                            pnl: pt.pnl,
-                            r: pt.rMultiple,
-                            balance: pt.equity,
-                            roi: pt.returnPercent,
-                            x: pt.x,
-                            y: pt.y,
-                          })
-                        }
-                        onMouseLeave={() => setHoveredPoint(null)}
-                      />
-                    );
-                  }
-
-                  const fillColor = pt.isWin ? '#10B981' : pt.isLoss ? '#DC2626' : '#9E958C';
+                  const isOrigin = idx === 0 && equityChartData.points.length > 1;
+                  const isHovered = hoveredPoint?.x === pt.x && hoveredPoint?.y === pt.y;
+                  const fillColor = isOrigin 
+                    ? '#9E958C' 
+                    : pt.isWin 
+                    ? '#10B981' 
+                    : pt.isLoss 
+                    ? '#DC2626' 
+                    : '#9E958C';
 
                   return (
-                    <circle
-                      key={idx}
-                      cx={pt.x}
-                      cy={pt.y}
-                      r="4.5"
-                      fill={fillColor}
-                      stroke="white"
-                      strokeWidth="1.5"
-                      className="cursor-pointer transition-transform hover:scale-150"
+                    <g
+                      key={`point-${idx}-${pt.x.toFixed(1)}`}
+                      className="cursor-pointer"
                       onMouseEnter={() =>
                         setHoveredPoint({
                           date: pt.date,
@@ -762,7 +748,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       }
                       onMouseLeave={() => setHoveredPoint(null)}
                       onClick={() => onSelectDate?.(pt.date)}
-                    />
+                    >
+                      {/* Generous invisible hit target (32px diameter) so mouse never slips off */}
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r="16"
+                        fill="transparent"
+                      />
+                      {/* Glowing halo ring when hovered */}
+                      {isHovered && (
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="10"
+                          fill={fillColor}
+                          fillOpacity="0.2"
+                          stroke={fillColor}
+                          strokeWidth="1.5"
+                          className="pointer-events-none"
+                        />
+                      )}
+                      {/* Data point dot */}
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={isHovered ? 6 : (isOrigin ? 3.5 : 4.5)}
+                        fill={fillColor}
+                        stroke="white"
+                        strokeWidth={isHovered ? 2 : 1.5}
+                        className="transition-all duration-100 ease-out pointer-events-none"
+                      />
+                    </g>
                   );
                 })}
               </svg>
@@ -771,10 +788,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {hoveredPoint && (
                 <div 
                   style={{
-                    left: `${Math.max(10, Math.min(85, (hoveredPoint.x / 700) * 100))}%`,
-                    top: `${Math.max(10, (hoveredPoint.y / 220) * 100 - 25)}%`,
+                    left: `${Math.max(12, Math.min(88, (hoveredPoint.x / 700) * 100))}%`,
+                    top: hoveredPoint.y < 70 
+                      ? `${((hoveredPoint.y + 20) / 220) * 100}%` 
+                      : `${((hoveredPoint.y - 12) / 220) * 100}%`,
+                    transform: hoveredPoint.y < 70 ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
                   }}
-                  className="absolute -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white rounded-xl p-2.5 text-xs shadow-xl pointer-events-none border border-[#3A322A] dark:border-[#242D3D] z-30 min-w-[140px]"
+                  className="absolute pointer-events-none bg-[#1F1A16] dark:bg-[#0B0F17] text-white rounded-xl p-2.5 text-xs shadow-xl border border-[#3A322A] dark:border-[#242D3D] z-30 min-w-[140px]"
                 >
                   <div className="flex items-center justify-between text-[10px] text-[#C4B7A6] font-mono mb-0.5">
                     <span>{hoveredPoint.date}</span>
