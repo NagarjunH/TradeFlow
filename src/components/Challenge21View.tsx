@@ -390,7 +390,7 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
 
         {/* Content Container */}
         <div className="relative z-10 p-6 sm:p-8 lg:p-10 w-full flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="max-w-xl space-y-2">
+          <div className="max-w-md sm:max-w-lg lg:max-w-xl space-y-2">
             {/* Badge */}
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#F2ECE0]/90 dark:bg-[#1F293D] border border-[#DFD5C6] dark:border-[#2B3850] shadow-2xs">
               <span className="text-[10px] font-mono tracking-widest text-[#9B671B] dark:text-[#F59E0B] uppercase font-black">
@@ -409,19 +409,19 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
             </p>
 
             {/* Description Paragraph */}
-            <p className="text-xs sm:text-sm text-[#786F66] dark:text-[#94A3B8] leading-relaxed max-w-lg">
+            <p className="text-xs sm:text-sm text-[#786F66] dark:text-[#94A3B8] leading-relaxed max-w-md sm:max-w-lg">
               Follow your trading rules for 21 consecutive trading days. This challenge is not about profits — it's about becoming a better trader.
             </p>
           </div>
+        </div>
 
-          {/* Right Artistic Calligraphy PNG (Small Steps Big Results) */}
-          <div className="hidden lg:flex items-center self-center pr-6 select-none">
-            <img
-              src="/small-steps-big-results.png"
-              alt="Small Steps Big Results"
-              className="h-20 sm:h-24 md:h-28 w-auto object-contain pointer-events-none select-none drop-shadow-md"
-            />
-          </div>
+        {/* Floating Calligraphy (Small Steps Big Results) tilted in open sky to the left of mountain peak */}
+        <div className="hidden md:block absolute top-3 sm:top-5 lg:top-7 right-[24%] md:right-[28%] lg:right-[31%] xl:right-[33%] z-15 select-none pointer-events-none transform -rotate-[11deg]">
+          <img
+            src="/small-steps-big-results.png"
+            alt="Small Steps Big Results"
+            className="w-36 sm:w-44 md:w-48 lg:w-56 xl:w-60 h-auto object-contain drop-shadow-md"
+          />
         </div>
       </div>
 
