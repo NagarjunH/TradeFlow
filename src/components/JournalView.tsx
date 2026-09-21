@@ -69,7 +69,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   onTabChange,
 }) => {
   // Filter States
-  const [filterDateRange, setFilterDateRange] = useState<string>('OCT_2026');
+  const [filterDateRange, setFilterDateRange] = useState<string>('ALL');
   const [filterPair, setFilterPair] = useState<string>('ALL');
   const [filterSetup, setFilterSetup] = useState<string>('ALL');
   const [filterEmotion, setFilterEmotion] = useState<string>('ALL');
@@ -156,6 +156,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
   // Filter application
   const filteredList = poolOfTrades.filter((t) => {
+    if (filterDateRange === 'OCT_2026' && !t.rawDate.startsWith('2026-10')) return false;
+    if (filterDateRange === 'DEC_2025' && !t.rawDate.startsWith('2025-12')) return false;
     if (filterPair !== 'ALL' && t.pair !== filterPair) return false;
     if (filterSetup !== 'ALL' && !t.setup.toLowerCase().includes(filterSetup.toLowerCase())) return false;
     if (filterEmotion !== 'ALL' && t.emotion.toLowerCase() !== filterEmotion.toLowerCase()) return false;
@@ -171,7 +173,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const paginatedTrades = filteredList.slice(startIndex, startIndex + pageSize);
 
   const hasActiveFilters = 
-    filterDateRange !== 'OCT_2026' ||
+    filterDateRange !== 'ALL' ||
     filterPair !== 'ALL' ||
     filterSetup !== 'ALL' ||
     filterEmotion !== 'ALL' ||
@@ -180,7 +182,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     Boolean(selectedDateFilter);
 
   const activeFilterCount = 
-    (filterDateRange !== 'OCT_2026' ? 1 : 0) +
+    (filterDateRange !== 'ALL' ? 1 : 0) +
     (filterPair !== 'ALL' ? 1 : 0) +
     (filterSetup !== 'ALL' ? 1 : 0) +
     (filterEmotion !== 'ALL' ? 1 : 0) +
@@ -189,7 +191,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     (selectedDateFilter ? 1 : 0);
 
   const handleResetFilters = () => {
-    setFilterDateRange('OCT_2026');
+    setFilterDateRange('ALL');
     setFilterPair('ALL');
     setFilterSetup('ALL');
     setFilterEmotion('ALL');
@@ -358,9 +360,9 @@ export const JournalView: React.FC<JournalViewProps> = ({
               }}
               className="appearance-none pl-8 pr-8 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
+              <option value="ALL">All Dates (Full History)</option>
               <option value="OCT_2026">Oct 01, 2026 - Oct 31, 2026</option>
               <option value="DEC_2025">Dec 01, 2025 - Dec 31, 2025</option>
-              <option value="ALL">All Dates (Full History)</option>
               {selectedDateFilter && (
                 <option value="CUSTOM">Custom Date: {selectedDateFilter}</option>
               )}

@@ -31,7 +31,7 @@ interface QuickTradeModalProps {
   onTradeSaved: () => void;
   editTrade?: Trade | null;
   userId?: string;
-  onTradesChange?: (trades: Trade[]) => void;
+  onTradesChange?: React.Dispatch<React.SetStateAction<Trade[]>>;
 }
 
 export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
@@ -42,6 +42,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
   onTradeSaved,
   editTrade,
   userId,
+  onTradesChange,
 }) => {
   const [showRiskCalc, setShowRiskCalc] = useState(false);
 
@@ -254,6 +255,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       if (editTrade && (editTrade as Trade & { _uuid?: string })._uuid) {
         const uuid = (editTrade as Trade & { _uuid?: string })._uuid!;
         await tradesApi.update(uuid, tradeData);
+        onTradesChange?.((prev) => prev.map((t) => ((t as Trade & { _uuid?: string })._uuid === uuid || t.id === editTrade.id) ? { ...t, ...tradeData } : t));
         await auditApi.add(
           userId,
           'UPDATE',
@@ -263,6 +265,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       } else {
         const created = await tradesApi.create(tradeData, userId);
         const createdUuid = (created as Trade & { _uuid?: string })._uuid;
+        onTradesChange?.((prev) => [created, ...prev.filter((t) => t.id !== created.id)]);
         if (isLockedOut && overrideReason) {
           await auditApi.add(
             userId,

@@ -37,7 +37,7 @@ function AppInner() {
     title: '',
   });
   const [journalDateFilter, setJournalDateFilter] = useState<string | undefined>(undefined);
-  const [systemDate, setSystemDate] = useState<string>('2026-10-05');
+  const [systemDate, setSystemDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
   // ── Cloud data state (reactive Supabase data) ──────────────────────
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -45,21 +45,28 @@ function AppInner() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
-  // Load all data from Supabase on mount
+  // Load all data from Supabase / IndexedDB on mount
   const loadAllData = useCallback(async () => {
     if (!user) return;
     try {
-      const [fetchedTrades, fetchedDays, fetchedSettings] = await Promise.all([
+      const [tradesRes, daysRes, settingsRes] = await Promise.allSettled([
         tradesApi.getAll(),
         dailyApi.getAll(),
         settingsApi.get(user.id),
       ]);
-      setTrades(fetchedTrades);
-      setDays(fetchedDays);
-      if (fetchedSettings) setSettings(fetchedSettings);
+
+      if (tradesRes.status === 'fulfilled' && tradesRes.value) {
+        setTrades(tradesRes.value);
+      }
+      if (daysRes.status === 'fulfilled' && daysRes.value) {
+        setDays(daysRes.value);
+      }
+      if (settingsRes.status === 'fulfilled' && settingsRes.value) {
+        setSettings(settingsRes.value);
+      }
       setIsDataLoaded(true);
     } catch (err) {
-      console.error('[TradeFlow] Failed to load cloud data:', err);
+      console.error('[TradeFlow] Failed to load data:', err);
       setIsDataLoaded(true);
     }
   }, [user]);
@@ -139,7 +146,6 @@ function AppInner() {
           currentDate={systemDate}
           onDateChange={(newDate) => {
             setSystemDate(newDate);
-            setJournalDateFilter(newDate);
           }}
           dayStatus={dayStatus}
           isDayClosedToday={isDayClosedToday}
