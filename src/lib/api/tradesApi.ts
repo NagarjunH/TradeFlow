@@ -3,7 +3,7 @@
 // Replaces: db.trades.add / update / toArray from Dexie
 // ============================================================
 import { supabase } from '../supabase';
-import type { Trade } from '../../db/db';
+import { db, type Trade } from '../../db/db';
 
 // Map Supabase DB row → app-level Trade object
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,15 +73,30 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
 export const tradesApi = {
   /** Fetch all trades for the current user */
   async getAll(): Promise<Trade[]> {
-    const { data, error } = await supabase
-      .from('trades')
-      .select('*')
-      .order('trade_date', { ascending: false })
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('trades')
+        .select('*')
+        .order('trade_date', { ascending: false })
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((data ?? []) as any[]).map(rowToTrade);
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const mapped = data.map(rowToTrade);
+        for (const t of mapped) {
+          try { await db.trades.put(t); } catch (_) {}
+        }
+        return mapped;
+      }
+    } catch (cloudErr) {
+      console.warn('[tradesApi] Cloud getAll failed, falling back to local DB:', cloudErr);
+    }
+
+    // Fallback to local Dexie trades
+    try {
+      return await db.trades.orderBy('tradeNumber').reverse().toArray();
+    } catch {
+      return [];
+    }
   },
 
   /** Create a new trade, returns the created Trade with id */
@@ -108,19 +123,35 @@ export const tradesApi = {
     }
 
     const row = tradeToRow(trade, userId);
-    const { data, error } = await supabase
-      .from('trades')
-      .insert(row as never)
-      .select();
+    let createdRow: any = null;
 
-    if (error) {
-      console.error('[tradesApi] Insert trade error:', error);
-      throw error;
+    try {
+      const { data, error } = await supabase
+        .from('trades')
+        .insert(row as never)
+        .select();
+
+      if (error) {
+        console.warn('[tradesApi] Insert with select failed, trying plain insert:', error.message);
+        const plainRes = await supabase.from('trades').insert(row as never);
+        if (plainRes.error) {
+          throw plainRes.error;
+        }
+        createdRow = row;
+      } else if (Array.isArray(data) && data.length > 0) {
+        createdRow = data[0];
+      } else {
+        createdRow = row;
+      }
+    } catch (cloudErr: any) {
+      console.warn('[tradesApi] Supabase cloud insert failed, saving locally into IndexedDB fallback:', cloudErr);
+      const localId = await db.trades.add({ ...trade } as Trade);
+      return { ...trade, id: localId } as Trade;
     }
 
-    const createdRow = Array.isArray(data) && data.length > 0 ? data[0] : row;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return rowToTrade(createdRow as any);
+    const tradeObj = rowToTrade(createdRow || row);
+    try { await db.trades.put(tradeObj); } catch (_) {}
+    return tradeObj;
   },
 
   /** Update an existing trade by UUID */
@@ -148,16 +179,40 @@ export const tradesApi = {
     if (updates.entryReason !== undefined) partial.entry_reason = updates.entryReason;
     if (updates.session !== undefined) partial.session = updates.session;
     if (updates.notes !== undefined) partial.notes = updates.notes;
-    if (updates.chartScreenshot !== undefined) partial.chart_url = updates.chartScreenshot;
+    if (updates.chartScreenshot !== undefined) {
+      partial.chart_url = updates.chartScreenshot && updates.chartScreenshot.trim() ? updates.chartScreenshot : null;
+    }
     partial.updated_at = new Date().toISOString();
 
-    const { error } = await supabase.from('trades').update(partial as never).eq('id', uuid);
-    if (error) throw error;
+    try {
+      await supabase.from('trades').update(partial as never).eq('id', uuid);
+    } catch (err) {
+      console.warn('[tradesApi] Cloud update warning:', err);
+    }
+
+    try {
+      const all = await db.trades.toArray();
+      const match = all.find((t: any) => t._uuid === uuid || String(t.id) === uuid);
+      if (match?.id) {
+        await db.trades.update(match.id, updates);
+      }
+    } catch (_) {}
   },
 
   /** Delete a trade by UUID */
   async delete(uuid: string): Promise<void> {
-    const { error } = await supabase.from('trades').delete().eq('id', uuid);
-    if (error) throw error;
+    try {
+      await supabase.from('trades').delete().eq('id', uuid);
+    } catch (err) {
+      console.warn('[tradesApi] Cloud delete warning:', err);
+    }
+
+    try {
+      const all = await db.trades.toArray();
+      const match = all.find((t: any) => t._uuid === uuid || String(t.id) === uuid);
+      if (match?.id) {
+        await db.trades.delete(match.id);
+      }
+    } catch (_) {}
   },
 };
