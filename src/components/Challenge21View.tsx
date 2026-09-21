@@ -48,9 +48,9 @@ const CHECKLIST_DEFAULT = [
   { id: 'review', label: "Reviewed today's trades", checked: false },
 ];
 
-const STORAGE_SETTINGS_KEY = 'nh_traders_21day_challenge_config_v2';
-const STORAGE_OVERRIDES_KEY = 'nh_traders_21day_challenge_overrides_v2';
-const STORAGE_CHECKLISTS_KEY = 'nh_traders_21day_challenge_checklists_v2';
+const STORAGE_SETTINGS_KEY = 'nh_traders_21day_challenge_config_v4';
+const STORAGE_OVERRIDES_KEY = 'nh_traders_21day_challenge_overrides_v4';
+const STORAGE_CHECKLISTS_KEY = 'nh_traders_21day_challenge_checklists_v4';
 
 export const Challenge21View: React.FC<Challenge21ViewProps> = ({
   trades = [],
@@ -60,6 +60,22 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
   onTabChange,
 }) => {
   const currSymbol = settings?.currency === 'USD' ? '$' : '₹';
+
+  // Clean up any legacy test keys once on mount
+  useEffect(() => {
+    try {
+      [
+        'nh_traders_21day_challenge_state_v1',
+        'nh_traders_21day_challenge_overrides_v2',
+        'nh_traders_21day_challenge_overrides_v3',
+        'nh_traders_21day_challenge_checklists_v2',
+        'nh_traders_21day_challenge_checklists_v3',
+        'nh_21day_challenge_state'
+      ].forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // Current system / actual date
   const todayStr = useMemo(() => {
@@ -78,11 +94,11 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
     } catch {
       // ignore
     }
-    // Default to 1st of October 2026 (matching reference data) or 1st of current month
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
-    return `${y}-${m}-01`;
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   });
 
   const [tradingDaysOnly, setTradingDaysOnly] = useState<boolean>(() => {
@@ -98,7 +114,7 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
     return true; // Trading days (Mon-Fri)
   });
 
-  // Manual status overrides for specific dates
+  // Status overrides for specific dates - completely empty by default for new users!
   const [statusOverrides, setStatusOverrides] = useState<Record<string, DayChallengeStatus>>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_OVERRIDES_KEY);
@@ -106,16 +122,7 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
     } catch {
       // ignore
     }
-    // Default initial mock pattern matching user's visual mockup
-    return {
-      '2026-10-01': 'CLEAN',
-      '2026-10-02': 'CLEAN',
-      '2026-10-05': 'CLEAN',
-      '2026-10-06': 'FAILED',
-      '2026-10-07': 'CLEAN',
-      '2026-10-08': 'CLEAN',
-      '2026-10-09': 'CLEAN',
-    };
+    return {};
   });
 
   // Checklist storage per date
@@ -188,12 +195,10 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
         // Find live DayRecord
         const dayRecord = days.find((dr) => dr.date === fullDate);
 
-        // Determine status
+        // Determine status: UNCHECKED / PENDING by default unless real trades or overrides exist
         let status: DayChallengeStatus = 'PENDING';
         if (statusOverrides[fullDate]) {
           status = statusOverrides[fullDate];
-        } else if (fullDate === todayStr) {
-          status = 'TODAY';
         } else if (dayTrades.length > 0) {
           const hasViolation = dayTrades.some(
             (t) => t.execution === 'VIOLATION' || t.tradeQuality === 'VIOLATION'
@@ -201,8 +206,10 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
           status = hasViolation ? 'FAILED' : 'CLEAN';
         } else if (dayRecord?.isNoTradeDay) {
           status = 'NO_TRADE';
-        } else if (fullDate < todayStr) {
-          status = 'NO_TRADE';
+        } else if (fullDate === todayStr) {
+          status = 'TODAY';
+        } else {
+          status = 'PENDING';
         }
 
         list.push({
@@ -220,11 +227,19 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
       cursor.setDate(cursor.getDate() + 1);
     }
 
+    // If no day is marked as TODAY or completed yet, Day 1 is TODAY
+    const hasActiveOrCompleted = list.some(
+      (d) => d.status === 'TODAY' || d.status === 'CLEAN' || d.status === 'FAILED' || d.status === 'NO_TRADE'
+    );
+    if (!hasActiveOrCompleted && list.length > 0) {
+      list[0].status = 'TODAY';
+    }
+
     return list;
   }, [startDate, tradingDaysOnly, trades, days, statusOverrides, todayStr]);
 
-  // Selected Day for interaction (default to today or day 8 or day 1)
-  const [selectedDayNum, setSelectedDayNum] = useState<number>(8);
+  // Selected Day for interaction (default to Day 1)
+  const [selectedDayNum, setSelectedDayNum] = useState<number>(1);
 
   const selectedDay = useMemo(() => {
     return challengeDays.find((d) => d.dayNum === selectedDayNum) || challengeDays[0];
@@ -238,7 +253,7 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
     return CHECKLIST_DEFAULT;
   }, [selectedDay, dailyChecklists]);
 
-  // Derived Summary Metrics
+  // Derived Summary Metrics - 0 for new users with no data!
   const cleanDaysCount = useMemo(() => {
     return challengeDays.filter((d) => d.status === 'CLEAN').length;
   }, [challengeDays]);
@@ -251,17 +266,21 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
     return challengeDays.filter((d) => d.status === 'NO_TRADE').length;
   }, [challengeDays]);
 
-  // Current active day (day matching today, or first today/pending day)
+  const completedDaysCount = useMemo(() => {
+    return cleanDaysCount + violationDaysCount + noTradeDaysCount;
+  }, [cleanDaysCount, violationDaysCount, noTradeDaysCount]);
+
+  // Current active day (day matching today or next pending day)
   const currentActiveDay = useMemo(() => {
     const todayMatch = challengeDays.find((d) => d.status === 'TODAY');
     if (todayMatch) return todayMatch.dayNum;
     const firstPending = challengeDays.find((d) => d.status === 'PENDING');
     if (firstPending) return firstPending.dayNum;
-    return 21;
+    return 1;
   }, [challengeDays]);
 
-  const progressPercent = Math.min(100, Math.round((currentActiveDay / 21) * 100));
-  const daysLeft = Math.max(0, 21 - currentActiveDay);
+  const progressPercent = Math.min(100, Math.round((completedDaysCount / 21) * 100));
+  const daysLeft = Math.max(0, 21 - completedDaysCount);
 
   // Consecutive clean/no-trade streak
   const currentStreak = useMemo(() => {
@@ -271,17 +290,17 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
         streak++;
       } else if (d.status === 'FAILED' || d.status === 'MINOR_VIOLATION') {
         streak = 0;
-      } else if (d.status === 'TODAY' || d.status === 'PENDING') {
+      } else {
         break;
       }
     }
-    return streak || 7;
+    return streak;
   }, [challengeDays]);
 
   // Rule adherence rate
   const ruleAdherence = useMemo(() => {
     const evaluated = cleanDaysCount + violationDaysCount;
-    if (evaluated === 0) return 86;
+    if (evaluated === 0) return 100;
     return Math.round((cleanDaysCount / evaluated) * 100);
   }, [cleanDaysCount, violationDaysCount]);
 
@@ -290,10 +309,12 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
     const cleanTradingDays = challengeDays.filter(
       (d) => d.status === 'CLEAN' && d.dayTrades.length > 0
     );
-    if (cleanTradingDays.length === 0) return 0.42;
+    if (cleanTradingDays.length === 0) return 0.00;
     const totalR = cleanTradingDays.reduce((acc, d) => acc + d.netR, 0);
     return Number((totalR / cleanTradingDays.length).toFixed(2));
   }, [challengeDays]);
+
+
 
   // Actions
   const toggleChecklist = (id: string) => {

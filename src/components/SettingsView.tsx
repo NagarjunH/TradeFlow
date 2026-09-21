@@ -121,12 +121,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         .update({ current_balance: formData.initialCapital } as never)
         .eq('id', userId);
 
-      // 4. Log the reset event
+      // 4. Log the reset event & clear local challenge storage
       try {
         await auditApi.add(userId, 'RESET', 'User wiped all trading journal records and reset balance.');
       } catch (logErr) {
         console.warn('Could not write reset audit log:', logErr);
       }
+
+      // Clear 21-day challenge keys so new user/reset state is 100% clean and unchecked
+      [
+        'nh_traders_21day_challenge_config_v2',
+        'nh_traders_21day_challenge_overrides_v2',
+        'nh_traders_21day_challenge_checklists_v2',
+        'nh_traders_21day_challenge_config_v3',
+        'nh_traders_21day_challenge_overrides_v3',
+        'nh_traders_21day_challenge_checklists_v3',
+        'nh_traders_21day_challenge_config_v4',
+        'nh_traders_21day_challenge_overrides_v4',
+        'nh_traders_21day_challenge_checklists_v4',
+        'nh_traders_21day_challenge_state_v1',
+        'nh_21day_challenge_state'
+      ].forEach((key) => localStorage.removeItem(key));
 
       setResetSuccess(true);
       setTimeout(() => {
