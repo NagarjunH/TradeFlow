@@ -121,37 +121,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom Mountain Landscape & Motivation Panel */}
-      <div className="relative flex-1 min-h-[140px] sm:min-h-[170px] flex flex-col justify-end overflow-hidden mt-auto">
+      <div className="relative flex-1 min-h-[160px] flex flex-col justify-end overflow-hidden mt-auto">
         {/* Soft top gradient blending from menu into mountain */}
-        <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-[#FAF7F2] dark:from-[#121722] via-[#FAF7F2]/60 dark:via-[#121722]/60 to-transparent z-10 pointer-events-none" />
+        <div className="absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-[#FAF7F2] dark:from-[#121722] via-[#FAF7F2]/60 dark:via-[#121722]/60 to-transparent z-10 pointer-events-none" />
 
         {/* Mountain Landscape Background Image - Centered on peak */}
         <img
           src="/mountain-sidebar.jpg"
           alt="TradeFlow Mountain Landscape"
-          className="absolute inset-0 w-full h-full object-cover object-[center_42%] block opacity-95 dark:opacity-40 pointer-events-none select-none"
+          className="absolute inset-0 w-full h-full object-cover object-top block opacity-95 dark:opacity-40 pointer-events-none select-none"
         />
 
         {/* Bottom subtle gradient for text contrast over misty trees */}
-        <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#FAF7F2]/95 dark:from-[#121722]/95 via-[#FAF7F2]/50 dark:via-[#121722]/60 to-transparent z-10 pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-[#FAF7F2]/90 dark:from-[#121722]/95 via-[#FAF7F2]/40 dark:via-[#121722]/50 to-transparent z-10 pointer-events-none" />
 
         {/* Typography Quote & TradeFlow Branding */}
-        <div className="relative z-20 px-4 pb-3 sm:pb-3.5">
-          <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-serif font-black italic text-[13.5px] sm:text-[14.5px] leading-[1.2] tracking-tight select-none">
+        <div className="relative z-20 px-5 pb-4 sm:pb-5">
+          <div className="text-[#1F1A16] dark:text-[#F0F4F8] font-serif font-black italic text-[14px] sm:text-[15px] leading-[1.2] tracking-tight select-none">
             <span className="text-[#C8681A] font-serif not-italic mr-0.5">“</span>Discipline<br />
             turns goals<br />
             into results.<span className="text-[#C8681A] font-serif not-italic ml-0.5">”</span>
           </div>
 
-          <p className="text-[9.5px] font-bold tracking-wider text-[#4A3E31] dark:text-[#CBD5E1] uppercase mt-1.5 select-none flex items-center gap-1.5">
+          <p className="text-[10px] font-bold tracking-wider text-[#4A3E31] dark:text-[#CBD5E1] uppercase mt-2 select-none flex items-center gap-1.5">
             <span className="text-[#C8681A] font-bold">—</span> TradeFlow
           </p>
 
-          <div className="mt-2 sm:mt-2.5 select-none">
+          <div className="mt-3.5 sm:mt-4 select-none">
             <div className="text-xs font-black text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight leading-none">
               TradeFlow
             </div>
-            <div className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-0.5">
+            <div className="text-[9.5px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-0.5">
               v1.0.0
             </div>
           </div>
