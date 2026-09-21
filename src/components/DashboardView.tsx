@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { defaultSettings, type Trade, type DayRecord, type AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
-import { calculatePerformance, calculateDiscipline } from '../utils/TradingEngine';
+import { calculatePerformance, calculateDiscipline, generateEquityCurve } from '../utils/TradingEngine';
 
 interface DashboardViewProps {
   trades?: Trade[];
@@ -27,6 +27,29 @@ interface DashboardViewProps {
   onSelectDate?: (dateStr: string) => void;
   onTabChange?: (tab: TabType) => void;
   onOpenQuickTrade?: () => void;
+}
+
+// Catmull-Rom to Cubic Bezier smooth path generator
+function generateSmoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length === 0) return '';
+  if (pts.length === 1) return `M 55 ${pts[0].y.toFixed(1)} L 675 ${pts[0].y.toFixed(1)}`;
+  if (pts.length === 2) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)} L ${pts[1].x.toFixed(1)} ${pts[1].y.toFixed(1)}`;
+
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i === 0 ? i : i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -40,7 +63,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [performerTab, setPerformerTab] = useState<'By R-Multiple' | 'By P&L'>('By R-Multiple');
   const [equityTab, setEquityTab] = useState<'$ P&L' | 'R-Multiple' | '% Return'>('$ P&L');
   const [timeframe, setTimeframe] = useState<'This Month' | 'Last 30 Days' | 'All Time'>('This Month');
-  const [hoveredPoint, setHoveredPoint] = useState<{ date: string; pnl: number; r: number; balance: number; roi: number } | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{ 
+    date: string; 
+    time?: string;
+    pnl: number; 
+    r: number; 
+    balance: number; 
+    roi: number; 
+    x: number; 
+    y: number;
+  } | null>(null);
+  const [hoveredBar, setHoveredBar] = useState<{ day: number; r: number; count: number } | null>(null);
 
   // Dynamic calculations from live data
   const perf = calculatePerformance(trades, settings);
@@ -59,117 +92,208 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (onTabChange) onTabChange(tab);
   };
 
-  // Group trades by pair for top performers
-  const pairStats = useMemo(() => {
-    const map = new Map<string, { totalR: number; totalPnl: number; wins: number; total: number }>();
-    trades.forEach((t) => {
-      const p = t.pair.replace('/', '');
-      const cur = map.get(p) || { totalR: 0, totalPnl: 0, wins: 0, total: 0 };
-      cur.totalR += t.rMultiple || 0;
-      cur.totalPnl += t.pnl || 0;
-      if (t.rMultiple > 0) cur.wins += 1;
-      cur.total += 1;
-      map.set(p, cur);
-    });
-
-    const list = Array.from(map.entries())
-      .map(([pair, stats]) => ({
-        pair,
-        avgR: stats.total > 0 ? stats.totalR / stats.total : 0,
-        totalR: stats.totalR,
-        totalPnl: stats.totalPnl,
-        winRate: stats.total > 0 ? Math.round((stats.wins / stats.total) * 100) : 0,
-        count: stats.total,
-      }))
-      .sort((a, b) => (performerTab === 'By R-Multiple' ? b.totalR - a.totalR : b.totalPnl - a.totalPnl));
-
-    if (list.length > 0) return list;
-
-    // Realistic baseline matching the mockup if user has no/few trades
-    return [
-      { pair: 'XAUUSD', avgR: 2.1, totalR: 25.2, totalPnl: 1250, winRate: 68, count: 12 },
-      { pair: 'BTCUSD', avgR: 1.8, totalR: 14.4, totalPnl: 720, winRate: 62, count: 8 },
-      { pair: 'ETHUSD', avgR: 1.4, totalR: 9.8, totalPnl: 490, winRate: 57, count: 7 },
-      { pair: 'GBPUSD', avgR: 1.2, totalR: 6.0, totalPnl: 300, winRate: 50, count: 5 },
-    ];
-  }, [trades, performerTab]);
-
-  // Group violations
-  const violationsList = useMemo(() => {
-    const counts = new Map<string, { count: number; lossR: number }>();
-    trades.forEach((t) => {
-      if (t.execution === 'VIOLATION' && t.violationReason && t.violationReason !== 'None') {
-        const cur = counts.get(t.violationReason) || { count: 0, lossR: 0 };
-        cur.count += 1;
-        if (t.rMultiple < 0) cur.lossR += Math.abs(t.rMultiple);
-        counts.set(t.violationReason, cur);
-      }
-    });
-
-    const list = Array.from(counts.entries())
-      .map(([reason, s]) => ({ reason, count: s.count, lossR: s.lossR }))
-      .sort((a, b) => b.count - a.count);
-
-    if (list.length > 0) return list;
-
-    // Baseline matching mockup
-    return [
-      { reason: 'FOMO', count: 4, lossR: 2.8 },
-      { reason: 'Revenge Trading', count: 3, lossR: 1.9 },
-      { reason: 'Poor SL Placement', count: 2, lossR: 1.2 },
-    ];
+  // Calculate Net R and Max Drawdown R across all trades
+  const netR = useMemo(() => {
+    return trades.reduce((sum, t) => sum + (t.rMultiple || 0), 0);
   }, [trades]);
 
-  // Recent 5 trades for the middle card
-  const recentTradesList = useMemo(() => {
-    if (trades.length > 0) {
-      return [...trades].sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || ''))).slice(0, 5);
+  const maxDrawdownR = useMemo(() => {
+    const sorted = [...trades].sort((a, b) => new Date(`${a.date}T${a.time || '00:00'}`).getTime() - new Date(`${b.date}T${b.time || '00:00'}`).getTime());
+    let peakR = 0;
+    let maxDd = 0;
+    let cumR = 0;
+    for (const t of sorted) {
+      cumR += (t.rMultiple || 0);
+      if (cumR > peakR) peakR = cumR;
+      const dd = peakR - cumR;
+      if (dd > maxDd) maxDd = dd;
     }
-    return [
-      { id: 1, pair: 'XAUUSD', order: 'BUY' as const, rMultiple: 2.0, pnl: 80.52, time: '14:32', date: '2026-10-05' },
-      { id: 2, pair: 'ETHUSD', order: 'SELL' as const, rMultiple: -1.0, pnl: -42.30, time: '11:21', date: '2026-10-05' },
-      { id: 3, pair: 'BTCUSD', order: 'BUY' as const, rMultiple: 1.5, pnl: 61.20, time: '09:48', date: '2026-10-04' },
-      { id: 4, pair: 'GBPUSD', order: 'SELL' as const, rMultiple: -0.5, pnl: -20.15, time: '06:32', date: '2026-10-03' },
-      { id: 5, pair: 'XAUUSD', order: 'BUY' as const, rMultiple: 3.0, pnl: 122.40, time: '03:17', date: '2026-10-02' },
-    ];
+    return maxDd;
   }, [trades]);
 
-  // Daily R breakdown for Monthly Performance bar chart
-  const dailyRData = useMemo(() => {
-    // Generate 31 days data
-    const daysArr: { day: number; r: number }[] = [];
-    const dateMap = new Map<number, number>();
-    trades.forEach((t) => {
+  // Current month & year metadata
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIdx = now.getMonth();
+  const currentMonthStr = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
+  const currentMonthName = now.toLocaleString('en-US', { month: 'long' });
+  const daysInCurrentMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+
+  // Filter trades for Equity Curve by timeframe
+  const filteredTradesForCurve = useMemo(() => {
+    if (trades.length === 0) return [];
+    if (timeframe === 'This Month') {
+      return trades.filter(t => t.date && t.date.startsWith(currentMonthStr));
+    }
+    if (timeframe === 'Last 30 Days') {
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      return trades.filter(t => t.date && t.date >= thirtyDaysAgo);
+    }
+    return trades;
+  }, [trades, timeframe, currentMonthStr, now]);
+
+  // Equity Curve Points & SVG geometry
+  const equityChartData = useMemo(() => {
+    const initialCapital = settings.initialCapital || 1000;
+    const rawPoints = generateEquityCurve(filteredTradesForCurve, settings);
+
+    if (rawPoints.length <= 1 && filteredTradesForCurve.length === 0) {
+      // Empty state baseline
+      return {
+        hasData: false,
+        points: [],
+        pathD: `M 55 110 L 675 110`,
+        areaD: `M 55 110 L 675 110 L 675 200 L 55 200 Z`,
+        yTicks: [
+          { y: 25, label: equityTab === '$ P&L' ? `${currSymbol}${initialCapital + 100}` : '+2.0' },
+          { y: 68, label: equityTab === '$ P&L' ? `${currSymbol}${initialCapital + 50}` : '+1.0' },
+          { y: 110, label: equityTab === '$ P&L' ? `${currSymbol}${initialCapital}` : '0.0' },
+          { y: 153, label: equityTab === '$ P&L' ? `${currSymbol}${initialCapital - 50}` : '-1.0' },
+          { y: 195, label: equityTab === '$ P&L' ? `${currSymbol}${initialCapital - 100}` : '-2.0' },
+        ],
+        xLabels: ['Day 1', 'Day 7', 'Day 14', 'Day 21', 'Day 28'],
+      };
+    }
+
+    // Extract values based on active tab
+    const values = rawPoints.map(p => {
+      if (equityTab === '$ P&L') return p.equity;
+      if (equityTab === 'R-Multiple') return p.cumulativeR;
+      return p.returnPercent;
+    });
+
+    let minVal = Math.min(...values);
+    let maxVal = Math.max(...values);
+
+    if (minVal === maxVal) {
+      if (equityTab === '$ P&L') {
+        minVal -= 50;
+        maxVal += 50;
+      } else if (equityTab === 'R-Multiple') {
+        minVal -= 1;
+        maxVal += 1;
+      } else {
+        minVal -= 5;
+        maxVal += 5;
+      }
+    }
+
+    const pad = (maxVal - minVal) * 0.12;
+    const paddedMin = minVal - pad;
+    const paddedMax = maxVal + pad;
+    const range = paddedMax - paddedMin;
+
+    const left = 55;
+    const right = 675;
+    const top = 25;
+    const bottom = 195;
+
+    const coords = rawPoints.map((p, idx) => {
+      const val = equityTab === '$ P&L' ? p.equity : equityTab === 'R-Multiple' ? p.cumulativeR : p.returnPercent;
+      const x = rawPoints.length === 1 ? (left + right) / 2 : left + (idx / (rawPoints.length - 1)) * (right - left);
+      const y = bottom - ((val - paddedMin) / range) * (bottom - top);
+      return {
+        ...p,
+        val,
+        x,
+        y,
+        isWin: (p.rMultiple || 0) > 0,
+        isLoss: (p.rMultiple || 0) < 0,
+        isBE: (p.rMultiple || 0) === 0,
+      };
+    });
+
+    const pathD = generateSmoothPath(coords);
+    const lastX = coords[coords.length - 1].x;
+    const firstX = coords[0].x;
+    const areaD = `${pathD} L ${lastX.toFixed(1)} ${bottom} L ${firstX.toFixed(1)} ${bottom} Z`;
+
+    // 5 Y-Ticks
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(frac => {
+      const val = paddedMax - frac * range;
+      const y = top + frac * (bottom - top);
+      let label = '';
+      if (equityTab === '$ P&L') {
+        label = `${currSymbol}${Math.round(val).toLocaleString()}`;
+      } else if (equityTab === 'R-Multiple') {
+        label = `${val >= 0 ? '+' : ''}${val.toFixed(1)}R`;
+      } else {
+        label = `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`;
+      }
+      return { y, label };
+    });
+
+    // Dynamic X-axis dates from points
+    const step = Math.max(1, Math.floor((rawPoints.length - 1) / 5));
+    const xLabels: string[] = [];
+    for (let i = 0; i < rawPoints.length; i += step) {
+      const rawDate = rawPoints[i].date;
+      if (rawDate) {
+        const d = new Date(rawDate);
+        xLabels.push(d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }));
+      }
+      if (xLabels.length >= 6) break;
+    }
+    if (xLabels.length === 0) {
+      xLabels.push('Start', 'Current');
+    }
+
+    return {
+      hasData: true,
+      points: coords,
+      pathD,
+      areaD,
+      yTicks,
+      xLabels,
+    };
+  }, [filteredTradesForCurve, settings, equityTab, currSymbol]);
+
+  // Current Month trades & Daily R breakdown for Monthly Performance bar chart
+  const { monthlyTotalR, dailyRData } = useMemo(() => {
+    const mTrades = trades.filter(t => t.date && t.date.startsWith(currentMonthStr));
+    const mTotalR = mTrades.reduce((sum, t) => sum + (t.rMultiple || 0), 0);
+
+    const dateMap = new Map<number, { r: number; count: number }>();
+    mTrades.forEach(t => {
       const parts = t.date.split('-');
       if (parts.length === 3) {
         const d = parseInt(parts[2], 10);
-        dateMap.set(d, (dateMap.get(d) || 0) + (t.rMultiple || 0));
+        const cur = dateMap.get(d) || { r: 0, count: 0 };
+        cur.r += (t.rMultiple || 0);
+        cur.count += 1;
+        dateMap.set(d, cur);
       }
     });
 
-    for (let d = 1; d <= 31; d++) {
-      if (dateMap.has(d)) {
-        daysArr.push({ day: d, r: dateMap.get(d)! });
-      } else {
-        // Sample baseline bars matching mockup
-        const samplePattern: Record<number, number> = {
-          2: -1.2, 4: 1.5, 7: 2.8, 9: -0.8, 12: 1.9, 14: 2.4, 16: 3.5, 18: -1.5, 20: 2.1, 23: -2.0, 26: 3.1, 28: 1.8, 30: -0.9
-        };
-        daysArr.push({ day: d, r: samplePattern[d] || 0 });
-      }
+    const daysArr: { day: number; r: number; count: number }[] = [];
+    for (let d = 1; d <= daysInCurrentMonth; d++) {
+      const item = dateMap.get(d);
+      daysArr.push({
+        day: d,
+        r: item ? item.r : 0,
+        count: item ? item.count : 0,
+      });
     }
-    return daysArr;
-  }, [trades]);
+
+    return { monthlyTotalR: mTotalR, dailyRData: daysArr };
+  }, [trades, currentMonthStr, daysInCurrentMonth]);
+
+  // Maximum absolute daily R for scaling bars
+  const maxAbsDailyR = useMemo(() => {
+    const vals = dailyRData.map(d => Math.abs(d.r));
+    const m = Math.max(1, ...vals);
+    return m;
+  }, [dailyRData]);
 
   // Quick stats values
   const quickStats = useMemo(() => {
-    const totalCount = trades.length > 0 ? trades.length : 42;
-    const wr = trades.length > 0 ? Math.round(perf.winRate) : 62;
-    const avgR = trades.length > 0 ? perf.averageR : 0.12;
+    const totalCount = trades.length;
+    const wr = Math.round(perf.winRate);
+    const avgR = perf.averageR;
     const wins = trades.filter((t) => (t.rMultiple || 0) > 0);
     const losses = trades.filter((t) => (t.rMultiple || 0) < 0);
-    const bigWin = wins.length > 0 ? Math.max(...wins.map((t) => t.rMultiple)) : 4.8;
-    const bigLoss = losses.length > 0 ? Math.min(...losses.map((t) => t.rMultiple)) : -2.8;
+    const bigWin = wins.length > 0 ? Math.max(...wins.map((t) => t.rMultiple || 0)) : (perf.bestTrade?.rMultiple || 0);
+    const bigLoss = losses.length > 0 ? Math.min(...losses.map((t) => t.rMultiple || 0)) : (perf.worstTrade && perf.worstTrade.rMultiple < 0 ? perf.worstTrade.rMultiple : 0);
 
     return {
       totalTrades: totalCount,
@@ -181,13 +305,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [trades, perf]);
 
-  // Monthly Cycle Progress numbers (21-Day Challenge / 31-Day Cycle)
+  // Monthly Cycle Progress numbers (Current Month)
   const cycleProgress = useMemo(() => {
-    const profitableDays = trades.length > 0 ? days.filter((d) => d.rules?.riskManagement).length : 16;
-    const losingDays = trades.length > 0 ? days.filter((d) => !d.rules?.dailyLossLimit).length : 5;
-    const beDays = 1;
-    const noTradeDays = 8;
-    const percent = 73;
+    const currentMonthDays = days.filter(d => d.date && d.date.startsWith(currentMonthStr));
+    const mTrades = trades.filter(t => t.date && t.date.startsWith(currentMonthStr));
+
+    const dayRMap = new Map<string, number>();
+    mTrades.forEach(t => {
+      dayRMap.set(t.date, (dayRMap.get(t.date) || 0) + (t.rMultiple || 0));
+    });
+
+    let profitableDays = 0;
+    let losingDays = 0;
+    let beDays = 0;
+    let tradedDates = new Set<string>();
+
+    dayRMap.forEach((r, date) => {
+      tradedDates.add(date);
+      if (r > 0.001) profitableDays++;
+      else if (r < -0.001) losingDays++;
+      else beDays++;
+    });
+
+    // Check explicitly marked no trade days
+    let markedNoTradeDays = 0;
+    currentMonthDays.forEach(d => {
+      if (d.isNoTradeDay) {
+        markedNoTradeDays++;
+      }
+    });
+
+    const dayOfMonth = now.getDate();
+    const activeDays = profitableDays + losingDays + beDays;
+    const noTradeDays = Math.max(markedNoTradeDays, Math.max(0, dayOfMonth - activeDays));
+    const percent = activeDays > 0 ? Math.round((profitableDays / activeDays) * 100) : (trades.length > 0 ? Math.round(perf.winRate) : 0);
 
     return {
       percent,
@@ -195,18 +346,94 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       losingDays,
       beDays,
       noTradeDays,
+      totalDaysPassed: dayOfMonth,
+      daysInMonth: daysInCurrentMonth,
     };
-  }, [trades, days]);
+  }, [trades, days, currentMonthStr, now, daysInCurrentMonth, perf.winRate]);
 
-  // Current equity display
-  const currentEquityDisplay = perf.currentBalance > 0 ? perf.currentBalance : 1003.52;
-  const netRDisplay = trades.length > 0 ? trades.reduce((sum, t) => sum + (t.rMultiple || 0), 0) : 8.2;
-  const netPnlDisplay = trades.length > 0 ? perf.netPnl : 412.30;
+  // Recent 5 trades
+  const recentTradesList = useMemo(() => {
+    return [...trades]
+      .sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`).getTime() - new Date(`${a.date}T${a.time || '00:00'}`).getTime())
+      .slice(0, 5);
+  }, [trades]);
+
+  // Live Pair Stats for Top Performers
+  const pairStats = useMemo(() => {
+    const map = new Map<string, { totalR: number; totalPnl: number; wins: number; total: number }>();
+    trades.forEach((t) => {
+      const p = (t.pair || 'OTHER').replace('/', '').toUpperCase();
+      const cur = map.get(p) || { totalR: 0, totalPnl: 0, wins: 0, total: 0 };
+      cur.totalR += (t.rMultiple || 0);
+      cur.totalPnl += (t.pnl || 0);
+      if ((t.rMultiple || 0) > 0) cur.wins += 1;
+      cur.total += 1;
+      map.set(p, cur);
+    });
+
+    return Array.from(map.entries())
+      .map(([pair, stats]) => ({
+        pair,
+        avgR: stats.total > 0 ? stats.totalR / stats.total : 0,
+        totalR: stats.totalR,
+        totalPnl: stats.totalPnl,
+        winRate: stats.total > 0 ? Math.round((stats.wins / stats.total) * 100) : 0,
+        count: stats.total,
+      }))
+      .sort((a, b) => (performerTab === 'By R-Multiple' ? b.totalR - a.totalR : b.totalPnl - a.totalPnl));
+  }, [trades, performerTab]);
+
+  // Live Violations list
+  const violationsList = useMemo(() => {
+    const counts = new Map<string, { count: number; lossR: number }>();
+    trades.forEach((t) => {
+      if (t.execution === 'VIOLATION') {
+        const reason = t.violationReason && t.violationReason !== 'None' ? t.violationReason : (t.emotion === 'FOMO' ? 'FOMO' : 'Rule Violation');
+        const cur = counts.get(reason) || { count: 0, lossR: 0 };
+        cur.count += 1;
+        if ((t.rMultiple || 0) < 0) cur.lossR += Math.abs(t.rMultiple || 0);
+        counts.set(reason, cur);
+      }
+    });
+
+    return Array.from(counts.entries())
+      .map(([reason, s]) => ({ reason, count: s.count, lossR: s.lossR }))
+      .sort((a, b) => b.count - a.count);
+  }, [trades]);
+
+  // Trading calendar mini grid for the current month
+  const calendarDays = useMemo(() => {
+    const firstDayOfWeek = new Date(currentYear, currentMonthIdx, 1).getDay(); // 0 = Sun, 1 = Mon...
+    // Shift Sunday to 6 so Monday is 0
+    const offset = (firstDayOfWeek + 6) % 7;
+
+    const daysList: { day?: number; dateStr?: string; r?: number; hasTrade?: boolean }[] = [];
+    for (let i = 0; i < offset; i++) {
+      daysList.push({});
+    }
+
+    const dayRMap = new Map<number, number>();
+    trades.forEach(t => {
+      if (t.date && t.date.startsWith(currentMonthStr)) {
+        const d = parseInt(t.date.split('-')[2], 10);
+        dayRMap.set(d, (dayRMap.get(d) || 0) + (t.rMultiple || 0));
+      }
+    });
+
+    for (let d = 1; d <= daysInCurrentMonth; d++) {
+      const dateStr = `${currentMonthStr}-${String(d).padStart(2, '0')}`;
+      const hasTrade = dayRMap.has(d);
+      const r = dayRMap.get(d);
+      daysList.push({ day: d, dateStr, r, hasTrade });
+    }
+
+    return daysList;
+  }, [currentYear, currentMonthIdx, currentMonthStr, daysInCurrentMonth, trades]);
 
   return (
     <div className="space-y-4 animate-fade-in pb-12 text-[#1F1A16] dark:text-[#F0F4F8] font-sans selection:bg-[#DB9F35]/30 transition-colors">
       
-      {/* 1. Greeting Banner (Matching uploaded image) */}
+      {/* 1. Greeting Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 pb-1">
         <div className="flex items-center gap-3">
           <span className="text-3xl select-none" role="img" aria-label="Waving hand">
@@ -232,8 +459,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Top 6 KPI Metric Cards (Exact layout from uploaded image) */}
+      {/* 2. Top 6 KPI Metric Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        
         {/* Card 1: CURRENT EQUITY */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div className="flex items-center justify-between">
@@ -246,11 +474,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-xl sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate">
-              {currSymbol}{currentEquityDisplay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {currSymbol}{perf.currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-[10px] font-bold text-[#10B981] flex items-center gap-1 mt-0.5">
-              <span>↑</span>
-              <span>+${(3.52).toFixed(2)} (+0.4%)</span>
+            <div className={`text-[10px] font-bold flex items-center gap-1 mt-0.5 ${
+              perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+            }`}>
+              <span>{perf.netPnl >= 0 ? '↑' : '↓'}</span>
+              <span>
+                {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)} ({perf.netPnl >= 0 ? '+' : ''}{perf.roiPercent.toFixed(1)}%)
+              </span>
             </div>
           </div>
         </div>
@@ -266,11 +498,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-xl sm:text-2xl font-black text-[#10B981] tracking-tight truncate">
-              {netRDisplay >= 0 ? '+' : ''}{netRDisplay.toFixed(1)}R
+            <div className={`text-xl sm:text-2xl font-black tracking-tight truncate ${
+              netR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+            }`}>
+              {netR >= 0 ? '+' : ''}{netR.toFixed(1)}R
             </div>
-            <div className="text-[10px] font-bold text-[#10B981] mt-0.5">
-              +{currSymbol}{Math.abs(netPnlDisplay).toFixed(2)}
+            <div className={`text-[10px] font-bold mt-0.5 ${
+              perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+            }`}>
+              {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)}
             </div>
           </div>
         </div>
@@ -288,16 +524,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between mt-2">
             <div>
               <div className="text-xl sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
-                {trades.length > 0 ? Math.round(perf.winRate) : 62}%
+                {trades.length > 0 ? Math.round(perf.winRate) : 0}%
               </div>
               <div className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-1">
-                {trades.length > 0 ? `${perf.winningTrades}W • ${perf.losingTrades}L • ${perf.breakEvenTrades}BE` : '26W • 14L • 2BE'}
+                {perf.winningTrades}W • {perf.losingTrades}L • {perf.breakEvenTrades}BE
               </div>
             </div>
             <div className="relative w-8 h-8 shrink-0">
               <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
                 <path className="text-[#E7E0D6] dark:text-[#242D3D]" stroke="currentColor" strokeWidth="4" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                <path className="text-[#10B981]" stroke="currentColor" strokeWidth="4" strokeDasharray={`${trades.length > 0 ? perf.winRate : 62}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path className="text-[#10B981]" stroke="currentColor" strokeWidth="4" strokeDasharray={`${trades.length > 0 ? perf.winRate : 0}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
               </svg>
             </div>
           </div>
@@ -314,11 +550,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-xl sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight">
-              +0.12R
+            <div className={`text-xl sm:text-2xl font-black tracking-tight ${
+              trades.length === 0 ? 'text-[#786F66] dark:text-[#94A3B8]' : perf.expectancy >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+            }`}>
+              {trades.length > 0 ? `${perf.expectancy >= 0 ? '+' : ''}${perf.expectancy.toFixed(2)}R` : '0.00R'}
             </div>
             <div className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-0.5 truncate">
-              PF 1.16 | Avg: +0.12R
+              PF {trades.length > 0 ? (perf.profitFactor > 99 ? '∞' : perf.profitFactor.toFixed(2)) : '0.00'} | Avg: {trades.length > 0 ? `${perf.averageR >= 0 ? '+' : ''}${perf.averageR.toFixed(2)}R` : '0.00R'}
             </div>
           </div>
         </div>
@@ -335,10 +573,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-xl sm:text-2xl font-black text-[#DC2626] tracking-tight">
-              -4.2R
+              {maxDrawdownR > 0 ? `-${maxDrawdownR.toFixed(1)}R` : '0.0R'}
             </div>
             <div className="text-[10px] font-bold text-[#DC2626] mt-0.5">
-              (-8.4%)
+              (-{perf.maxDrawdownPercent.toFixed(1)}%)
             </div>
           </div>
         </div>
@@ -355,10 +593,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-xl sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
-              {trades.length > 0 ? discipline.disciplineScore : 87}%
+              {trades.length > 0 ? discipline.disciplineScore : 100}%
             </div>
             <div className="text-[10px] font-bold text-[#10B981] mt-1">
-              {trades.length > 0 ? `${discipline.cleanTradesCount}/${trades.length}` : '36/42'} Clean
+              {trades.length > 0 ? `${discipline.cleanTradesCount}/${trades.length}` : '0/0'} Clean
             </div>
           </div>
         </div>
@@ -397,7 +635,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                         equityTab === tab
                           ? 'bg-[#DB9F35] text-[#1F1A16] font-bold shadow-2xs'
-                          : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
+                          : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-white'
                       }`}
                     >
                       {tab}
@@ -405,7 +643,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   ))}
                 </div>
 
-                {/* Dropdown: This Month */}
+                {/* Dropdown: Timeframe */}
                 <div className="relative">
                   <select
                     value={timeframe}
@@ -432,28 +670,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </defs>
 
                 {/* Y-Axis Grid Lines & Labels */}
-                {[
-                  { y: 20, label: '1,050' },
-                  { y: 70, label: '1,025' },
-                  { y: 120, label: '1,000' },
-                  { y: 170, label: '975' },
-                  { y: 210, label: '950' },
-                ].map((grid, i) => (
+                {equityChartData.yTicks.map((grid, i) => (
                   <g key={i}>
-                    <line x1="45" y1={grid.y} x2="690" y2={grid.y} stroke="currentColor" className="text-[#E7E0D6]/70 dark:text-[#242D3D]" strokeDasharray="3 3" strokeWidth="1" />
-                    <text x="5" y={grid.y + 4} className="fill-[#9E958C] text-[10px] font-mono">{grid.label}</text>
+                    <line 
+                      x1="45" 
+                      y1={grid.y} 
+                      x2="690" 
+                      y2={grid.y} 
+                      stroke="currentColor" 
+                      className="text-[#E7E0D6]/70 dark:text-[#242D3D]" 
+                      strokeDasharray="3 3" 
+                      strokeWidth="1" 
+                    />
+                    <text 
+                      x="5" 
+                      y={grid.y + 4} 
+                      className="fill-[#9E958C] dark:fill-[#64748B] text-[10px] font-mono"
+                    >
+                      {grid.label}
+                    </text>
                   </g>
                 ))}
 
                 {/* Area Fill */}
                 <path
-                  d="M 50 170 Q 120 185, 180 150 T 280 160 T 360 130 T 440 100 T 520 85 T 600 70 T 670 45 L 670 210 L 50 210 Z"
+                  d={equityChartData.areaD}
                   fill="url(#eqFillGrad)"
                 />
 
                 {/* Main Curve */}
                 <path
-                  d="M 50 170 Q 120 185, 180 150 T 280 160 T 360 130 T 440 100 T 520 85 T 600 70 T 670 45"
+                  d={equityChartData.pathD}
                   fill="none"
                   stroke="#DB9F35"
                   strokeWidth="2.5"
@@ -462,76 +709,112 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 />
 
                 {/* Data Points (Green = win, Red = loss, Gray = BE) */}
-                {[
-                  { cx: 50, cy: 170, type: 'be' },
-                  { cx: 100, cy: 175, type: 'loss' },
-                  { cx: 140, cy: 180, type: 'loss' },
-                  { cx: 180, cy: 150, type: 'win', date: '5 Oct 2026', r: 6.4, pnl: 358 },
-                  { cx: 230, cy: 165, type: 'loss' },
-                  { cx: 280, cy: 160, type: 'win' },
-                  { cx: 330, cy: 145, type: 'win' },
-                  { cx: 380, cy: 135, type: 'win' },
-                  { cx: 430, cy: 110, type: 'win' },
-                  { cx: 480, cy: 95, type: 'loss' },
-                  { cx: 530, cy: 90, type: 'win' },
-                  { cx: 580, cy: 75, type: 'win' },
-                  { cx: 630, cy: 60, type: 'win' },
-                  { cx: 670, cy: 45, type: 'win' },
-                ].map((pt, idx) => (
-                  <circle
-                    key={idx}
-                    cx={pt.cx}
-                    cy={pt.cy}
-                    r="4"
-                    className={`cursor-pointer transition-transform hover:scale-150 ${
-                      pt.type === 'win'
-                        ? 'fill-[#10B981] stroke-white stroke-1'
-                        : pt.type === 'loss'
-                        ? 'fill-[#DC2626] stroke-white stroke-1'
-                        : 'fill-[#9E958C] stroke-white stroke-1'
-                    }`}
-                    onMouseEnter={() =>
-                      setHoveredPoint({
-                        date: pt.date || '05 Oct 2026',
-                        pnl: pt.pnl || 358,
-                        r: pt.r || 6.4,
-                        balance: 1003.52,
-                        roi: 0.4,
-                      })
-                    }
-                    onMouseLeave={() => setHoveredPoint(null)}
-                  />
-                ))}
+                {equityChartData.points.map((pt, idx) => {
+                  if (idx === 0 && equityChartData.points.length > 1) {
+                    // Baseline origin point
+                    return (
+                      <circle
+                        key={idx}
+                        cx={pt.x}
+                        cy={pt.y}
+                        r="3.5"
+                        className="fill-[#9E958C] stroke-white dark:stroke-[#131822] stroke-1 cursor-pointer"
+                        onMouseEnter={() =>
+                          setHoveredPoint({
+                            date: pt.date,
+                            time: pt.time,
+                            pnl: pt.pnl,
+                            r: pt.rMultiple,
+                            balance: pt.equity,
+                            roi: pt.returnPercent,
+                            x: pt.x,
+                            y: pt.y,
+                          })
+                        }
+                        onMouseLeave={() => setHoveredPoint(null)}
+                      />
+                    );
+                  }
+
+                  const fillColor = pt.isWin ? '#10B981' : pt.isLoss ? '#DC2626' : '#9E958C';
+
+                  return (
+                    <circle
+                      key={idx}
+                      cx={pt.x}
+                      cy={pt.y}
+                      r="4.5"
+                      fill={fillColor}
+                      stroke="white"
+                      strokeWidth="1.5"
+                      className="cursor-pointer transition-transform hover:scale-150"
+                      onMouseEnter={() =>
+                        setHoveredPoint({
+                          date: pt.date,
+                          time: pt.time,
+                          pnl: pt.pnl,
+                          r: pt.rMultiple,
+                          balance: pt.equity,
+                          roi: pt.returnPercent,
+                          x: pt.x,
+                          y: pt.y,
+                        })
+                      }
+                      onMouseLeave={() => setHoveredPoint(null)}
+                      onClick={() => onSelectDate?.(pt.date)}
+                    />
+                  );
+                })}
               </svg>
 
-              {/* Hover Tooltip Matching Mockup */}
-              <div className="absolute top-12 left-[155px] bg-[#1F1A16] text-white rounded-xl p-2.5 text-xs shadow-xl pointer-events-none border border-[#3A322A] z-20">
-                <span className="text-[10px] text-[#C4B7A6] font-mono block">
-                  {hoveredPoint ? hoveredPoint.date : '5 Oct 2026'}
-                </span>
-                <span className="font-bold text-[#DB9F35] font-mono block text-sm">
-                  {hoveredPoint ? `${hoveredPoint.r >= 0 ? '+' : ''}${hoveredPoint.r}R` : '6.4R'}
-                </span>
-                <span className={`text-[10px] font-mono block ${
-                  (hoveredPoint ? hoveredPoint.pnl : 358) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-                }`}>
-                  {hoveredPoint
-                    ? `+${hoveredPoint.pnl} (${hoveredPoint.roi >= 0 ? '+' : ''}${hoveredPoint.roi}%)`
-                    : '+0.35R (+0.4%)'}
-                </span>
-              </div>
+              {/* Dynamic Hover Tooltip */}
+              {hoveredPoint && (
+                <div 
+                  style={{
+                    left: `${Math.max(10, Math.min(85, (hoveredPoint.x / 700) * 100))}%`,
+                    top: `${Math.max(10, (hoveredPoint.y / 220) * 100 - 25)}%`,
+                  }}
+                  className="absolute -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white rounded-xl p-2.5 text-xs shadow-xl pointer-events-none border border-[#3A322A] dark:border-[#242D3D] z-30 min-w-[140px]"
+                >
+                  <div className="flex items-center justify-between text-[10px] text-[#C4B7A6] font-mono mb-0.5">
+                    <span>{hoveredPoint.date}</span>
+                    {hoveredPoint.time && <span>{hoveredPoint.time}</span>}
+                  </div>
+                  <div className="font-black text-[#DB9F35] font-mono text-sm">
+                    {hoveredPoint.r >= 0 ? '+' : ''}{hoveredPoint.r.toFixed(2)}R
+                  </div>
+                  <div className={`text-[10px] font-mono font-bold mt-0.5 ${
+                    hoveredPoint.pnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+                  }`}>
+                    {hoveredPoint.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(hoveredPoint.pnl).toFixed(2)} ({hoveredPoint.roi >= 0 ? '+' : ''}{hoveredPoint.roi.toFixed(1)}%)
+                  </div>
+                  <div className="text-[9px] text-[#9E958C] font-mono mt-1 pt-1 border-t border-white/10">
+                    Eq: {currSymbol}{hoveredPoint.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state overlay if no trades */}
+              {!equityChartData.hasData && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
+                  <div className="p-2.5 rounded-full bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] mb-2">
+                    <Activity className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                    No trades recorded for this timeframe
+                  </p>
+                  <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8] mt-0.5 max-w-xs">
+                    Log your trades in the Trading Journal or Quick Trade to visualize your equity curve.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* X-Axis Dates */}
-            <div className="flex justify-between px-10 text-[10px] font-mono text-[#9E958C] border-t border-[#E7E0D6]/60 dark:border-[#242D3D] pt-2">
-              <span>1 Oct</span>
-              <span>5 Oct</span>
-              <span>9 Oct</span>
-              <span>13 Oct</span>
-              <span>17 Oct</span>
-              <span>21 Oct</span>
-              <span>25 Oct</span>
-              <span>29 Oct</span>
+            <div className="flex justify-between px-10 text-[10px] font-mono text-[#9E958C] dark:text-[#64748B] border-t border-[#E7E0D6]/60 dark:border-[#242D3D] pt-2">
+              {equityChartData.xLabels.map((lbl, i) => (
+                <span key={i}>{lbl}</span>
+              ))}
             </div>
           </div>
 
@@ -567,54 +850,85 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     Monthly Performance
                   </h3>
                   <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
-                    Net R by day (October 2026)
+                    Net R by day ({currentMonthName} {currentYear})
                   </p>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded-lg bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399] font-mono text-[10px] font-bold">
-                +8.2R Net result
+              <span className={`px-2 py-0.5 rounded-lg font-mono text-[10px] font-bold ${
+                monthlyTotalR >= 0 
+                  ? 'bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399]'
+                  : 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]'
+              }`}>
+                {monthlyTotalR >= 0 ? '+' : ''}{monthlyTotalR.toFixed(1)}R Net result
               </span>
             </div>
 
-            {/* Daily R Bar Chart (4R to -4R) */}
+            {/* Daily R Bar Chart (Centered on 0 line) */}
             <div className="h-32 w-full pt-3 relative flex items-end">
+              {/* Midline at 50% */}
               <div className="absolute inset-x-0 top-1/2 border-b border-dashed border-[#E7E0D6] dark:border-[#2E384D]" />
-              <div className="w-full flex items-end justify-between gap-1 h-full z-10 px-1">
-                {dailyRData.slice(0, 31).map((item, idx) => {
-                  const isPositive = item.r >= 0;
-                  const absHeight = Math.min(50, Math.abs(item.r) * 12);
+              
+              <div className="w-full flex items-end justify-between gap-0.5 sm:gap-1 h-full z-10 px-1">
+                {dailyRData.map((item) => {
+                  const isPositive = item.r > 0;
+                  const isNegative = item.r < 0;
+                  // Max height 45% of total container height
+                  const heightPercent = Math.min(48, (Math.abs(item.r) / maxAbsDailyR) * 48);
+
                   return (
-                    <div key={idx} className="flex-1 flex flex-col items-center h-full justify-center group relative">
+                    <div 
+                      key={item.day} 
+                      className="flex-1 flex flex-col items-center h-full justify-center group relative cursor-pointer"
+                      onMouseEnter={() => setHoveredBar(item)}
+                      onMouseLeave={() => setHoveredBar(null)}
+                      onClick={() => {
+                        const dateStr = `${currentMonthStr}-${String(item.day).padStart(2, '0')}`;
+                        onSelectDate?.(dateStr);
+                      }}
+                    >
                       {isPositive ? (
                         <div className="w-full flex flex-col items-center justify-end h-1/2">
                           <div
-                            style={{ height: `${absHeight}%` }}
+                            style={{ height: `${Math.max(12, heightPercent * 2)}%` }}
                             className="w-full max-w-[6px] rounded-t-sm bg-[#10B981] group-hover:bg-[#059669] transition-all"
                           />
                         </div>
-                      ) : (
+                      ) : isNegative ? (
                         <div className="w-full flex flex-col items-center justify-start h-1/2">
                           <div
-                            style={{ height: `${absHeight}%` }}
+                            style={{ height: `${Math.max(12, heightPercent * 2)}%` }}
                             className="w-full max-w-[6px] rounded-b-sm bg-[#DC2626] group-hover:bg-[#B91C1C] transition-all"
                           />
                         </div>
+                      ) : (
+                        <div className="w-1 h-1 rounded-full bg-[#E7E0D6] dark:bg-[#242D3D] group-hover:bg-[#DB9F35] transition-colors" />
                       )}
                     </div>
                   );
                 })}
               </div>
+
+              {/* Bar Hover Tooltip */}
+              {hoveredBar && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white px-2.5 py-1 rounded-lg text-[10px] font-mono shadow-lg border border-[#3A322A] dark:border-[#242D3D] pointer-events-none z-20 whitespace-nowrap">
+                  <span>Day {hoveredBar.day}: </span>
+                  <span className={hoveredBar.r > 0 ? 'text-[#10B981] font-bold' : hoveredBar.r < 0 ? 'text-[#DC2626] font-bold' : 'text-[#9E958C]'}>
+                    {hoveredBar.r > 0 ? '+' : ''}{hoveredBar.r.toFixed(1)}R
+                  </span>
+                  <span className="text-[#9E958C] ml-1.5">({hoveredBar.count} trade{hoveredBar.count === 1 ? '' : 's'})</span>
+                </div>
+              )}
             </div>
 
             {/* X-Axis labels for days */}
-            <div className="flex justify-between text-[9px] font-mono text-[#9E958C] border-t border-[#E7E0D6]/60 dark:border-[#242D3D] pt-1 mt-1">
+            <div className="flex justify-between text-[9px] font-mono text-[#9E958C] dark:text-[#64748B] border-t border-[#E7E0D6]/60 dark:border-[#242D3D] pt-1 mt-1">
               <span>1</span>
               <span>5</span>
               <span>10</span>
               <span>15</span>
               <span>20</span>
               <span>25</span>
-              <span>31</span>
+              <span>{daysInCurrentMonth}</span>
             </div>
           </div>
 
@@ -629,7 +943,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="p-2 rounded-xl bg-[#F2ECE0] dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244]">
                 <span className="text-[9px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Total Trades</span>
                 <span className="text-xs font-black font-mono mt-1 text-[#1F1A16] dark:text-[#F0F4F8] block">
-                  {quickStats.totalTrades} <span className="text-[9px] text-[#10B981] font-normal">↑8%</span>
+                  {quickStats.totalTrades}
                 </span>
               </div>
 
@@ -642,8 +956,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
               <div className="p-2 rounded-xl bg-[#F2ECE0] dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244]">
                 <span className="text-[9px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Avg R / Trade</span>
-                <span className="text-xs font-black font-mono mt-1 text-[#10B981] block">
-                  +{quickStats.avgR.toFixed(2)}R
+                <span className={`text-xs font-black font-mono mt-1 block ${
+                  quickStats.avgR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+                }`}>
+                  {quickStats.avgR >= 0 ? '+' : ''}{quickStats.avgR.toFixed(2)}R
                 </span>
               </div>
 
@@ -664,7 +980,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="p-2 rounded-xl bg-[#F2ECE0] dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244]">
                 <span className="text-[9px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Biggest Loss</span>
                 <span className="text-xs font-black font-mono mt-1 text-[#DC2626] block">
-                  {quickStats.biggestLoss.toFixed(1)}R
+                  {quickStats.biggestLoss <= 0 ? `${quickStats.biggestLoss.toFixed(1)}R` : `-${quickStats.biggestLoss.toFixed(1)}R`}
                 </span>
               </div>
             </div>
@@ -672,10 +988,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 4. Middle Row: 4-Column Feature Grid (Matching exact mockup!) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* 4. Middle Row: 3-Column Balanced Feature Grid (Trading Rules removed per user request) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
         
-        {/* Card 1: 21-Day Challenge / Monthly Cycle Progress */}
+        {/* Card 1: Monthly Cycle Progress */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div>
             <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
@@ -685,7 +1001,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
                     Monthly Cycle Progress
                   </h4>
-                  <p className="text-[9px] text-[#786F66] dark:text-[#94A3B8]">October 2026</p>
+                  <p className="text-[9px] text-[#786F66] dark:text-[#94A3B8]">
+                    {currentMonthName} {currentYear}
+                  </p>
                 </div>
               </div>
               <button
@@ -710,7 +1028,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {cycleProgress.percent}%
                   </span>
                   <span className="text-[8px] text-[#786F66] dark:text-[#94A3B8] font-mono leading-none block mt-0.5">
-                    22/30 Days
+                    {cycleProgress.totalDaysPassed}/{cycleProgress.daysInMonth} Days
                   </span>
                 </div>
               </div>
@@ -732,68 +1050,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
                     <span className="w-2 h-2 rounded-full bg-[#DB9F35]" /> Break Even
                   </span>
-                  <span className="font-bold text-[#786F66] font-mono">{cycleProgress.beDays}</span>
+                  <span className="font-bold text-[#786F66] dark:text-[#94A3B8] font-mono">{cycleProgress.beDays}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
                     <span className="w-2 h-2 rounded-full bg-[#9E958C]" /> No Trade Days
                   </span>
-                  <span className="font-bold text-[#786F66] font-mono">{cycleProgress.noTradeDays}</span>
+                  <span className="font-bold text-[#786F66] dark:text-[#94A3B8] font-mono">{cycleProgress.noTradeDays}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Card 2: Trading Rules Checklist */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#DB9F35]" />
-                <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
-                  Trading Rules
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('challenge21')}
-                className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
-              >
-                <span>View All</span>
-                <ArrowRight className="w-2.5 h-2.5" />
-              </button>
-            </div>
-
-            <div className="space-y-1.5 py-2.5 text-[11px]">
-              {[
-                { text: 'Risk 0.5 – 1% per trade', passed: true },
-                { text: 'Daily max loss limit respected', passed: true },
-                { text: 'SL pre-defined & never widened', passed: true },
-                { text: 'No setup = No trade', passed: true },
-                { text: 'SMC sequence (HTF → LTF → MSS → POI)', passed: true },
-                { text: 'No FOMO / Revenge trading', passed: false },
-                { text: 'Economic calendar checked', passed: true },
-              ].map((rule, idx) => (
-                <div key={idx} className="flex items-center justify-between text-[#1F1A16] dark:text-[#F0F4F8]">
-                  <div className="flex items-center gap-2 truncate pr-2">
-                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
-                      rule.passed ? 'bg-[#E8F8EE] text-[#15803D]' : 'bg-[#FEECEB] text-[#DC2626]'
-                    }`}>
-                      {rule.passed ? '✓' : '✗'}
-                    </span>
-                    <span className="truncate">{rule.text}</span>
-                  </div>
-                  <span className={rule.passed ? 'text-[#10B981]' : 'text-[#DC2626]'}>
-                    {rule.passed ? '✓' : '✗'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Recent Trades Table */}
+        {/* Card 2: Recent Trades Table */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div>
             <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
@@ -813,56 +1083,62 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </div>
 
-            <div className="overflow-x-auto py-1 text-[11px]">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-[9px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-                    <th className="pb-1.5">Pair</th>
-                    <th className="pb-1.5">Type</th>
-                    <th className="pb-1.5 text-center">R</th>
-                    <th className="pb-1.5 text-right">P&L</th>
-                    <th className="pb-1.5 text-right">Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E7E0D6]/40 dark:divide-[#242D3D]">
-                  {recentTradesList.map((t, i) => (
-                    <tr 
-                      key={i} 
-                      onClick={() => onSelectDate?.(t.date)}
-                      className="hover:bg-[#F2ECE0]/60 dark:hover:bg-[#1C2331]/60 transition-colors cursor-pointer"
-                    >
-                      <td className="py-1.5 font-bold font-mono">{t.pair}</td>
-                      <td className="py-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                          t.order === 'BUY'
-                            ? 'bg-[#E8F8EE] text-[#15803D]'
-                            : 'bg-[#FEECEB] text-[#DC2626]'
-                        }`}>
-                          {t.order}
-                        </span>
-                      </td>
-                      <td className={`py-1.5 text-center font-bold font-mono ${
-                        t.rMultiple >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-                      }`}>
-                        {t.rMultiple >= 0 ? `+${t.rMultiple}R` : `${t.rMultiple}R`}
-                      </td>
-                      <td className={`py-1.5 text-right font-bold font-mono ${
-                        t.pnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-                      }`}>
-                        {t.pnl >= 0 ? `+${currSymbol}${t.pnl.toFixed(2)}` : `-${currSymbol}${Math.abs(t.pnl).toFixed(2)}`}
-                      </td>
-                      <td className="py-1.5 text-right text-[10px] font-mono text-[#786F66]">
-                        {t.time || '10:00'}
-                      </td>
+            {recentTradesList.length === 0 ? (
+              <div className="py-6 text-center text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                No trades recorded yet. Log your trades in the Journal.
+              </div>
+            ) : (
+              <div className="overflow-x-auto py-1 text-[11px]">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[9px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
+                      <th className="pb-1.5">Pair</th>
+                      <th className="pb-1.5">Type</th>
+                      <th className="pb-1.5 text-center">R</th>
+                      <th className="pb-1.5 text-right">P&L</th>
+                      <th className="pb-1.5 text-right">Time</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-[#E7E0D6]/40 dark:divide-[#242D3D]">
+                    {recentTradesList.map((t) => (
+                      <tr 
+                        key={t.id} 
+                        onClick={() => onSelectDate?.(t.date)}
+                        className="hover:bg-[#F2ECE0]/60 dark:hover:bg-[#1C2331]/60 transition-colors cursor-pointer"
+                      >
+                        <td className="py-1.5 font-bold font-mono text-[#1F1A16] dark:text-[#F0F4F8]">{t.pair}</td>
+                        <td className="py-1.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            t.order === 'BUY'
+                              ? 'bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399]'
+                              : 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]'
+                          }`}>
+                            {t.order}
+                          </span>
+                        </td>
+                        <td className={`py-1.5 text-center font-bold font-mono ${
+                          (t.rMultiple || 0) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+                        }`}>
+                          {(t.rMultiple || 0) >= 0 ? `+${t.rMultiple}R` : `${t.rMultiple}R`}
+                        </td>
+                        <td className={`py-1.5 text-right font-bold font-mono ${
+                          (t.pnl || 0) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+                        }`}>
+                          {(t.pnl || 0) >= 0 ? `+${currSymbol}${(t.pnl || 0).toFixed(2)}` : `-${currSymbol}${Math.abs(t.pnl || 0).toFixed(2)}`}
+                        </td>
+                        <td className="py-1.5 text-right text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8]">
+                          {t.time || '10:00'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Card 4: Trading Calendar Mini-Grid */}
+        {/* Card 3: Trading Calendar Mini-Grid */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
           <div>
             <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
@@ -895,51 +1171,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* Mini Calendar Day Cells */}
             <div className="grid grid-cols-7 gap-1 pt-2 text-[9px] font-mono text-center">
-              {[
-                { day: 1, r: '+2.1R', win: true },
-                { day: 2, r: '-1R', loss: true },
-                { day: 3, r: '+1.5R', win: true },
-                { day: 4, r: '+0.8R', win: true },
-                { day: 5, r: '-0.5R', loss: true },
-                { day: 6, r: '' },
-                { day: 7, r: '+0.8R', win: true },
-                { day: 8, r: '-1R', loss: true },
-                { day: 9, r: '-1.2R', loss: true },
-                { day: 10, r: '+1R', win: true },
-                { day: 11, r: '' },
-                { day: 12, r: '' },
-                { day: 13, r: '+0.5R', win: true },
-                { day: 14, r: 'BE' },
-                { day: 15, r: '-1.5R', loss: true },
-                { day: 16, r: '+3R', win: true },
-                { day: 17, r: '' },
-                { day: 18, r: '' },
-                { day: 19, r: '' },
-                { day: 20, r: '' },
-                { day: 21, r: '' },
-              ].map((c, i) => (
-                <div
-                  key={i}
-                  className={`p-1 rounded-md border min-h-[30px] flex flex-col justify-between ${
-                    c.win
-                      ? 'bg-[#E8F8EE] dark:bg-[#132A1C] border-[#B7ECC8] text-[#15803D]'
-                      : c.loss
-                      ? 'bg-[#FEECEB] dark:bg-[#321B1B] border-[#FBC5C2] text-[#DC2626]'
-                      : c.r === 'BE'
-                      ? 'bg-[#FAF2E6] dark:bg-[#1C2331] border-[#E8DCC8] text-[#DB9F35]'
-                      : 'bg-transparent border-transparent text-[#9E958C]'
-                  }`}
-                >
-                  <span className="text-[8px] font-bold block leading-none">{c.day}</span>
-                  {c.r && <span className="text-[7px] font-bold block leading-none truncate">{c.r}</span>}
-                </div>
-              ))}
+              {calendarDays.map((c, i) => {
+                if (!c.day) {
+                  return <div key={i} className="min-h-[28px]" />;
+                }
+                const isWin = c.hasTrade && (c.r || 0) > 0.001;
+                const isLoss = c.hasTrade && (c.r || 0) < -0.001;
+                const isBE = c.hasTrade && Math.abs(c.r || 0) <= 0.001;
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => c.dateStr && onSelectDate?.(c.dateStr)}
+                    className={`p-1 rounded-md border min-h-[28px] flex flex-col justify-between cursor-pointer transition-all hover:scale-105 ${
+                      isWin
+                        ? 'bg-[#E8F8EE] dark:bg-[#132A1C] border-[#B7ECC8] dark:border-[#1E432A] text-[#15803D] dark:text-[#34D399]'
+                        : isLoss
+                        ? 'bg-[#FEECEB] dark:bg-[#321B1B] border-[#FBC5C2] dark:border-[#4B1E1E] text-[#DC2626] dark:text-[#F87171]'
+                        : isBE
+                        ? 'bg-[#FAF2E6] dark:bg-[#1C2331] border-[#E8DCC8] dark:border-[#2E384D] text-[#DB9F35]'
+                        : 'bg-transparent border-transparent text-[#9E958C] dark:text-[#64748B] hover:bg-[#F2ECE0] dark:hover:bg-[#1C2331]'
+                    }`}
+                  >
+                    <span className="text-[8px] font-bold block leading-none">{c.day}</span>
+                    {c.hasTrade && (
+                      <span className="text-[7px] font-bold block leading-none truncate">
+                        {(c.r || 0) >= 0 ? `+${(c.r || 0).toFixed(1)}R` : `${(c.r || 0).toFixed(1)}R`}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 5. Bottom Row: 3-Column Insights Grid (Matching exact mockup!) */}
+      {/* 5. Bottom Row: 3-Column Insights Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
         
         {/* Card 1: Top Performers */}
@@ -963,7 +1231,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setPerformerTab('By R-Multiple')}
-                  className={`px-2 py-0.5 rounded cursor-pointer ${
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-all ${
                     performerTab === 'By R-Multiple'
                       ? 'bg-[#DB9F35] text-[#1F1A16] font-bold shadow-2xs'
                       : 'text-[#786F66] dark:text-[#94A3B8]'
@@ -974,7 +1242,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setPerformerTab('By P&L')}
-                  className={`px-2 py-0.5 rounded cursor-pointer ${
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-all ${
                     performerTab === 'By P&L'
                       ? 'bg-[#DB9F35] text-[#1F1A16] font-bold shadow-2xs'
                       : 'text-[#786F66] dark:text-[#94A3B8]'
@@ -985,32 +1253,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto py-2 text-[11px]">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-[9px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-                    <th className="pb-1.5 w-6">#</th>
-                    <th className="pb-1.5">Pair</th>
-                    <th className="pb-1.5 text-right">Avg R</th>
-                    <th className="pb-1.5 text-right">Win Rate</th>
-                    <th className="pb-1.5 text-right">Trades</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E7E0D6]/40 dark:divide-[#242D3D]">
-                  {pairStats.slice(0, 4).map((p, idx) => (
-                    <tr key={p.pair} className="hover:bg-[#F2ECE0]/60 dark:hover:bg-[#1C2331]/60 transition-colors">
-                      <td className="py-2 text-[10px] font-mono text-[#9E958C]">{idx + 1}</td>
-                      <td className="py-2 font-bold font-mono text-[#1F1A16] dark:text-[#F0F4F8]">{p.pair}</td>
-                      <td className="py-2 text-right font-mono font-bold text-[#10B981]">
-                        +{p.avgR.toFixed(1)}R
-                      </td>
-                      <td className="py-2 text-right font-mono">{p.winRate}%</td>
-                      <td className="py-2 text-right font-mono text-[#786F66]">{p.count}</td>
+            {pairStats.length === 0 ? (
+              <div className="py-6 text-center text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                No trade pairs recorded yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto py-2 text-[11px]">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[9px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
+                      <th className="pb-1.5 w-6">#</th>
+                      <th className="pb-1.5">Pair</th>
+                      <th className="pb-1.5 text-right">{performerTab === 'By R-Multiple' ? 'Avg R' : 'Net P&L'}</th>
+                      <th className="pb-1.5 text-right">Win Rate</th>
+                      <th className="pb-1.5 text-right">Trades</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-[#E7E0D6]/40 dark:divide-[#242D3D]">
+                    {pairStats.slice(0, 4).map((p, idx) => (
+                      <tr key={p.pair} className="hover:bg-[#F2ECE0]/60 dark:hover:bg-[#1C2331]/60 transition-colors">
+                        <td className="py-2 text-[10px] font-mono text-[#9E958C] dark:text-[#64748B]">{idx + 1}</td>
+                        <td className="py-2 font-bold font-mono text-[#1F1A16] dark:text-[#F0F4F8]">{p.pair}</td>
+                        <td className={`py-2 text-right font-mono font-bold ${
+                          (performerTab === 'By R-Multiple' ? p.avgR : p.totalPnl) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+                        }`}>
+                          {performerTab === 'By R-Multiple' 
+                            ? `${p.avgR >= 0 ? '+' : ''}${p.avgR.toFixed(1)}R`
+                            : `${p.totalPnl >= 0 ? '+' : '-'}${currSymbol}${Math.abs(p.totalPnl).toFixed(2)}`}
+                        </td>
+                        <td className="py-2 text-right font-mono text-[#1F1A16] dark:text-[#F0F4F8]">{p.winRate}%</td>
+                        <td className="py-2 text-right font-mono text-[#786F66] dark:text-[#94A3B8]">{p.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1039,24 +1317,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Biggest Leaks
               </span>
 
-              <div className="space-y-2">
-                {violationsList.slice(0, 3).map((v, i) => (
-                  <div key={v.reason} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] font-bold text-[10px] flex items-center justify-center">
-                        {i + 1}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] font-bold text-[11px]">
-                        {v.reason}
+              {violationsList.length === 0 ? (
+                <div className="py-4 text-center text-[11px] text-[#10B981] font-medium">
+                  ✓ 100% Clean Execution! No rule leaks detected.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {violationsList.slice(0, 3).map((v, i) => (
+                    <div key={v.reason} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] font-bold text-[10px] flex items-center justify-center">
+                          {i + 1}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] font-bold text-[11px]">
+                          {v.reason}
+                        </span>
+                      </div>
+                      <span className="text-[#786F66] dark:text-[#94A3B8] text-[11px]">{v.count} occurrence{v.count === 1 ? '' : 's'}</span>
+                      <span className="font-bold font-mono text-xs text-[#DC2626]">
+                        -{v.lossR.toFixed(1)}R
                       </span>
                     </div>
-                    <span className="text-[#786F66] text-[11px]">{v.count} occurrences</span>
-                    <span className="font-bold font-mono text-xs text-[#DC2626]">
-                      -{v.lossR.toFixed(1)}R
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1068,7 +1352,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Focus This Week
               </span>
               <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8] mt-0.5 leading-snug">
-                Avoid FOMO after strong moves. Wait for your setup.
+                Avoid FOMO after strong market moves. Protect capital and wait patiently for valid setups.
               </p>
             </div>
           </div>
@@ -1099,14 +1383,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="relative w-18 h-18 shrink-0 flex items-center justify-center">
                 <svg className="w-18 h-18 -rotate-90" viewBox="0 0 36 36">
                   <path className="text-[#E7E0D6] dark:text-[#242D3D]" stroke="currentColor" strokeWidth="3.5" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                  <path className="text-[#10B981]" stroke="currentColor" strokeWidth="3.5" strokeDasharray={`${trades.length > 0 ? discipline.disciplineScore : 87}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                  <path className="text-[#10B981]" stroke="currentColor" strokeWidth="3.5" strokeDasharray={`${trades.length > 0 ? discipline.disciplineScore : 100}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                 </svg>
                 <div className="absolute text-center">
                   <span className="text-sm font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none block">
-                    {trades.length > 0 ? discipline.disciplineScore : 87}%
+                    {trades.length > 0 ? discipline.disciplineScore : 100}%
                   </span>
                   <span className="text-[8px] text-[#786F66] dark:text-[#94A3B8] font-mono leading-none block mt-0.5">
-                    {trades.length > 0 ? `${discipline.cleanTradesCount}/${trades.length}` : '36/42'} Clean
+                    {discipline.cleanTradesCount}/{trades.length} Clean
                   </span>
                 </div>
               </div>
@@ -1118,35 +1402,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     Rule Violations
                   </span>
                   <span className="text-sm font-black text-[#1F1A16] dark:text-[#F0F4F8] font-mono">
-                    6 <span className="text-[9px] font-normal text-[#786F66]">14% of total trades</span>
+                    {discipline.violationTradesCount} <span className="text-[9px] font-normal text-[#786F66] dark:text-[#94A3B8]">
+                      {trades.length > 0 ? `${Math.round((discipline.violationTradesCount / trades.length) * 100)}% of total trades` : '0%'}
+                    </span>
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
-                    <span className="w-2 h-2 rounded-full bg-[#DC2626]" /> FOMO
-                  </span>
-                  <span className="font-bold text-[#DC2626] font-mono">4</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
-                    <span className="w-2 h-2 rounded-full bg-[#10B981]" /> Revenge
-                  </span>
-                  <span className="font-bold text-[#10B981] font-mono">1</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
-                    <span className="w-2 h-2 rounded-full bg-[#9E958C]" /> Other
-                  </span>
-                  <span className="font-bold text-[#786F66] font-mono">1</span>
-                </div>
+                {violationsList.length === 0 ? (
+                  <div className="text-[11px] text-[#10B981] font-medium py-1">
+                    Zero rule violations recorded
+                  </div>
+                ) : (
+                  violationsList.slice(0, 3).map((v) => (
+                    <div key={v.reason} className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
+                        <span className="w-2 h-2 rounded-full bg-[#DC2626]" /> {v.reason}
+                      </span>
+                      <span className="font-bold text-[#DC2626] font-mono">{v.count}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 6. Footer (Matching exact text in mockup) */}
+      {/* 6. Footer */}
       <footer className="pt-4 border-t border-[#E7E0D6] dark:border-[#242D3D] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#786F66] dark:text-[#94A3B8] transition-colors">
         <div className="flex items-center gap-2">
           <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8]">TradeFlow</span>
@@ -1154,7 +1436,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span>Trade Better. Be Better.</span>
         </div>
         <div className="font-mono text-[10px]">
-          Last updated: 05 Oct 2026, 07:18 PM
+          Last updated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
       </footer>
     </div>
