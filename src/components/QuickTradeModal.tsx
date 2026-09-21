@@ -6,7 +6,9 @@ import {
   Image as ImageIcon, 
   Trash2, 
   Lock, 
-  ShieldAlert
+  ShieldAlert,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { 
   type Trade, 
@@ -69,6 +71,8 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
 
   const [chartScreenshot, setChartScreenshot] = useState<string>('');
   const [overrideReason, setOverrideReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
@@ -127,8 +131,31 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
           if (blob) {
             const reader = new FileReader();
             reader.onload = (event) => {
-              if (event.target?.result) {
-                setChartScreenshot(event.target.result as string);
+              const rawData = event.target?.result as string;
+              if (rawData) {
+                // Compress pasted TradingView screenshot (max 1280px, quality 0.75 JPEG)
+                const img = new Image();
+                img.onload = () => {
+                  const maxWidth = 1280;
+                  let w = img.width;
+                  let h = img.height;
+                  if (w > maxWidth) {
+                    h = Math.round((h * maxWidth) / w);
+                    w = maxWidth;
+                  }
+                  const canvas = document.createElement('canvas');
+                  canvas.width = w;
+                  canvas.height = h;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    ctx.drawImage(img, 0, 0, w, h);
+                    setChartScreenshot(canvas.toDataURL('image/jpeg', 0.75));
+                  } else {
+                    setChartScreenshot(rawData);
+                  }
+                };
+                img.onerror = () => setChartScreenshot(rawData);
+                img.src = rawData;
               }
             };
             reader.readAsDataURL(blob);
@@ -166,87 +193,102 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    setIsSubmitting(true);
 
-    if (isLockedOut && isHardLock) {
-      alert('Daily Loss Limit is locked. Hard constraint active. Trade entry blocked.');
-      return;
-    }
+    try {
+      if (!userId) {
+        throw new Error('Authentication required. Please refresh or sign in again.');
+      }
 
-    if (isLockedOut && !isHardLock && !overrideReason.trim()) {
-      alert('You must provide an override reason to log a trade while in daily loss lockout.');
-      return;
-    }
+      if (isLockedOut && isHardLock) {
+        throw new Error('Daily Loss Limit is locked (-2R). Hard constraint active. Trade entry blocked.');
+      }
 
-    const tradeQuality: TradeQuality = 
-      execution === 'CLEAN' 
-        ? 'CLEAN' 
-        : (violationReason === 'Moved SL' || violationReason === 'Over-risk' || violationReason === 'Revenge')
-          ? 'VIOLATION'
-          : 'MANAGEABLE_MISTAKE';
+      if (isLockedOut && !isHardLock && !overrideReason.trim()) {
+        throw new Error('You must provide an override reason to log a trade while in daily loss lockout.');
+      }
 
-    const numPnl = parseFloat(pnl) || 0;
-    const nextTradeNumber = editTrade ? editTrade.tradeNumber : (trades.length > 0 ? Math.max(...trades.map(t => t.tradeNumber)) + 1 : 1);
+      const tradeQuality: TradeQuality = 
+        execution === 'CLEAN' 
+          ? 'CLEAN' 
+          : (violationReason === 'Moved SL' || violationReason === 'Over-risk' || violationReason === 'Revenge')
+            ? 'VIOLATION'
+            : 'MANAGEABLE_MISTAKE';
 
-    const tradeData: Omit<Trade, 'id'> = {
-      tradeNumber: nextTradeNumber,
-      date,
-      time,
-      pair,
-      order,
-      lotSize,
-      entryPrice: entryPrice ? parseFloat(entryPrice) : undefined,
-      slPrice: slPrice ? parseFloat(slPrice) : undefined,
-      tpPrice: tpPrice ? parseFloat(tpPrice) : undefined,
-      pnl: numPnl,
-      rMultiple,
-      pips: pips ? parseFloat(pips) : undefined,
-      exitType,
-      tradeQuality,
-      emotion,
-      execution,
-      violationReason: execution === 'VIOLATION' ? violationReason : 'None',
-      setupType,
-      htfContext,
-      entryReason,
-      session,
-      chartScreenshot,
-      createdAt: editTrade ? editTrade.createdAt : new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      const numPnl = parseFloat(pnl) || 0;
+      const validNumbers = trades
+        .map((t) => Number(t.tradeNumber))
+        .filter((n) => !isNaN(n) && isFinite(n));
+      const nextTradeNumber = editTrade 
+        ? editTrade.tradeNumber 
+        : (validNumbers.length > 0 ? Math.max(...validNumbers) + 1 : 1);
 
-    if (editTrade && (editTrade as Trade & { _uuid?: string })._uuid) {
-      const uuid = (editTrade as Trade & { _uuid?: string })._uuid!;
-      await tradesApi.update(uuid, tradeData);
-      if (userId) {
+      const tradeData: Omit<Trade, 'id'> = {
+        tradeNumber: nextTradeNumber,
+        date,
+        time,
+        pair: pair || 'XAU/USD',
+        order,
+        lotSize: Number(lotSize) || 0.01,
+        entryPrice: entryPrice ? parseFloat(entryPrice) : undefined,
+        slPrice: slPrice ? parseFloat(slPrice) : undefined,
+        tpPrice: tpPrice ? parseFloat(tpPrice) : undefined,
+        pnl: numPnl,
+        rMultiple: Number(rMultiple) || 0,
+        pips: pips ? parseFloat(pips) : undefined,
+        exitType,
+        tradeQuality,
+        emotion,
+        execution,
+        violationReason: execution === 'VIOLATION' ? violationReason : 'None',
+        setupType,
+        htfContext,
+        entryReason,
+        session,
+        chartScreenshot: chartScreenshot || undefined,
+        createdAt: editTrade ? editTrade.createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (editTrade && (editTrade as Trade & { _uuid?: string })._uuid) {
+        const uuid = (editTrade as Trade & { _uuid?: string })._uuid!;
+        await tradesApi.update(uuid, tradeData);
         await auditApi.add(
           userId,
           'UPDATE',
           `Edited trade #${editTrade.tradeNumber}. New PnL: ${numPnl}, Quality: ${tradeQuality}`,
           uuid
         );
-      }
-    } else if (userId) {
-      const created = await tradesApi.create(tradeData, userId);
-      const createdUuid = (created as Trade & { _uuid?: string })._uuid;
-      if (isLockedOut && overrideReason) {
-        await auditApi.add(
-          userId,
-          'OVERRIDE_LOCK',
-          `Logged trade beyond daily loss limit. Reason: "${overrideReason}"`,
-          createdUuid
-        );
       } else {
-        await auditApi.add(
-          userId,
-          'CREATE',
-          `Created trade #${nextTradeNumber} (${order} ${pair} ${rMultiple}R)`,
-          createdUuid
-        );
+        const created = await tradesApi.create(tradeData, userId);
+        const createdUuid = (created as Trade & { _uuid?: string })._uuid;
+        if (isLockedOut && overrideReason) {
+          await auditApi.add(
+            userId,
+            'OVERRIDE_LOCK',
+            `Logged trade beyond daily loss limit. Reason: "${overrideReason}"`,
+            createdUuid
+          );
+        } else {
+          await auditApi.add(
+            userId,
+            'CREATE',
+            `Created trade #${nextTradeNumber} (${order} ${pair} ${rMultiple}R)`,
+            createdUuid
+          );
+        }
       }
-    }
 
-    onTradeSaved();
-    onClose();
+      onTradeSaved();
+      onClose();
+    } catch (err: unknown) {
+      console.error('[QuickTradeModal] Submit error:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to record trade. Please try again.';
+      setSubmitError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -694,29 +736,46 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               </div>
             )}
 
-            <div className="pt-3 border-t border-[#E7E0D6] flex items-center justify-between">
-              <span className="text-[11px] text-[#786F66]">
+            {submitError && (
+              <div className="p-3 bg-[#FEECEB] dark:bg-[#2A1616] border border-[#FBC5C2] dark:border-[#521C1C] text-[#B91C1C] dark:text-[#F87171] rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span className="flex-1 font-medium">{submitError}</span>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-[#E7E0D6] dark:border-[#242D3D] flex items-center justify-between">
+              <span className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
                 Target: 5–10s rapid journaling
               </span>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F3EDE2] text-[#786F66] hover:text-[#1F1A16] text-xs font-semibold border border-[#E7E0D6] transition-colors"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-xl bg-[#FAF7F2] dark:bg-[#1A2230] hover:bg-[#F3EDE2] dark:hover:bg-[#252E40] text-[#786F66] hover:text-[#1F1A16] dark:text-[#94A3B8] dark:hover:text-white text-xs font-semibold border border-[#E7E0D6] dark:border-[#283244] transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isLockedOut && isHardLock}
-                  className={`px-6 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm ${
-                    isLockedOut && isHardLock
-                      ? 'bg-[#E7E0D6] text-[#9E958C] cursor-not-allowed'
+                  disabled={isSubmitting || (isLockedOut && isHardLock)}
+                  className={`px-6 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+                    isSubmitting || (isLockedOut && isHardLock)
+                      ? 'bg-[#E7E0D6] dark:bg-[#242D3D] text-[#9E958C] dark:text-[#64748B] cursor-not-allowed'
                       : 'bg-[#DB9F35] hover:bg-[#CCA030] text-[#1F1A16] hover:scale-[1.02]'
                   }`}
                 >
-                  <Check className="w-4 h-4" />
-                  {editTrade ? 'Save Changes' : 'Record Trade'}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Recording...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>{editTrade ? 'Save Changes' : 'Record Trade'}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

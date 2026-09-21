@@ -65,7 +65,7 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
     entry_reason: trade.entryReason ?? null,
     session: trade.session ?? null,
     notes: trade.notes ?? null,
-    chart_url: trade.chartScreenshot ?? null,
+    chart_url: trade.chartScreenshot && trade.chartScreenshot.trim() ? trade.chartScreenshot : null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -86,15 +86,41 @@ export const tradesApi = {
 
   /** Create a new trade, returns the created Trade with id */
   async create(trade: Omit<Trade, 'id'>, userId: string): Promise<Trade> {
+    // 1. Ensure user profile exists to satisfy foreign key constraint
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (!profile) {
+        await supabase.from('profiles').upsert({
+          id: userId,
+          name: 'NH Trader',
+          base_currency: 'USD',
+          initial_capital: 10000,
+          current_balance: 10000,
+        } as never);
+      }
+    } catch (profErr) {
+      console.warn('[tradesApi] Profile check warning:', profErr);
+    }
+
+    const row = tradeToRow(trade, userId);
     const { data, error } = await supabase
       .from('trades')
-      .insert(tradeToRow(trade, userId) as never)
-      .select()
-      .single();
+      .insert(row as never)
+      .select();
 
-    if (error) throw error;
+    if (error) {
+      console.error('[tradesApi] Insert trade error:', error);
+      throw error;
+    }
+
+    const createdRow = Array.isArray(data) && data.length > 0 ? data[0] : row;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return rowToTrade(data as any);
+    return rowToTrade(createdRow as any);
   },
 
   /** Update an existing trade by UUID */
