@@ -195,19 +195,20 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
         // Find live DayRecord
         const dayRecord = days.find((dr) => dr.date === fullDate);
 
-        // Determine status: UNCHECKED / PENDING by default unless real trades or overrides exist
+        // Determine status: UNCHECKED / PENDING by default unless explicitly completed
         let status: DayChallengeStatus = 'PENDING';
         if (statusOverrides[fullDate]) {
           status = statusOverrides[fullDate];
-        } else if (dayTrades.length > 0) {
+        } else if (fullDate === todayStr) {
+          // Current day is active in progress: ALWAYS 'TODAY' (gold ring, never auto-failed cross!)
+          status = 'TODAY';
+        } else if (dayRecord?.isDayClosed && dayTrades.length > 0) {
           const hasViolation = dayTrades.some(
             (t) => t.execution === 'VIOLATION' || t.tradeQuality === 'VIOLATION'
           );
           status = hasViolation ? 'FAILED' : 'CLEAN';
         } else if (dayRecord?.isNoTradeDay) {
           status = 'NO_TRADE';
-        } else if (fullDate === todayStr) {
-          status = 'TODAY';
         } else {
           status = 'PENDING';
         }
@@ -360,10 +361,16 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
   };
 
   const handleResetChallenge = () => {
-    if (window.confirm('Reset all 21-Day Challenge progress and start fresh?')) {
+    if (window.confirm('Reset all 21-Day Challenge progress and start fresh? All days will be unchecked.')) {
       setStatusOverrides({});
       setDailyChecklists({});
       setSelectedDayNum(1);
+      try {
+        localStorage.removeItem(STORAGE_OVERRIDES_KEY);
+        localStorage.removeItem(STORAGE_CHECKLISTS_KEY);
+      } catch {
+        // ignore
+      }
     }
   };
 
