@@ -19,6 +19,7 @@ export interface Trade {
   tpPrice?: number;
   pnl: number;
   rMultiple: number;
+  riskReward?: string;
   pips?: number;
   exitType: ExitType;
   tradeQuality: TradeQuality;
@@ -26,10 +27,12 @@ export interface Trade {
   execution: 'CLEAN' | 'VIOLATION';
   violationReason?: ViolationType;
   setupType?: string;
-  htfContext?: 'Bullish' | 'Bearish' | 'Neutral';
+  htfContext?: string;
   entryReason?: string;
-  session?: 'London' | 'New York' | 'Asian' | 'London/NY Overlap';
-  chartScreenshot?: string; // base64
+  exitReason?: string;
+  tradeSuccessRate?: string;
+  session?: 'Tokyo' | 'Asian' | 'London' | 'New York' | 'London/NY Overlap' | string;
+  chartScreenshot?: string; // base64 / URL
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -120,53 +123,59 @@ export async function seedInitialDataIfEmpty() {
     const initialTrades: Omit<Trade, 'id'>[] = [
       {
         tradeNumber: 1,
-        date: '2025-12-22',
-        time: '14:30',
-        pair: 'XAU/USD',
-        order: 'SELL',
-        lotSize: 0.01,
-        entryPrice: 2654.5,
-        slPrice: 2658.0,
-        tpPrice: 2645.0,
-        pnl: -3.56,
-        rMultiple: -1.0,
-        pips: -35.6,
-        exitType: 'STOP_LOSS',
-        tradeQuality: 'CLEAN',
-        emotion: 'CALM',
-        execution: 'CLEAN',
-        violationReason: 'None',
-        setupType: 'Liquidity Sweep + MSS',
-        htfContext: 'Bearish',
-        entryReason: 'Sweep of Asian high into 4H FVG',
-        session: 'London',
-        createdAt: '2025-12-22T14:30:00.000Z',
-        updatedAt: '2025-12-22T15:10:00.000Z',
-      },
-      {
-        tradeNumber: 2,
-        date: '2025-12-22',
-        time: '16:15',
+        date: '2026-10-09',
+        time: '08:30',
         pair: 'XAU/USD',
         order: 'BUY',
         lotSize: 0.01,
-        entryPrice: 2648.2,
-        slPrice: 2644.0,
-        tpPrice: 2660.0,
-        pnl: 4.32,
-        rMultiple: 1.2,
-        pips: 43.2,
+        entryPrice: 2650.0,
+        slPrice: 2645.0,
+        tpPrice: 2655.0,
+        pnl: 5.55,
+        rMultiple: 1.0,
+        riskReward: '1:1',
+        pips: 555,
         exitType: 'MANUAL_EXIT',
+        tradeSuccessRate: 'Exit Before Target',
+        exitReason: 'Strong Resistance was there and Candle closed weak',
         tradeQuality: 'CLEAN',
-        emotion: 'CALM',
+        emotion: 'FOCUSED',
         execution: 'CLEAN',
         violationReason: 'None',
-        setupType: 'FVG Retest',
-        htfContext: 'Bullish',
-        entryReason: 'NY open liquidity tap and 5m displacement',
-        session: 'New York',
-        createdAt: '2025-12-22T16:15:00.000Z',
-        updatedAt: '2025-12-22T17:00:00.000Z',
+        setupType: 'On Support',
+        htfContext: '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m',
+        entryReason: 'On Support and Pullback of HTF Support',
+        session: 'Tokyo',
+        createdAt: '2026-10-09T08:30:00.000Z',
+        updatedAt: '2026-10-09T09:15:00.000Z',
+      },
+      {
+        tradeNumber: 2,
+        date: '2026-10-12',
+        time: '09:15',
+        pair: 'XAU/USD',
+        order: 'BUY',
+        lotSize: 0.01,
+        entryPrice: 2652.5,
+        slPrice: 2647.5,
+        tpPrice: 2657.5,
+        pnl: 5.16,
+        rMultiple: 1.0,
+        riskReward: '1:1',
+        pips: 515,
+        exitType: 'MANUAL_EXIT',
+        tradeSuccessRate: 'Exit Before Target',
+        exitReason: 'Exit mindset, Should wait',
+        tradeQuality: 'CLEAN',
+        emotion: 'FOCUSED',
+        execution: 'CLEAN',
+        violationReason: 'None',
+        setupType: 'Important 1H Support and Pullback',
+        htfContext: '1. Bearish on 1H 2. Waited for The HH of 1H and pullback',
+        entryReason: 'Entry on Liquidity Sweep',
+        session: 'Tokyo',
+        createdAt: '2026-10-12T09:15:00.000Z',
+        updatedAt: '2026-10-12T10:00:00.000Z',
       },
       {
         tradeNumber: 3,

@@ -8,6 +8,18 @@ import { db, type Trade } from '../../db/db';
 // Map Supabase DB row → app-level Trade object
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToTrade(row: any): Trade {
+  let tradeSuccessRate = 'Exit Before Target';
+  if (row.exit_type === 'TARGET') tradeSuccessRate = 'Target Hit';
+  else if (row.exit_type === 'STOP_LOSS') tradeSuccessRate = 'Stop Loss Hit';
+  else if (row.exit_type === 'BREAKEVEN') tradeSuccessRate = 'Breakeven';
+  else if (row.exit_type === 'MANUAL_EXIT') tradeSuccessRate = 'Exit Before Target';
+
+  let session = (row.session as string) || 'Tokyo';
+  if (session === 'Asian') session = 'Tokyo';
+
+  const rMult = row.r_multiple != null ? Number(row.r_multiple) : 0;
+  const riskReward = rMult !== 0 ? `1:${Math.abs(rMult).toFixed(rMult % 1 === 0 ? 0 : 1)}` : '1:1';
+
   return {
     id: row.id,
     tradeNumber: row.trade_number as number,
@@ -20,17 +32,20 @@ function rowToTrade(row: any): Trade {
     slPrice: row.sl_price != null ? Number(row.sl_price) : undefined,
     tpPrice: row.tp_price != null ? Number(row.tp_price) : undefined,
     pnl: Number(row.pnl),
-    rMultiple: Number(row.r_multiple),
+    rMultiple: rMult,
+    riskReward,
     pips: row.pips != null ? Number(row.pips) : undefined,
     exitType: row.exit_type as Trade['exitType'],
     tradeQuality: row.trade_quality as Trade['tradeQuality'],
-    emotion: row.emotion as Trade['emotion'],
-    execution: row.execution as 'CLEAN' | 'VIOLATION',
+    emotion: (row.emotion || 'FOCUSED') as Trade['emotion'],
+    execution: (row.execution || 'CLEAN') as 'CLEAN' | 'VIOLATION',
     violationReason: row.violation_reason as Trade['violationReason'],
     setupType: row.setup_type as string | undefined,
-    htfContext: row.htf_context as Trade['htfContext'],
+    htfContext: row.htf_context as string | undefined,
     entryReason: row.entry_reason as string | undefined,
-    session: row.session as Trade['session'],
+    exitReason: (row.notes as string) || undefined,
+    tradeSuccessRate,
+    session,
     chartScreenshot: row.chart_url as string | undefined,
     notes: row.notes as string | undefined,
     createdAt: row.created_at as string,
@@ -41,11 +56,27 @@ function rowToTrade(row: any): Trade {
 
 // Map app Trade → Supabase insert/update shape
 function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
+  let dbSession = trade.session;
+  if (dbSession === 'Tokyo') dbSession = 'Asian';
+  else if (!['London', 'New York', 'Asian', 'London/NY Overlap'].includes(dbSession || '')) {
+    dbSession = 'Asian';
+  }
+
+  let exitType = trade.exitType || 'MANUAL_EXIT';
+  if (trade.tradeSuccessRate) {
+    if (trade.tradeSuccessRate === 'Target Hit') exitType = 'TARGET';
+    else if (trade.tradeSuccessRate === 'Stop Loss Hit') exitType = 'STOP_LOSS';
+    else if (trade.tradeSuccessRate === 'Breakeven') exitType = 'BREAKEVEN';
+    else if (trade.tradeSuccessRate === 'Exit Before Target') exitType = 'MANUAL_EXIT';
+  }
+
+  const notes = trade.exitReason || trade.notes || null;
+
   return {
     user_id: userId,
     trade_number: trade.tradeNumber,
     trade_date: trade.date,
-    trade_time: trade.time,
+    trade_time: trade.time || '10:00',
     pair: trade.pair,
     direction: trade.order,
     lot_size: trade.lotSize,
@@ -55,16 +86,16 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
     pnl: trade.pnl,
     r_multiple: trade.rMultiple,
     pips: trade.pips ?? null,
-    exit_type: trade.exitType,
-    trade_quality: trade.tradeQuality,
-    emotion: trade.emotion,
-    execution: trade.execution,
+    exit_type: exitType,
+    trade_quality: trade.tradeQuality || 'CLEAN',
+    emotion: trade.emotion || 'FOCUSED',
+    execution: trade.execution || 'CLEAN',
     violation_reason: trade.violationReason ?? null,
     setup_type: trade.setupType ?? null,
     htf_context: trade.htfContext ?? null,
     entry_reason: trade.entryReason ?? null,
-    session: trade.session ?? null,
-    notes: trade.notes ?? null,
+    session: dbSession,
+    notes,
     chart_url: trade.chartScreenshot && trade.chartScreenshot.trim() ? trade.chartScreenshot : null,
     updated_at: new Date().toISOString(),
   };
@@ -178,7 +209,14 @@ export const tradesApi = {
     if (updates.pnl !== undefined) partial.pnl = updates.pnl;
     if (updates.rMultiple !== undefined) partial.r_multiple = updates.rMultiple;
     if (updates.pips !== undefined) partial.pips = updates.pips;
-    if (updates.exitType !== undefined) partial.exit_type = updates.exitType;
+    if (updates.tradeSuccessRate !== undefined) {
+      if (updates.tradeSuccessRate === 'Target Hit') partial.exit_type = 'TARGET';
+      else if (updates.tradeSuccessRate === 'Stop Loss Hit') partial.exit_type = 'STOP_LOSS';
+      else if (updates.tradeSuccessRate === 'Breakeven') partial.exit_type = 'BREAKEVEN';
+      else partial.exit_type = 'MANUAL_EXIT';
+    } else if (updates.exitType !== undefined) {
+      partial.exit_type = updates.exitType;
+    }
     if (updates.tradeQuality !== undefined) partial.trade_quality = updates.tradeQuality;
     if (updates.emotion !== undefined) partial.emotion = updates.emotion;
     if (updates.execution !== undefined) partial.execution = updates.execution;
@@ -186,8 +224,11 @@ export const tradesApi = {
     if (updates.setupType !== undefined) partial.setup_type = updates.setupType;
     if (updates.htfContext !== undefined) partial.htf_context = updates.htfContext;
     if (updates.entryReason !== undefined) partial.entry_reason = updates.entryReason;
-    if (updates.session !== undefined) partial.session = updates.session;
-    if (updates.notes !== undefined) partial.notes = updates.notes;
+    if (updates.session !== undefined) {
+      partial.session = updates.session === 'Tokyo' ? 'Asian' : updates.session;
+    }
+    if (updates.exitReason !== undefined) partial.notes = updates.exitReason;
+    else if (updates.notes !== undefined) partial.notes = updates.notes;
     if (updates.chartScreenshot !== undefined) {
       partial.chart_url = updates.chartScreenshot && updates.chartScreenshot.trim() ? updates.chartScreenshot : null;
     }

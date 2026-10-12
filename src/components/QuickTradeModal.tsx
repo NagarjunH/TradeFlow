@@ -6,7 +6,6 @@ import {
   Image as ImageIcon, 
   Trash2, 
   Lock, 
-  ShieldAlert,
   Loader2,
   AlertCircle,
   Upload
@@ -57,19 +56,22 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
   const [slPrice, setSlPrice] = useState<string>('');
   const [tpPrice, setTpPrice] = useState<string>('');
   
-  const [rMultiple, setRMultiple] = useState<number>(1.5);
-  const [pnl, setPnl] = useState<string>('15.00');
-  const [pips, setPips] = useState<string>('');
+  const [rMultiple, setRMultiple] = useState<number>(1.0);
+  const [riskReward, setRiskReward] = useState<string>('1:1');
+  const [pnl, setPnl] = useState<string>('5.55');
+  const [pips, setPips] = useState<string>('555');
 
-  const [exitType, setExitType] = useState<ExitType>('TARGET');
+  const [exitType, setExitType] = useState<ExitType>('MANUAL_EXIT');
+  const [tradeSuccessRate, setTradeSuccessRate] = useState<string>('Exit Before Target');
+  const [exitReason, setExitReason] = useState<string>('Strong Resistance was there and Candle closed weak');
   const [execution, setExecution] = useState<'CLEAN' | 'VIOLATION'>('CLEAN');
   const [violationReason, setViolationReason] = useState<ViolationType>('None');
-  const [emotion, setEmotion] = useState<EmotionType>('CALM');
+  const [emotion, setEmotion] = useState<EmotionType>('FOCUSED');
 
-  const [setupType, setSetupType] = useState<string>('MSS + FVG');
-  const [htfContext, setHtfContext] = useState<'Bullish' | 'Bearish' | 'Neutral'>('Bullish');
-  const [entryReason, setEntryReason] = useState<string>('');
-  const [session, setSession] = useState<'London' | 'New York' | 'Asian' | 'London/NY Overlap'>('London/NY Overlap');
+  const [setupType, setSetupType] = useState<string>('On Support');
+  const [htfContext, setHtfContext] = useState<string>('1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
+  const [entryReason, setEntryReason] = useState<string>('On Support and Pullback of HTF Support');
+  const [session, setSession] = useState<'Tokyo' | 'London' | 'New York' | 'London/NY Overlap' | string>('Tokyo');
 
   const [chartScreenshot, setChartScreenshot] = useState<string>('');
   const [overrideReason, setOverrideReason] = useState('');
@@ -127,17 +129,23 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setEntryPrice(editTrade.entryPrice?.toString() || '');
       setSlPrice(editTrade.slPrice?.toString() || '');
       setTpPrice(editTrade.tpPrice?.toString() || '');
-      setRMultiple(editTrade.rMultiple);
-      setPnl(editTrade.pnl.toString());
+      setRMultiple(editTrade.rMultiple ?? 1.0);
+      setRiskReward(editTrade.riskReward || (editTrade.rMultiple ? `1:${Math.abs(editTrade.rMultiple)}` : '1:1'));
+      setPnl(editTrade.pnl != null ? editTrade.pnl.toString() : '5.55');
       setPips(editTrade.pips?.toString() || '');
-      setExitType(editTrade.exitType);
-      setExecution(editTrade.execution);
+      setExitType(editTrade.exitType || 'MANUAL_EXIT');
+      setTradeSuccessRate(
+        editTrade.tradeSuccessRate ||
+        (editTrade.exitType === 'TARGET' ? 'Target Hit' : editTrade.exitType === 'STOP_LOSS' ? 'Stop Loss Hit' : editTrade.exitType === 'BREAKEVEN' ? 'Breakeven' : 'Exit Before Target')
+      );
+      setExitReason(editTrade.exitReason || editTrade.notes || '');
+      setExecution(editTrade.execution || 'CLEAN');
       setViolationReason(editTrade.violationReason || 'None');
-      setEmotion(editTrade.emotion);
-      setSetupType(editTrade.setupType || 'MSS + FVG');
-      setHtfContext(editTrade.htfContext || 'Bullish');
-      setEntryReason(editTrade.notes || editTrade.entryReason || '');
-      setSession(editTrade.session || 'London/NY Overlap');
+      setEmotion(editTrade.emotion || 'FOCUSED');
+      setSetupType(editTrade.setupType || 'On Support');
+      setHtfContext(editTrade.htfContext || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
+      setEntryReason(editTrade.entryReason || '');
+      setSession(editTrade.session === 'Asian' ? 'Tokyo' : (editTrade.session || 'Tokyo'));
       setChartScreenshot(editTrade.chartScreenshot || '');
     } else {
       setDate(new Date().toISOString().split('T')[0]);
@@ -145,13 +153,20 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setPair(settings.defaultPair || 'XAU/USD');
       setOrder('BUY');
       setLotSize(settings.defaultLot || 0.01);
-      setRMultiple(1.5);
-      setPnl('15.00');
-      setExitType('TARGET');
+      setRMultiple(1.0);
+      setRiskReward('1:1');
+      setPnl('5.55');
+      setPips('555');
+      setExitType('MANUAL_EXIT');
+      setTradeSuccessRate('Exit Before Target');
+      setExitReason('Strong Resistance was there and Candle closed weak');
       setExecution('CLEAN');
       setViolationReason('None');
-      setEmotion('CALM');
-      setEntryReason('');
+      setEmotion('FOCUSED');
+      setSetupType('On Support');
+      setHtfContext('1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
+      setEntryReason('On Support and Pullback of HTF Support');
+      setSession('Tokyo');
       setChartScreenshot('');
     }
   }, [editTrade, isOpen, settings]);
@@ -178,21 +193,6 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const handleQuickR = (r: number) => {
-    setRMultiple(r);
-    const riskAmount = (settings.currentBalance * (settings.riskPerTradePercent || 1)) / 100;
-    const estPnl = (r * riskAmount).toFixed(2);
-    setPnl(estPnl);
-
-    if (r <= -0.8) {
-      setExitType('STOP_LOSS');
-    } else if (r === 0) {
-      setExitType('BREAKEVEN');
-    } else if (r >= 1) {
-      setExitType('TARGET');
-    }
-  };
 
   const handleApplyRiskCalc = (calculatedLot: number, entry: number, sl: number) => {
     setLotSize(calculatedLot);
@@ -233,6 +233,12 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         ? editTrade.tradeNumber 
         : (validNumbers.length > 0 ? Math.max(...validNumbers) + 1 : 1);
 
+      let finalExitType: ExitType = exitType;
+      if (tradeSuccessRate === 'Target Hit') finalExitType = 'TARGET';
+      else if (tradeSuccessRate === 'Stop Loss Hit') finalExitType = 'STOP_LOSS';
+      else if (tradeSuccessRate === 'Breakeven') finalExitType = 'BREAKEVEN';
+      else if (tradeSuccessRate === 'Exit Before Target') finalExitType = 'MANUAL_EXIT';
+
       const tradeData: Omit<Trade, 'id'> = {
         tradeNumber: nextTradeNumber,
         date,
@@ -245,16 +251,19 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         tpPrice: tpPrice ? parseFloat(tpPrice) : undefined,
         pnl: numPnl,
         rMultiple: Number(rMultiple) || 0,
+        riskReward: riskReward || (rMultiple !== 0 ? `1:${Math.abs(rMultiple)}` : '1:1'),
         pips: pips ? parseFloat(pips) : undefined,
-        exitType,
+        exitType: finalExitType,
+        tradeSuccessRate,
+        exitReason: exitReason.trim() || undefined,
         tradeQuality,
         emotion,
         execution,
         violationReason: execution === 'VIOLATION' ? violationReason : 'None',
         setupType,
         htfContext,
-        entryReason: entryReason.trim(),
-        notes: entryReason.trim(),
+        entryReason: entryReason.trim() || undefined,
+        notes: exitReason.trim() || entryReason.trim() || undefined,
         session,
         chartScreenshot: chartScreenshot || undefined,
         createdAt: editTrade ? editTrade.createdAt : new Date().toISOString(),
@@ -459,41 +468,11 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               </div>
             </div>
 
-            {/* Row 3: Result (Quick R Pills) */}
-            <div className="bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl p-3.5 space-y-3">
-              <label className="block text-xs font-semibold text-[#786F66] uppercase tracking-wider">
-                Trade Result (1-Click R-Multiple)
-              </label>
-
-              <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-                {[-1.0, -0.5, 0, 1.0, 1.5, 2.0, 3.0].map((r) => {
-                  const isNegative = r < 0;
-                  const isZero = r === 0;
-                  const isSelected = rMultiple === r;
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => handleQuickR(r)}
-                      className={`py-2 rounded-xl text-xs font-mono font-bold border transition-all ${
-                        isSelected
-                          ? isNegative
-                            ? 'bg-[#DC2626] text-white border-[#DC2626] shadow-xs'
-                            : isZero
-                            ? 'bg-[#786F66] text-white border-[#786F66]'
-                            : 'bg-[#16A34A] text-white border-[#16A34A] shadow-xs'
-                          : 'bg-white text-[#786F66] border-[#E7E0D6] hover:text-[#1F1A16]'
-                      }`}
-                    >
-                      {r > 0 ? `+${r}R` : isZero ? 'BE (0R)' : `${r}R`}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#E7E0D6]">
+            {/* Row 3: P/L, Risk:Reward & PIP Captured */}
+            <div className="bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl p-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[11px] text-[#786F66] mb-1">
+                  <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
                     Net P&L ({settings.currency === 'USD' ? '$' : '₹'})
                   </label>
                   <input
@@ -501,46 +480,66 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                     step="0.01"
                     value={pnl}
                     onChange={(e) => setPnl(e.target.value)}
-                    className={`w-full px-3 py-1.5 bg-white border border-[#E7E0D6] rounded-xl text-xs font-mono font-bold focus:border-[#DB9F35] outline-none ${
-                      parseFloat(pnl) >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'
+                    className={`w-full px-3 py-1.5 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono font-bold focus:border-[#DB9F35] outline-none ${
+                      parseFloat(pnl) >= 0 ? 'text-[#15803D] dark:text-[#4ADE80]' : 'text-[#DC2626] dark:text-[#F87171]'
                     }`}
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-[#786F66] mb-1">Pips Captured (Optional)</label>
+                  <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
+                    Risk:Reward
+                  </label>
+                  <input
+                    type="text"
+                    value={riskReward}
+                    onChange={(e) => setRiskReward(e.target.value)}
+                    placeholder="1:1"
+                    className="w-full px-3 py-1.5 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
+                    PIP Captured
+                  </label>
                   <input
                     type="number"
-                    step="0.1"
+                    step="1"
                     value={pips}
                     onChange={(e) => setPips(e.target.value)}
-                    placeholder="+25.4"
-                    className="w-full px-3 py-1.5 bg-white border border-[#E7E0D6] rounded-xl text-xs font-mono text-[#1F1A16] focus:border-[#DB9F35] outline-none"
+                    placeholder="555"
+                    className="w-full px-3 py-1.5 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Row 4: Exit Type & Emotion */}
+            {/* Row 4: Trade Success Rate & Emotions */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#786F66] uppercase tracking-wider mb-1.5">
-                  Exit Type
+                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                  TRADE SUCCESS RATE (Outcome)
                 </label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { id: 'TARGET', label: '🎯 TARGET' },
-                    { id: 'STOP_LOSS', label: '🛑 STOP LOSS' },
-                    { id: 'MANUAL_EXIT', label: '✋ MANUAL' },
-                    { id: 'BREAKEVEN', label: '🔄 BREAKEVEN' },
+                    { id: 'Exit Before Target', label: '✋ Exit Before Target' },
+                    { id: 'Target Hit', label: '🎯 Target Hit' },
+                    { id: 'Stop Loss Hit', label: '🛑 Stop Loss Hit' },
+                    { id: 'Breakeven', label: '🔄 Breakeven' },
                   ].map((ex) => (
                     <button
                       key={ex.id}
                       type="button"
-                      onClick={() => setExitType(ex.id as ExitType)}
-                      className={`py-1.5 px-2 rounded-xl text-xs font-medium border text-center transition-colors ${
-                        exitType === ex.id
-                          ? 'bg-[#E8F8EE] text-[#15803D] border-[#B7ECC8] font-bold'
-                          : 'bg-[#FAF7F2] text-[#786F66] border-[#E7E0D6] hover:text-[#1F1A16]'
+                      onClick={() => {
+                        setTradeSuccessRate(ex.id);
+                        if (ex.id === 'Target Hit') setExitType('TARGET');
+                        else if (ex.id === 'Stop Loss Hit') setExitType('STOP_LOSS');
+                        else if (ex.id === 'Breakeven') setExitType('BREAKEVEN');
+                        else setExitType('MANUAL_EXIT');
+                      }}
+                      className={`py-1.5 px-2 rounded-xl text-[11px] font-medium border text-center transition-colors ${
+                        tradeSuccessRate === ex.id
+                          ? 'bg-[#E8F8EE] dark:bg-[#1E3326] text-[#15803D] dark:text-[#86EFAC] border-[#B7ECC8] dark:border-[#2E4D3A] font-bold'
+                          : 'bg-[#FAF7F2] dark:bg-[#1A2230] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] hover:text-[#1F1A16]'
                       }`}
                     >
                       {ex.label}
@@ -550,11 +549,11 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#786F66] uppercase tracking-wider mb-1.5">
-                  Emotion at Entry
+                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                  Emotions
                 </label>
                 <div className="grid grid-cols-3 gap-1.5">
-                  {['CALM', 'FOCUSED', 'FOMO', 'REVENGE', 'GREED', 'HESITANT'].map((em) => (
+                  {['FOCUSED', 'CALM', 'FOMO', 'REVENGE', 'GREED', 'HESITANT', 'BOREDOM'].map((em) => (
                     <button
                       key={em}
                       type="button"
@@ -565,12 +564,12 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                           setViolationReason(em === 'FOMO' ? 'FOMO' : 'Revenge');
                         }
                       }}
-                      className={`py-1.5 px-1.5 rounded-xl text-[11px] font-semibold border text-center transition-colors ${
+                      className={`py-1.5 px-1.5 rounded-xl text-[10px] font-semibold border text-center transition-colors uppercase ${
                         emotion === em
                           ? em === 'CALM' || em === 'FOCUSED'
-                            ? 'bg-[#E8F8EE] text-[#15803D] border-[#B7ECC8]'
-                            : 'bg-[#FEECEB] text-[#B91C1C] border-[#FBC5C2]'
-                          : 'bg-[#FAF7F2] text-[#786F66] border-[#E7E0D6] hover:text-[#1F1A16]'
+                            ? 'bg-[#E0EFFE] dark:bg-[#1A3152] text-[#1D4ED8] dark:text-[#93C5FD] border-[#B9D9FE]'
+                            : 'bg-[#FEECEB] dark:bg-[#3D1D1D] text-[#B91C1C] dark:text-[#F87171] border-[#FBC5C2]'
+                          : 'bg-[#FAF7F2] dark:bg-[#1A2230] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] hover:text-[#1F1A16]'
                       }`}
                     >
                       {em}
@@ -580,128 +579,95 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               </div>
             </div>
 
-            {/* Row 5: Clean vs Violation */}
-            <div className={`p-4 rounded-xl border transition-all ${
-              execution === 'CLEAN'
-                ? 'bg-[#E8F8EE] border-[#B7ECC8]'
-                : 'bg-[#FEECEB] border-[#FBC5C2]'
-            }`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[#1F1A16] flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4 text-[#DB9F35]" />
-                  Execution Discipline Audit
-                </span>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExecution('CLEAN');
-                      setViolationReason('None');
-                    }}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
-                      execution === 'CLEAN'
-                        ? 'bg-[#16A34A] text-white border-[#16A34A]'
-                        : 'bg-white text-[#786F66] border-[#E7E0D6]'
-                    }`}
-                  >
-                    ✓ Clean Execution
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExecution('VIOLATION')}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
-                      execution === 'VIOLATION'
-                        ? 'bg-[#DC2626] text-white border-[#DC2626]'
-                        : 'bg-white text-[#786F66] border-[#E7E0D6]'
-                    }`}
-                  >
-                    ⚠ Rule Violation
-                  </button>
-                </div>
+            {/* Row 5: Exit Reason */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider">
+                  Exit Reason
+                </label>
+                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Why did you close or exit this trade?</span>
               </div>
-
-              {execution === 'VIOLATION' && (
-                <div className="mt-3 pt-3 border-t border-[#FBC5C2] space-y-2">
-                  <span className="text-xs text-[#DC2626] font-semibold block">What rule was broken?</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['FOMO', 'Moved SL', 'Revenge', 'No Setup', 'Over-risk', 'Chased Price', 'Impulsive Exit'].map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => setViolationReason(r as ViolationType)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                          violationReason === r
-                            ? 'bg-[#DC2626] text-white border-[#DC2626]'
-                            : 'bg-white text-[#DC2626] border-[#FBC5C2] hover:bg-[#FEECEB]'
-                        }`}
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <input
+                type="text"
+                value={exitReason}
+                onChange={(e) => setExitReason(e.target.value)}
+                placeholder="e.g. Strong Resistance was there and Candle closed weak, or Exit mindset, Should wait"
+                className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors placeholder:text-[#9E958C]"
+              />
             </div>
 
-            {/* Row 6: Setup & Context */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Row 6: Setup Type & Session */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-semibold text-[#786F66] uppercase mb-1">Setup Type</label>
-                <select
+                <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
+                  Setup Type
+                </label>
+                <input
+                  type="text"
+                  list="setup-presets"
                   value={setupType}
                   onChange={(e) => setSetupType(e.target.value)}
-                  className="w-full bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] focus:border-[#DB9F35] outline-none"
-                >
-                  <option value="MSS + FVG">MSS + FVG</option>
-                  <option value="Liquidity Sweep">Liquidity Sweep</option>
-                  <option value="Order Block Tap">Order Block Tap</option>
-                  <option value="Turtle Soup">Turtle Soup</option>
-                  <option value="Range Breakout">Range Breakout</option>
-                  <option value="Chased Move">Chased Move (Invalid)</option>
-                </select>
+                  placeholder="On Support, Important 1H Support and Pullback, MSS + FVG"
+                  className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
+                />
+                <datalist id="setup-presets">
+                  <option value="On Support" />
+                  <option value="Important 1H Support and Pullback" />
+                  <option value="MSS + FVG" />
+                  <option value="Liquidity Sweep" />
+                  <option value="Order Block Tap" />
+                  <option value="Turtle Soup" />
+                  <option value="Range Breakout" />
+                </datalist>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-[#786F66] uppercase mb-1">HTF Context</label>
-                <select
-                  value={htfContext}
-                  onChange={(e) => setHtfContext(e.target.value as any)}
-                  className="w-full bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] focus:border-[#DB9F35] outline-none"
-                >
-                  <option value="Bullish">Bullish</option>
-                  <option value="Bearish">Bearish</option>
-                  <option value="Neutral">Neutral</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-[#786F66] uppercase mb-1">Session</label>
+                <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
+                  Session
+                </label>
                 <select
                   value={session}
-                  onChange={(e) => setSession(e.target.value as any)}
-                  className="w-full bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] focus:border-[#DB9F35] outline-none"
+                  onChange={(e) => setSession(e.target.value)}
+                  className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none font-semibold"
                 >
-                  <option value="London/NY Overlap">London/NY Overlap</option>
+                  <option value="Tokyo">Tokyo (Asian)</option>
                   <option value="London">London</option>
                   <option value="New York">New York</option>
-                  <option value="Asian">Asian</option>
+                  <option value="London/NY Overlap">London/NY Overlap</option>
                 </select>
               </div>
             </div>
 
-            {/* Row 7: Manual Trade Notes */}
+            {/* Row 7: HTF Context */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider">
-                  Trade Notes (Manual Notes)
+                  HTF Context
                 </label>
-                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Entry reasoning, plan execution or observations</span>
+                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Higher Timeframe narrative</span>
+              </div>
+              <textarea
+                rows={2}
+                value={htfContext}
+                onChange={(e) => setHtfContext(e.target.value)}
+                placeholder="1. Bearish on 1H, 4H 2. Bullish on 15m, 5m"
+                className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors resize-y placeholder:text-[#9E958C]"
+              />
+            </div>
+
+            {/* Row 8: Entry Reason */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider">
+                  Entry Reason
+                </label>
+                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Why was the trigger pulled?</span>
               </div>
               <textarea
                 rows={2}
                 value={entryReason}
                 onChange={(e) => setEntryReason(e.target.value)}
-                placeholder="Write your trade notes manually here (e.g. Clean 15m MSS retest on London open, followed plan, TP hit cleanly)..."
+                placeholder="e.g. On Support and Pullback of HTF Support, or Entry on Liquidity Sweep"
                 className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors resize-y placeholder:text-[#9E958C]"
               />
             </div>
@@ -710,7 +676,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-                  Chart Screenshot (TradingView)
+                  Vantage P/L Images / Screenshot
                 </label>
                 <span className="text-[10px] text-[#9E958C]">Ctrl+V paste, drag &amp; drop, or browse</span>
               </div>
