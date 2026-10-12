@@ -5,6 +5,50 @@
 import { supabase } from '../supabase';
 import { db, type Trade } from '../../db/db';
 
+/** Extract custom HTF context embedded in notes (e.g. "[HTF: Bearish on 1H]") */
+function parseHtfFromNotes(notes?: string | null): { cleanNotes?: string; htfContext?: string } {
+  if (!notes) return {};
+  const match = notes.match(/\n?\[HTF:\s*(.*?)\]$/s);
+  if (match) {
+    const clean = notes.replace(/\n?\[HTF:\s*(.*?)\]$/s, '').trim();
+    return {
+      cleanNotes: clean.length > 0 ? clean : undefined,
+      htfContext: match[1].trim(),
+    };
+  }
+  return { cleanNotes: notes };
+}
+
+/** Embed custom HTF context into notes string to avoid Supabase check constraint while preserving full text */
+function formatNotesWithHtf(notes?: string | null, customHtf?: string | null, existingNotes?: string | null): string | null {
+  let htfToSave = customHtf;
+  if (!htfToSave && existingNotes) {
+    const existingParsed = parseHtfFromNotes(existingNotes);
+    if (existingParsed.htfContext) htfToSave = existingParsed.htfContext;
+  }
+  const baseNotes = notes ? notes.replace(/\n?\[HTF:\s*(.*?)\]$/s, '').trim() : '';
+  if (htfToSave && !['Bullish', 'Bearish', 'Neutral'].includes(htfToSave.trim())) {
+    const htfTag = `[HTF: ${htfToSave.trim()}]`;
+    return baseNotes ? `${baseNotes}\n${htfTag}` : htfTag;
+  }
+  return baseNotes || null;
+}
+
+/** Map any custom HTF text into valid Supabase check enum ('Bullish' | 'Bearish' | 'Neutral') */
+function mapHtfContextForDb(htf?: string | null): 'Bullish' | 'Bearish' | 'Neutral' | null {
+  if (!htf) return null;
+  const trimmed = htf.trim();
+  if (trimmed === 'Bullish' || trimmed === 'Bearish' || trimmed === 'Neutral') {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('bearish') && !lower.includes('bullish')) return 'Bearish';
+  if (lower.includes('bullish') && !lower.includes('bearish')) return 'Bullish';
+  if (lower.includes('bearish')) return 'Bearish';
+  if (lower.includes('bullish')) return 'Bullish';
+  return 'Neutral';
+}
+
 // Map Supabase DB row → app-level Trade object
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToTrade(row: any): Trade {
@@ -19,6 +63,9 @@ function rowToTrade(row: any): Trade {
 
   const rMult = row.r_multiple != null ? Number(row.r_multiple) : 0;
   const riskReward = rMult !== 0 ? `1:${Math.abs(rMult).toFixed(rMult % 1 === 0 ? 0 : 1)}` : '1:1';
+
+  const { cleanNotes, htfContext: parsedHtf } = parseHtfFromNotes(row.notes);
+  const htfContext = parsedHtf || (row.htf_context as string | undefined) || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m';
 
   return {
     id: row.id,
@@ -41,13 +88,13 @@ function rowToTrade(row: any): Trade {
     execution: (row.execution || 'CLEAN') as 'CLEAN' | 'VIOLATION',
     violationReason: row.violation_reason as Trade['violationReason'],
     setupType: row.setup_type as string | undefined,
-    htfContext: row.htf_context as string | undefined,
+    htfContext,
     entryReason: row.entry_reason as string | undefined,
-    exitReason: (row.notes as string) || undefined,
+    exitReason: cleanNotes,
     tradeSuccessRate,
     session,
     chartScreenshot: row.chart_url as string | undefined,
-    notes: row.notes as string | undefined,
+    notes: cleanNotes,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     _uuid: row.id as string,
@@ -70,7 +117,9 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
     else if (trade.tradeSuccessRate === 'Exit Before Target') exitType = 'MANUAL_EXIT';
   }
 
-  const notes = trade.exitReason || trade.notes || null;
+  const rawNotes = trade.exitReason || trade.notes || null;
+  const notesWithHtf = formatNotesWithHtf(rawNotes, trade.htfContext);
+  const dbHtf = mapHtfContextForDb(trade.htfContext);
 
   return {
     user_id: userId,
@@ -92,10 +141,10 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
     execution: trade.execution || 'CLEAN',
     violation_reason: trade.violationReason ?? null,
     setup_type: trade.setupType ?? null,
-    htf_context: trade.htfContext ?? null,
+    htf_context: dbHtf,
     entry_reason: trade.entryReason ?? null,
     session: dbSession,
-    notes,
+    notes: notesWithHtf,
     chart_url: trade.chartScreenshot && trade.chartScreenshot.trim() ? trade.chartScreenshot : null,
     updated_at: new Date().toISOString(),
   };
@@ -124,12 +173,24 @@ export const tradesApi = {
       if (!error && Array.isArray(data)) {
         const mapped = data.map(rowToTrade);
         try {
+          // Preserve any unsynced local trades so they are never lost on cloud refresh
+          const existingLocal = await db.trades.toArray().catch(() => []);
+          const unsynced = existingLocal.filter(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (local) => !(local as any)._uuid && !mapped.some((m) => m.tradeNumber === local.tradeNumber && m.date === local.date)
+          );
+
           await db.trades.clear();
           if (mapped.length > 0) {
             await db.trades.bulkPut(mapped);
           }
-        } catch (_) {}
-        return mapped;
+          if (unsynced.length > 0) {
+            await db.trades.bulkAdd(unsynced);
+          }
+          return [...mapped, ...unsynced];
+        } catch (_) {
+          return mapped;
+        }
       }
     } catch (cloudErr) {
       console.warn('[tradesApi] Cloud getAll failed, falling back to local DB:', cloudErr);
@@ -141,28 +202,31 @@ export const tradesApi = {
 
   /** Create a new trade, returns the created Trade with id */
   async create(trade: Omit<Trade, 'id'>, userId: string): Promise<Trade> {
-    // 1. Ensure user profile exists to satisfy foreign key constraint
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
+    // 1. Ensure user profile exists to satisfy foreign key constraint if valid user UUID
+    if (userId && userId !== '00000000-0000-0000-0000-000000000000') {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle();
 
-      if (!profile) {
-        await supabase.from('profiles').upsert({
-          id: userId,
-          name: 'TradeFlow Trader',
-          base_currency: 'USD',
-          initial_capital: 10000,
-          current_balance: 10000,
-        } as never);
+        if (!profile) {
+          await supabase.from('profiles').upsert({
+            id: userId,
+            name: 'TradeFlow Trader',
+            base_currency: 'USD',
+            initial_capital: 10000,
+            current_balance: 10000,
+          } as never);
+        }
+      } catch (profErr) {
+        console.warn('[tradesApi] Profile check warning:', profErr);
       }
-    } catch (profErr) {
-      console.warn('[tradesApi] Profile check warning:', profErr);
     }
 
     const row = tradeToRow(trade, userId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let createdRow: any = null;
 
     try {
@@ -183,7 +247,7 @@ export const tradesApi = {
       } else {
         createdRow = row;
       }
-    } catch (cloudErr: any) {
+    } catch (cloudErr: unknown) {
       console.warn('[tradesApi] Supabase cloud insert failed, saving locally into IndexedDB fallback:', cloudErr);
       const localId = await db.trades.add({ ...trade } as Trade);
       return { ...trade, id: localId } as Trade;
@@ -222,13 +286,20 @@ export const tradesApi = {
     if (updates.execution !== undefined) partial.execution = updates.execution;
     if (updates.violationReason !== undefined) partial.violation_reason = updates.violationReason;
     if (updates.setupType !== undefined) partial.setup_type = updates.setupType;
-    if (updates.htfContext !== undefined) partial.htf_context = updates.htfContext;
+    if (updates.htfContext !== undefined) {
+      partial.htf_context = mapHtfContextForDb(updates.htfContext);
+    }
     if (updates.entryReason !== undefined) partial.entry_reason = updates.entryReason;
     if (updates.session !== undefined) {
-      partial.session = updates.session === 'Tokyo' ? 'Asian' : updates.session;
+      let s = updates.session;
+      if (s === 'Tokyo') s = 'Asian';
+      else if (!['London', 'New York', 'Asian', 'London/NY Overlap'].includes(s || '')) s = 'Asian';
+      partial.session = s;
     }
-    if (updates.exitReason !== undefined) partial.notes = updates.exitReason;
-    else if (updates.notes !== undefined) partial.notes = updates.notes;
+    if (updates.exitReason !== undefined || updates.notes !== undefined || updates.htfContext !== undefined) {
+      const baseN = updates.exitReason ?? updates.notes;
+      partial.notes = formatNotesWithHtf(baseN, updates.htfContext);
+    }
     if (updates.chartScreenshot !== undefined) {
       partial.chart_url = updates.chartScreenshot && updates.chartScreenshot.trim() ? updates.chartScreenshot : null;
     }
@@ -242,6 +313,7 @@ export const tradesApi = {
 
     try {
       const all = await db.trades.toArray();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const match = all.find((t: any) => t._uuid === uuid || String(t.id) === uuid);
       if (match?.id) {
         await db.trades.update(match.id, updates);
@@ -259,6 +331,7 @@ export const tradesApi = {
 
     try {
       const all = await db.trades.toArray();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const match = all.find((t: any) => t._uuid === uuid || String(t.id) === uuid);
       if (match?.id) {
         await db.trades.delete(match.id);

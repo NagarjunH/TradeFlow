@@ -67,8 +67,6 @@ function AppInner() {
   // 1. Instant local read (<50ms)
   // 2. Silent cloud fetch in background
   const loadAllData = useCallback(async () => {
-    if (!user) return;
-
     // Step 1: Fast local read
     try {
       const [localTrades, localDays, localSettings] = await Promise.all([
@@ -83,6 +81,8 @@ function AppInner() {
     } catch (localErr) {
       console.warn('[TradeFlow] Local cache load warning:', localErr);
     }
+
+    if (!user) return;
 
     // Step 2: Background cloud sync
     setIsSyncing(true);

@@ -206,9 +206,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      if (!userId) {
-        throw new Error('Authentication required. Please refresh or sign in again.');
-      }
+      const effectiveUserId = userId || '00000000-0000-0000-0000-000000000000';
 
       if (isLockedOut && isHardLock) {
         throw new Error('Daily Loss Limit is locked (-2R). Hard constraint active. Trade entry blocked.');
@@ -274,30 +272,34 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         const uuid = (editTrade as Trade & { _uuid?: string })._uuid!;
         await tradesApi.update(uuid, tradeData);
         onTradesChange?.((prev) => prev.map((t) => ((t as Trade & { _uuid?: string })._uuid === uuid || t.id === editTrade.id) ? { ...t, ...tradeData } : t));
-        await auditApi.add(
-          userId,
-          'UPDATE',
-          `Edited trade #${editTrade.tradeNumber}. New PnL: ${numPnl}, Quality: ${tradeQuality}`,
-          uuid
-        );
+        if (userId) {
+          await auditApi.add(
+            userId,
+            'UPDATE',
+            `Edited trade #${editTrade.tradeNumber}. New PnL: ${numPnl}, Quality: ${tradeQuality}`,
+            uuid
+          );
+        }
       } else {
-        const created = await tradesApi.create(tradeData, userId);
+        const created = await tradesApi.create(tradeData, effectiveUserId);
         const createdUuid = (created as Trade & { _uuid?: string })._uuid;
         onTradesChange?.((prev) => [...prev.filter((t) => t.id !== created.id), created]);
-        if (isLockedOut && overrideReason) {
-          await auditApi.add(
-            userId,
-            'OVERRIDE_LOCK',
-            `Logged trade beyond daily loss limit. Reason: "${overrideReason}"`,
-            createdUuid
-          );
-        } else {
-          await auditApi.add(
-            userId,
-            'CREATE',
-            `Created trade #${nextTradeNumber} (${order} ${pair} ${rMultiple}R)`,
-            createdUuid
-          );
+        if (userId) {
+          if (isLockedOut && overrideReason) {
+            await auditApi.add(
+              userId,
+              'OVERRIDE_LOCK',
+              `Logged trade beyond daily loss limit. Reason: "${overrideReason}"`,
+              createdUuid
+            );
+          } else {
+            await auditApi.add(
+              userId,
+              'CREATE',
+              `Created trade #${nextTradeNumber} (${order} ${pair} ${rMultiple}R)`,
+              createdUuid
+            );
+          }
         }
       }
 
