@@ -245,9 +245,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           {/* + Add Trade Button */}
           <button
             onClick={onOpenQuickTrade}
-            className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all hover:scale-102 cursor-pointer"
+            className="px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-xs sm:text-[13px] font-bold flex items-center gap-1.5 shadow-sm hover:shadow-md transition-all hover:scale-102 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <Plus className="w-4 h-4 stroke-[2.5]" />
             <span className="hidden xs:inline">Add Trade</span>
           </button>
         </div>

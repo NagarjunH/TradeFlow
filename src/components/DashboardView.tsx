@@ -823,23 +823,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 2. Top 6 KPI Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-3.5">
         
         {/* Card 1: CURRENT EQUITY */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
               CURRENT EQUITY
             </span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-              <Wallet className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+              <Wallet className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate">
+          <div className="mt-2.5">
+            <div className="text-2xl sm:text-[26px] font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight">
               {currSymbol}{perf.currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className={`text-[10px] font-bold flex items-center gap-1 mt-0.5 ${
+            <div className={`text-xs font-bold font-mono flex items-center gap-1 mt-1 ${
               perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
             }`}>
               <span>{perf.netPnl >= 0 ? '↑' : '↓'}</span>
@@ -851,22 +851,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Card 2: NET P&L */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
               NET P&amp;L
             </span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-              <BarChart2 className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+              <BarChart2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className={`text-xl sm:text-2xl font-black tracking-tight truncate ${
+          <div className="mt-2.5">
+            <div className={`text-2xl sm:text-[26px] font-black font-mono tracking-tight truncate leading-tight ${
               perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
             }`}>
               {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)}
             </div>
-            <div className={`text-[10px] font-bold mt-0.5 ${
+            <div className={`text-xs font-bold font-mono mt-1 ${
               netR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
             }`}>
               {netR >= 0 ? '+' : ''}{netR.toFixed(1)}R
@@ -875,26 +875,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Card 3: WIN RATE */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
               WIN RATE
             </span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-              <Percent className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+              <Percent className="w-4 h-4" />
             </div>
           </div>
-          <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center justify-between mt-2.5">
             <div>
-              <div className="text-xl sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
+              <div className="text-2xl sm:text-[26px] font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
                 {trades.length > 0 ? Math.round(perf.winRate) : 0}%
               </div>
-              <div className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-1">
+              <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] font-medium mt-1.5">
                 {perf.winningTrades}W • {perf.losingTrades}L • {perf.breakEvenTrades}BE
               </div>
             </div>
-            <div className="relative w-8 h-8 shrink-0">
-              <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+            <div className="relative w-9 h-9 shrink-0">
+              <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
                 <path className="text-[#E7E0D6] dark:text-[#242D3D]" stroke="currentColor" strokeWidth="4" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                 <path className="text-[#10B981]" stroke="currentColor" strokeWidth="4" strokeDasharray={`${trades.length > 0 ? perf.winRate : 0}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
               </svg>
@@ -903,62 +903,62 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Card 4: EXPECTANCY */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
               EXPECTANCY
             </span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-              <TrendingUp className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+              <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className={`text-xl sm:text-2xl font-black tracking-tight ${
+          <div className="mt-2.5">
+            <div className={`text-2xl sm:text-[26px] font-black font-mono tracking-tight leading-tight ${
               trades.length === 0 ? 'text-[#786F66] dark:text-[#94A3B8]' : perf.expectancyUsd >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
             }`}>
               {trades.length > 0 ? `${perf.expectancyUsd >= 0 ? '+' : '-'}${currSymbol}${Math.abs(perf.expectancyUsd).toFixed(2)}` : `${currSymbol}0.00`}
             </div>
-            <div className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-0.5 truncate">
-              PF {trades.length > 0 ? (perf.profitFactor > 99 ? '∞' : perf.profitFactor.toFixed(2)) : '0.00'} | {trades.length > 0 ? `${perf.expectancy >= 0 ? '+' : ''}${perf.expectancy.toFixed(2)}R` : '0.00R'} / trade
+            <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] font-medium mt-1 truncate">
+              PF {trades.length > 0 ? (perf.profitFactor > 99 ? '∞' : perf.profitFactor.toFixed(2)) : '0.00'} | {trades.length > 0 ? `${perf.expectancy >= 0 ? '+' : ''}${perf.expectancy.toFixed(2)}R` : '0.00R'}
             </div>
           </div>
         </div>
 
         {/* Card 5: MAX DRAWDOWN */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DC2626]/40 dark:hover:border-[#DC2626]/30 transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
               MAX DRAWDOWN
             </span>
-            <div className="w-7 h-7 rounded-lg bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center">
-              <TrendingDown className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center shadow-2xs">
+              <TrendingDown className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-2xl font-black text-[#DC2626] tracking-tight">
+          <div className="mt-2.5">
+            <div className="text-2xl sm:text-[26px] font-black font-mono text-[#DC2626] tracking-tight leading-tight">
               -{currSymbol}{perf.maxDrawdownUsd.toFixed(2)}
             </div>
-            <div className="text-[10px] font-bold text-[#DC2626] mt-0.5">
+            <div className="text-xs font-bold font-mono text-[#DC2626] mt-1">
               {maxDrawdownR > 0 ? `-${maxDrawdownR.toFixed(1)}R` : '0.0R'} (-{perf.maxDrawdownPercent.toFixed(1)}%)
             </div>
           </div>
         </div>
 
         {/* Card 6: DISCIPLINE SCORE */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#10B981]/40 dark:hover:border-[#10B981]/30 transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
               DISCIPLINE SCORE
             </span>
-            <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-              <ShieldCheck className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+              <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
+          <div className="mt-2.5">
+            <div className="text-2xl sm:text-[26px] font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
               {trades.length > 0 ? discipline.disciplineScore : 100}%
             </div>
-            <div className="text-[10px] font-bold text-[#10B981] mt-1">
+            <div className="text-xs font-bold font-mono text-[#10B981] mt-1">
               {trades.length > 0 ? `${discipline.cleanTradesCount}/${trades.length}` : '0/0'} Clean
             </div>
           </div>
@@ -990,37 +990,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {/* 4 Top Stat Badges */}
               <div className="flex items-center flex-wrap gap-4 sm:gap-6">
                 <div>
-                  <div className="text-base sm:text-lg font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
+                  <div className="text-lg sm:text-xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
                     {currSymbol}{equityCurveStats.currentEquity.toFixed(2)}
                   </div>
-                  <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+                  <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
                     Current Equity
                   </div>
                 </div>
 
                 <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
-                  <div className={`text-base sm:text-lg font-black font-mono leading-tight ${equityCurveStats.netReturn >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                  <div className={`text-lg sm:text-xl font-black font-mono leading-tight ${equityCurveStats.netReturn >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
                     {equityCurveStats.netReturn >= 0 ? '+' : '-'}{currSymbol}{Math.abs(equityCurveStats.netReturn).toFixed(2)}
                   </div>
-                  <div className={`text-[10px] font-bold ${equityCurveStats.netReturn >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                  <div className={`text-[11px] font-bold font-mono mt-0.5 ${equityCurveStats.netReturn >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
                     Net Return ({equityCurveStats.netReturnPct >= 0 ? '+' : ''}{equityCurveStats.netReturnPct.toFixed(1)}%)
                   </div>
                 </div>
 
                 <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
-                  <div className={`text-base sm:text-lg font-black font-mono leading-tight ${equityCurveStats.monthReturnPct >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                  <div className={`text-lg sm:text-xl font-black font-mono leading-tight ${equityCurveStats.monthReturnPct >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
                     {equityCurveStats.monthReturnPct >= 0 ? '+' : ''}{equityCurveStats.monthReturnPct.toFixed(2)}%
                   </div>
-                  <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+                  <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
                     This Month
                   </div>
                 </div>
 
                 <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
-                  <div className="text-base sm:text-lg font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
+                  <div className="text-lg sm:text-xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
                     {trades.length}
                   </div>
-                  <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+                  <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
                     Total Trades
                   </div>
                 </div>
@@ -1356,11 +1356,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 preserveAspectRatio="xMidYMid meet"
               >
                 {/* Y-axis labels */}
-                <text x="2" y="12" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">{currSymbol}{monthlyBarChartData.roundedMax}</text>
-                <text x="2" y="36" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">{currSymbol}{Math.round(monthlyBarChartData.roundedMax / 2)}</text>
-                <text x="2" y="59" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">{currSymbol}0</text>
-                <text x="2" y="82" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">-{currSymbol}{Math.round(monthlyBarChartData.roundedMax / 2)}</text>
-                <text x="2" y="105" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">-{currSymbol}{monthlyBarChartData.roundedMax}</text>
+                <text x="2" y="12" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] font-mono" fontSize="9" fontWeight="600">{currSymbol}{monthlyBarChartData.roundedMax}</text>
+                <text x="2" y="36" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] font-mono" fontSize="9" fontWeight="600">{currSymbol}{Math.round(monthlyBarChartData.roundedMax / 2)}</text>
+                <text x="2" y="59" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] font-mono" fontSize="9" fontWeight="600">{currSymbol}0</text>
+                <text x="2" y="82" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] font-mono" fontSize="9" fontWeight="600">-{currSymbol}{Math.round(monthlyBarChartData.roundedMax / 2)}</text>
+                <text x="2" y="105" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] font-mono" fontSize="9" fontWeight="600">-{currSymbol}{monthlyBarChartData.roundedMax}</text>
 
                 {/* Gridlines */}
                 {[8, 32, 56, 80, 104].map((y, i) => (
@@ -1414,7 +1414,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   const gap = chartW / totalDays;
                   const cx = 30 + (day - 1) * gap + gap / 2;
                   return (
-                    <text key={day} x={cx} y="110" textAnchor="middle" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">
+                    <text key={day} x={cx} y="110" textAnchor="middle" className="fill-[#9E958C] dark:fill-[#64748B] font-mono" fontSize="9" fontWeight="600">
                       {day}
                     </text>
                   );
@@ -1456,37 +1456,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* 6 Mini Stats in 2 Columns x 3 Rows */}
-            <div className="grid grid-cols-2 gap-2.5 pt-2">
+            <div className="grid grid-cols-2 gap-2.5 pt-2.5">
               {/* Card 1: Total Trades */}
-              <div className="p-2.5 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] flex items-center justify-between">
+              <div className="p-3 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] hover:border-[#DB9F35]/40 transition-all flex items-center justify-between shadow-2xs">
                 <div>
-                  <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Total Trades</span>
-                  <span className="text-sm font-black font-mono mt-1 text-[#1F1A16] dark:text-[#F0F4F8] block">
+                  <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] block leading-none">Total Trades</span>
+                  <span className="text-base font-black font-mono mt-1.5 text-[#1F1A16] dark:text-[#F0F4F8] block">
                     {trades.length}
                   </span>
                 </div>
                 <div className="flex items-end gap-0.5 h-4 text-[#10B981]">
-                  <span className="w-1 h-2 bg-[#10B981] rounded-xs" />
-                  <span className="w-1 h-3.5 bg-[#10B981] rounded-xs" />
-                  <span className="w-1 h-2.5 bg-[#10B981] rounded-xs" />
+                  <span className="w-1.5 h-2 bg-[#10B981] rounded-xs" />
+                  <span className="w-1.5 h-3.5 bg-[#10B981] rounded-xs" />
+                  <span className="w-1.5 h-2.5 bg-[#10B981] rounded-xs" />
                 </div>
               </div>
 
               {/* Card 2: Win Rate */}
-              <div className="p-2.5 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] flex items-center justify-between">
+              <div className="p-3 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] hover:border-[#DB9F35]/40 transition-all flex items-center justify-between shadow-2xs">
                 <div>
-                  <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Win Rate</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-sm font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
+                  <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] block leading-none">Win Rate</span>
+                  <div className="flex items-baseline gap-1 mt-1.5">
+                    <span className="text-base font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
                       {Math.round(perf.winRate)}%
                     </span>
-                    <span className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8]">
-                      {perf.winningTrades}W / {perf.losingTrades}L
+                    <span className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8]">
+                      {perf.winningTrades}W/{perf.losingTrades}L
                     </span>
                   </div>
                 </div>
-                <div className="relative w-6 h-6 shrink-0">
-                  <svg className="w-6 h-6 -rotate-90" viewBox="0 0 36 36">
+                <div className="relative w-7 h-7 shrink-0">
+                  <svg className="w-7 h-7 -rotate-90" viewBox="0 0 36 36">
                     <path className="text-[#E7E0D6] dark:text-[#242D3D]" stroke="currentColor" strokeWidth="3.5" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                     <path className="text-[#10B981]" stroke="currentColor" strokeWidth="3.5" strokeDasharray={`${trades.length > 0 ? perf.winRate : 0}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                   </svg>
@@ -1494,57 +1494,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               {/* Card 3: Avg R / Trade */}
-              <div className="p-2.5 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] flex items-center justify-between">
+              <div className="p-3 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] hover:border-[#DB9F35]/40 transition-all flex items-center justify-between shadow-2xs">
                 <div>
-                  <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Avg R / Trade</span>
-                  <span className={`text-sm font-black font-mono mt-1 block ${
+                  <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] block leading-none">Avg R / Trade</span>
+                  <span className={`text-base font-black font-mono mt-1.5 block ${
                     perf.averageR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
                   }`}>
                     {perf.averageR >= 0 ? '+' : ''}{perf.averageR.toFixed(2)}R
                   </span>
                 </div>
                 <div className="flex items-end gap-0.5 h-4">
-                  <span className="w-1 h-1.5 bg-[#10B981] rounded-xs" />
-                  <span className="w-1 h-3 bg-[#10B981] rounded-xs" />
-                  <span className="w-1 h-4 bg-[#10B981] rounded-xs" />
+                  <span className="w-1.5 h-1.5 bg-[#10B981] rounded-xs" />
+                  <span className="w-1.5 h-3 bg-[#10B981] rounded-xs" />
+                  <span className="w-1.5 h-4 bg-[#10B981] rounded-xs" />
                 </div>
               </div>
 
               {/* Card 4: Avg Trade Time */}
-              <div className="p-2.5 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] flex items-center justify-between">
+              <div className="p-3 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] hover:border-[#DB9F35]/40 transition-all flex items-center justify-between shadow-2xs">
                 <div>
-                  <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Avg Trade Time</span>
-                  <span className="text-sm font-black font-mono mt-1 text-[#1F1A16] dark:text-[#F0F4F8] block">
+                  <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] block leading-none">Avg Trade Time</span>
+                  <span className="text-base font-black font-mono mt-1.5 text-[#1F1A16] dark:text-[#F0F4F8] block">
                     1h 42m
                   </span>
                 </div>
-                <div className="w-6 h-6 rounded-full bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-                  <Activity className="w-3.5 h-3.5" />
+                <div className="w-7 h-7 rounded-full bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
+                  <Activity className="w-4 h-4" />
                 </div>
               </div>
 
               {/* Card 5: Biggest Win */}
-              <div className="p-2.5 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] flex items-center justify-between">
+              <div className="p-3 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] hover:border-[#10B981]/40 transition-all flex items-center justify-between shadow-2xs">
                 <div>
-                  <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Biggest Win</span>
-                  <span className="text-xs font-black font-mono mt-1 text-[#10B981] block">
-                    +{currSymbol}{quickStats.biggestWinPnl.toFixed(2)} (+{quickStats.biggestWin.toFixed(1)}R)
+                  <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] block leading-none">Biggest Win</span>
+                  <span className="text-sm font-black font-mono mt-1.5 text-[#10B981] block">
+                    +{currSymbol}{quickStats.biggestWinPnl.toFixed(2)} <span className="text-[11px] font-semibold">(+{quickStats.biggestWin.toFixed(1)}R)</span>
                   </span>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-[#E8F8EE] dark:bg-[#132A1C] text-[#10B981] flex items-center justify-center text-xs font-bold">
+                <div className="w-6 h-6 rounded-full bg-[#E8F8EE] dark:bg-[#132A1C] text-[#10B981] flex items-center justify-center text-xs font-bold shadow-2xs">
                   ↗
                 </div>
               </div>
 
               {/* Card 6: Biggest Loss */}
-              <div className="p-2.5 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] flex items-center justify-between">
+              <div className="p-3 rounded-xl bg-[#F2ECE0]/70 dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244] hover:border-[#DC2626]/40 transition-all flex items-center justify-between shadow-2xs">
                 <div>
-                  <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Biggest Loss</span>
-                  <span className="text-xs font-black font-mono mt-1 text-[#DC2626] block">
-                    -{currSymbol}{Math.abs(quickStats.biggestLossPnl).toFixed(2)} ({quickStats.biggestLoss <= 0 ? quickStats.biggestLoss.toFixed(1) : -quickStats.biggestLoss.toFixed(1)}R)
+                  <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] block leading-none">Biggest Loss</span>
+                  <span className="text-sm font-black font-mono mt-1.5 text-[#DC2626] block">
+                    -{currSymbol}{Math.abs(quickStats.biggestLossPnl).toFixed(2)} <span className="text-[11px] font-semibold">({quickStats.biggestLoss <= 0 ? quickStats.biggestLoss.toFixed(1) : -quickStats.biggestLoss.toFixed(1)}R)</span>
                   </span>
                 </div>
-                <div className="w-5 h-5 rounded-full bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center text-xs font-bold">
+                <div className="w-6 h-6 rounded-full bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center text-xs font-bold shadow-2xs">
                   ↘
                 </div>
               </div>

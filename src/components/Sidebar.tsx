@@ -88,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`relative w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs sm:text-[13px] font-semibold transition-all cursor-pointer text-left overflow-hidden ${
+                className={`relative w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] sm:text-sm font-semibold transition-all cursor-pointer text-left overflow-hidden ${
                   isActive
                     ? isChallenge
                       ? 'bg-[#FCEFD8] dark:bg-[#342416] text-[#6E3C12] dark:text-[#FBBF24] font-bold shadow-2xs'
@@ -99,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {/* Left orange accent bar indicator */}
                 {isActive && (
                   <span
-                    className={`absolute left-0 top-1 bottom-1 w-1 rounded-r-md ${
+                    className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-md ${
                       isChallenge ? 'bg-[#E08A2B]' : 'bg-[#10B981]'
                     }`}
                   />
