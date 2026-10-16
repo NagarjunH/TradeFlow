@@ -647,12 +647,12 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
                     {item.dayTrades.length > 0 && (
                       <span
                         className={`text-[8px] font-mono font-bold px-1 rounded ${
-                          item.netR >= 0
+                          item.netPnl >= 0
                             ? 'text-[#10B981] bg-[#10B981]/10'
                             : 'text-[#EF4444] bg-[#EF4444]/10'
                         }`}
                       >
-                        {item.netR >= 0 ? '+' : ''}{item.netR.toFixed(1)}R
+                        {item.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(item.netPnl).toFixed(2)}
                       </span>
                     )}
 
@@ -734,11 +734,11 @@ export const Challenge21View: React.FC<Challenge21ViewProps> = ({
                             </span>
                           </div>
                           <div className="flex items-center gap-2 font-mono">
-                            <span className={t.rMultiple >= 0 ? 'text-[#10B981] font-bold' : 'text-[#EF4444] font-bold'}>
-                              {t.rMultiple >= 0 ? '+' : ''}{t.rMultiple}R
+                            <span className={t.pnl >= 0 ? 'text-[#10B981] font-bold' : 'text-[#EF4444] font-bold'}>
+                              {t.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(t.pnl).toFixed(2)}
                             </span>
                             <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
-                              ({currSymbol}{t.pnl.toFixed(2)})
+                              ({t.rMultiple >= 0 ? '+' : ''}{t.rMultiple}R)
                             </span>
                           </div>
                         </div>

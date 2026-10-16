@@ -114,7 +114,9 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
   // Dynamic trades calculation for active date
   const todayTrades = trades.filter((t) => t.date === activeDate);
   const todayTradesCount = todayTrades.length;
+  const todayPnl = todayTrades.reduce((acc, t) => acc + (t.pnl || 0), 0);
   const todayPnlR = todayTrades.reduce((acc, t) => acc + (t.rMultiple || 0), 0);
+  const currSymbol = settings.currency === 'USD' ? '$' : '₹';
 
   const formatDateDisplay = (isoDate: string) => {
     try {
@@ -638,8 +640,8 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
 
               <div className="flex items-center justify-between py-1 border-b border-[#E7E0D6]/60">
                 <span className="text-[#5A5043] font-medium">Today's P&L</span>
-                <span className="font-bold text-[#15803D]">
-                  {todayPnlR >= 0 ? `+${todayPnlR.toFixed(1)}R` : `${todayPnlR.toFixed(1)}R`}
+                <span className={`font-bold ${todayPnl >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>
+                  {todayPnl >= 0 ? `+${currSymbol}${todayPnl.toFixed(2)}` : `-${currSymbol}${Math.abs(todayPnl).toFixed(2)}`}
                 </span>
               </div>
 
@@ -712,11 +714,11 @@ export const TradingRulesView: React.FC<TradingRulesViewProps> = ({
               </div>
 
               <div>
-                <div className="text-base font-black text-[#15803D] leading-none">
-                  +{todayPnlR.toFixed(1)}R
+                <div className={`text-base font-black leading-none ${todayPnl >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>
+                  {todayPnl >= 0 ? `+${currSymbol}${todayPnl.toFixed(2)}` : `-${currSymbol}${Math.abs(todayPnl).toFixed(2)}`}
                 </div>
                 <div className="text-[10px] text-[#786F66] mt-1 font-medium">
-                  P&L
+                  P&L {todayPnlR !== 0 && `(${todayPnlR >= 0 ? '+' : ''}${todayPnlR.toFixed(1)}R)`}
                 </div>
               </div>
 

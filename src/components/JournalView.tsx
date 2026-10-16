@@ -77,7 +77,7 @@ interface JournalViewProps {
 
 export const JournalView: React.FC<JournalViewProps> = ({
   trades,
-  settings: _settings,
+  settings,
   onEditTrade,
   onDeleteTrade,
   onUpdateTrade,
@@ -87,6 +87,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
   onClearDateFilter,
   onTabChange,
 }) => {
+  const currSymbol = settings?.currency === 'USD' ? '$' : '₹';
+
   // Filter States
   const [filterDateRange, setFilterDateRange] = useState<string>('ALL');
   const [filterSession, setFilterSession] = useState<string>('ALL');
@@ -349,11 +351,11 @@ export const JournalView: React.FC<JournalViewProps> = ({
           </div>
           <div className="flex items-baseline justify-between mt-2">
             <div>
-              <div className={`text-2xl font-black leading-none ${perf.netR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
-                {perf.netR >= 0 ? '+' : ''}{perf.netR.toFixed(1)}R
+              <div className={`text-2xl font-black leading-none ${perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)}
               </div>
-              <div className={`text-[10px] font-bold mt-1 ${perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
-                {perf.netPnl >= 0 ? '+' : ''}${perf.netPnl.toFixed(2)}
+              <div className={`text-[10px] font-bold mt-1 ${perf.netR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                {perf.netR >= 0 ? '+' : ''}{perf.netR.toFixed(1)}R
               </div>
             </div>
           </div>

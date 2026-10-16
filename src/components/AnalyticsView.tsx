@@ -27,6 +27,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const perf = calculatePerformance(trades, settings);
   const discipline = calculateDiscipline(trades);
   const netR = trades.reduce((acc, t) => acc + (t.rMultiple || 0), 0);
+  const currSymbol = settings.currency === 'USD' ? '$' : '₹';
 
   // Helper to group by any trade key and calculate stats
   const calculateGroupStats = (key: keyof Trade) => {
@@ -61,9 +62,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   const fomoTrades = trades.filter((t) => t.emotion === 'FOMO' || t.violationReason === 'FOMO');
   const fomoR = fomoTrades.reduce((acc, t) => acc + (t.rMultiple || 0), 0);
+  const fomoPnl = fomoTrades.reduce((acc, t) => acc + (t.pnl || 0), 0);
 
   const cleanTrades = trades.filter((t) => t.execution === 'CLEAN');
   const cleanR = cleanTrades.reduce((acc, t) => acc + (t.rMultiple || 0), 0);
+  const cleanPnl = cleanTrades.reduce((acc, t) => acc + (t.pnl || 0), 0);
 
   const maxSetupR = Math.max(...setupStats.map((s) => Math.abs(s.totalR)), 1);
   const maxEmotionR = Math.max(...emotionStats.map((s) => Math.abs(s.totalR)), 1);
@@ -106,16 +109,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         <div className="bg-[#FAF6EE] border border-[#E7E0D6] rounded-2xl p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-[#786F66] uppercase">Net P&amp;L</span>
-            <div className="w-6 h-6 rounded-lg bg-[#E8F8EE] text-[#15803D] flex items-center justify-center">
-              <TrendingUp className="w-3.5 h-3.5" />
+            <div className={`w-6 h-6 rounded-lg ${perf.netPnl >= 0 ? 'bg-[#E8F8EE] text-[#15803D]' : 'bg-[#FEECEB] text-[#DC2626]'} flex items-center justify-center`}>
+              {perf.netPnl >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
             </div>
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-black font-mono text-[#15803D]">
-              {netR >= 0 ? `+${netR.toFixed(1)}R` : `${netR.toFixed(1)}R`}
+            <span className={`text-2xl font-black font-mono ${perf.netPnl >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>
+              {perf.netPnl >= 0 ? `+${currSymbol}${perf.netPnl.toFixed(2)}` : `-${currSymbol}${Math.abs(perf.netPnl).toFixed(2)}`}
             </span>
-            <span className="block text-[11px] font-bold text-[#16A34A] mt-0.5">
-              +${perf.netPnl.toFixed(2)}
+            <span className={`block text-[11px] font-bold mt-0.5 ${netR >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
+              {netR >= 0 ? `+${netR.toFixed(1)}R` : `${netR.toFixed(1)}R`}
             </span>
           </div>
         </div>
@@ -166,10 +169,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
           <div className="mt-2">
             <span className="text-2xl font-black font-mono text-[#1F1A16]">
-              {perf.expectancy >= 0 ? `+${perf.expectancy.toFixed(2)}R` : `${perf.expectancy.toFixed(2)}R`}
+              {perf.expectancyUsd >= 0 ? `+${currSymbol}${perf.expectancyUsd.toFixed(2)}` : `-${currSymbol}${Math.abs(perf.expectancyUsd).toFixed(2)}`}
             </span>
             <span className="block text-[11px] text-[#786F66] mt-0.5">
-              PF: {perf.profitFactor.toFixed(2)}
+              {perf.expectancy >= 0 ? `+${perf.expectancy.toFixed(2)}R` : `${perf.expectancy.toFixed(2)}R`} (PF: {perf.profitFactor.toFixed(2)})
             </span>
           </div>
         </div>
@@ -184,10 +187,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
           <div className="mt-2">
             <span className="text-2xl font-black font-mono text-[#DC2626]">
-              -4.2R
+              -{currSymbol}{perf.maxDrawdownUsd.toFixed(2)}
             </span>
             <span className="block text-[11px] text-[#DC2626] mt-0.5">
-              Peak to trough
+              -{perf.maxDrawdownPercent.toFixed(1)}% peak to trough
             </span>
           </div>
         </div>
@@ -451,9 +454,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                     <span className="text-[10px] text-[#786F66]">{fomoTrades.length} emotional entries</span>
                   </div>
                 </div>
-                <span className="text-xs font-bold font-mono text-[#DC2626]">
-                  {fomoR.toFixed(1)}R
-                </span>
+                <div className="text-right">
+                  <span className="text-xs font-bold font-mono text-[#DC2626] block">
+                    -{currSymbol}{Math.abs(fomoPnl).toFixed(2)}
+                  </span>
+                  <span className="text-[10px] text-[#DC2626] font-mono">
+                    {fomoR.toFixed(1)}R
+                  </span>
+                </div>
               </div>
 
               {/* Clean Execution */}
@@ -467,9 +475,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                     <span className="text-[10px] text-[#786F66]">{cleanTrades.length} plan-followed trades</span>
                   </div>
                 </div>
-                <span className="text-xs font-bold font-mono text-[#15803D]">
-                  +{cleanR.toFixed(1)}R
-                </span>
+                <div className="text-right">
+                  <span className="text-xs font-bold font-mono text-[#15803D] block">
+                    +{currSymbol}{cleanPnl.toFixed(2)}
+                  </span>
+                  <span className="text-[10px] text-[#15803D] font-mono">
+                    +{cleanR.toFixed(1)}R
+                  </span>
+                </div>
               </div>
             </div>
           </div>

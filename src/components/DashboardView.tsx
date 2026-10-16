@@ -60,7 +60,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onTabChange,
   onOpenQuickTrade: _onOpenQuickTrade,
 }) => {
-  const [performerTab, setPerformerTab] = useState<'By R-Multiple' | 'By P&L'>('By R-Multiple');
+  const [performerTab, setPerformerTab] = useState<'By R-Multiple' | 'By P&L'>('By P&L');
   const [equityTab, setEquityTab] = useState<'$ P&L' | 'R-Multiple' | '% Return'>('$ P&L');
   const [timeframe, setTimeframe] = useState<'This Month' | 'Last 30 Days' | 'All Time'>('This Month');
   const [hoveredPoint, setHoveredPoint] = useState<{ 
@@ -73,7 +73,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     x: number; 
     y: number;
   } | null>(null);
-  const [hoveredBar, setHoveredBar] = useState<{ day: number; r: number; count: number } | null>(null);
+  const [hoveredBar, setHoveredBar] = useState<{ day: number; r: number; pnl: number; count: number } | null>(null);
 
   // Dynamic calculations from live data
   const perf = calculatePerformance(trades, settings);
@@ -259,34 +259,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [filteredTradesForCurve, settings, equityTab, currSymbol]);
 
-  // Current Month trades & Daily R breakdown for Monthly Performance bar chart
-  const { monthlyTotalR, dailyRData } = useMemo(() => {
+  // Current Month trades & Daily breakdown for Monthly Performance bar chart
+  const { monthlyTotalR, monthlyTotalPnl, dailyRData } = useMemo(() => {
     const mTrades = trades.filter(t => t.date && t.date.startsWith(currentMonthStr));
     const mTotalR = mTrades.reduce((sum, t) => sum + (t.rMultiple || 0), 0);
+    const mTotalPnl = mTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
 
-    const dateMap = new Map<number, { r: number; count: number }>();
+    const dateMap = new Map<number, { r: number; pnl: number; count: number }>();
     mTrades.forEach(t => {
       const parts = t.date.split('-');
       if (parts.length === 3) {
         const d = parseInt(parts[2], 10);
-        const cur = dateMap.get(d) || { r: 0, count: 0 };
+        const cur = dateMap.get(d) || { r: 0, pnl: 0, count: 0 };
         cur.r += (t.rMultiple || 0);
+        cur.pnl += (t.pnl || 0);
         cur.count += 1;
         dateMap.set(d, cur);
       }
     });
 
-    const daysArr: { day: number; r: number; count: number }[] = [];
+    const daysArr: { day: number; r: number; pnl: number; count: number }[] = [];
     for (let d = 1; d <= daysInCurrentMonth; d++) {
       const item = dateMap.get(d);
       daysArr.push({
         day: d,
         r: item ? item.r : 0,
+        pnl: item ? item.pnl : 0,
         count: item ? item.count : 0,
       });
     }
 
-    return { monthlyTotalR: mTotalR, dailyRData: daysArr };
+    return { monthlyTotalR: mTotalR, monthlyTotalPnl: mTotalPnl, dailyRData: daysArr };
   }, [trades, currentMonthStr, daysInCurrentMonth]);
 
   // Maximum absolute daily R for scaling bars
@@ -305,6 +308,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const losses = trades.filter((t) => (t.rMultiple || 0) < 0);
     const bigWin = wins.length > 0 ? Math.max(...wins.map((t) => t.rMultiple || 0)) : (perf.bestTrade?.rMultiple || 0);
     const bigLoss = losses.length > 0 ? Math.min(...losses.map((t) => t.rMultiple || 0)) : (perf.worstTrade && perf.worstTrade.rMultiple < 0 ? perf.worstTrade.rMultiple : 0);
+    const bigWinPnl = wins.length > 0 ? Math.max(...wins.map((t) => t.pnl || 0)) : (perf.bestTrade?.pnl || 0);
+    const bigLossPnl = losses.length > 0 ? Math.min(...losses.map((t) => t.pnl || 0)) : (perf.worstTrade && perf.worstTrade.pnl < 0 ? perf.worstTrade.pnl : 0);
 
     return {
       totalTrades: totalCount,
@@ -313,6 +318,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       avgTradeTime: '1h 42m',
       biggestWin: bigWin,
       biggestLoss: bigLoss,
+      biggestWinPnl: bigWinPnl,
+      biggestLossPnl: bigLossPnl,
     };
   }, [trades, perf]);
 
@@ -417,24 +424,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     // Shift Sunday to 6 so Monday is 0
     const offset = (firstDayOfWeek + 6) % 7;
 
-    const daysList: { day?: number; dateStr?: string; r?: number; hasTrade?: boolean }[] = [];
+    const daysList: { day?: number; dateStr?: string; r?: number; pnl?: number; hasTrade?: boolean }[] = [];
     for (let i = 0; i < offset; i++) {
       daysList.push({});
     }
 
     const dayRMap = new Map<number, number>();
+    const dayPnlMap = new Map<number, number>();
     trades.forEach(t => {
       if (t.date && t.date.startsWith(currentMonthStr)) {
         const d = parseInt(t.date.split('-')[2], 10);
         dayRMap.set(d, (dayRMap.get(d) || 0) + (t.rMultiple || 0));
+        dayPnlMap.set(d, (dayPnlMap.get(d) || 0) + (t.pnl || 0));
       }
     });
 
     for (let d = 1; d <= daysInCurrentMonth; d++) {
       const dateStr = `${currentMonthStr}-${String(d).padStart(2, '0')}`;
-      const hasTrade = dayRMap.has(d);
-      const r = dayRMap.get(d);
-      daysList.push({ day: d, dateStr, r, hasTrade });
+      const hasTrade = dayPnlMap.has(d);
+      const r = dayRMap.get(d) || 0;
+      const pnl = dayPnlMap.get(d) || 0;
+      daysList.push({ day: d, dateStr, r, pnl, hasTrade });
     }
 
     return daysList;
@@ -509,14 +519,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2">
             <div className={`text-xl sm:text-2xl font-black tracking-tight truncate ${
-              netR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-            }`}>
-              {netR >= 0 ? '+' : ''}{netR.toFixed(1)}R
-            </div>
-            <div className={`text-[10px] font-bold mt-0.5 ${
               perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
             }`}>
               {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)}
+            </div>
+            <div className={`text-[10px] font-bold mt-0.5 ${
+              netR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+            }`}>
+              {netR >= 0 ? '+' : ''}{netR.toFixed(1)}R
             </div>
           </div>
         </div>
@@ -583,10 +593,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-xl sm:text-2xl font-black text-[#DC2626] tracking-tight">
-              {maxDrawdownR > 0 ? `-${maxDrawdownR.toFixed(1)}R` : '0.0R'}
+              -{currSymbol}{perf.maxDrawdownUsd.toFixed(2)}
             </div>
             <div className="text-[10px] font-bold text-[#DC2626] mt-0.5">
-              (-{perf.maxDrawdownPercent.toFixed(1)}%)
+              {maxDrawdownR > 0 ? `-${maxDrawdownR.toFixed(1)}R` : '0.0R'} (-{perf.maxDrawdownPercent.toFixed(1)}%)
             </div>
           </div>
         </div>
@@ -875,11 +885,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
               <span className={`px-2 py-0.5 rounded-lg font-mono text-[10px] font-bold ${
-                monthlyTotalR >= 0 
+                monthlyTotalPnl >= 0 
                   ? 'bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399]'
                   : 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]'
               }`}>
-                {monthlyTotalR >= 0 ? '+' : ''}{monthlyTotalR.toFixed(1)}R Net result
+                {monthlyTotalPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(monthlyTotalPnl).toFixed(2)} ({monthlyTotalR >= 0 ? '+' : ''}{monthlyTotalR.toFixed(1)}R)
               </span>
             </div>
 
@@ -932,8 +942,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {hoveredBar && (
                 <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white px-2.5 py-1 rounded-lg text-[10px] font-mono shadow-lg border border-[#3A322A] dark:border-[#242D3D] pointer-events-none z-20 whitespace-nowrap">
                   <span>Day {hoveredBar.day}: </span>
-                  <span className={hoveredBar.r > 0 ? 'text-[#10B981] font-bold' : hoveredBar.r < 0 ? 'text-[#DC2626] font-bold' : 'text-[#9E958C]'}>
-                    {hoveredBar.r > 0 ? '+' : ''}{hoveredBar.r.toFixed(1)}R
+                  <span className={hoveredBar.pnl > 0 ? 'text-[#10B981] font-bold' : hoveredBar.pnl < 0 ? 'text-[#DC2626] font-bold' : 'text-[#9E958C]'}>
+                    {hoveredBar.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(hoveredBar.pnl).toFixed(2)} ({hoveredBar.r >= 0 ? '+' : ''}{hoveredBar.r.toFixed(1)}R)
                   </span>
                   <span className="text-[#9E958C] ml-1.5">({hoveredBar.count} trade{hoveredBar.count === 1 ? '' : 's'})</span>
                 </div>
@@ -993,14 +1003,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="p-2 rounded-xl bg-[#F2ECE0] dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244]">
                 <span className="text-[9px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Biggest Win</span>
                 <span className="text-xs font-black font-mono mt-1 text-[#10B981] block">
-                  +{quickStats.biggestWin.toFixed(1)}R
+                  +{currSymbol}{quickStats.biggestWinPnl.toFixed(2)} (+{quickStats.biggestWin.toFixed(1)}R)
                 </span>
               </div>
 
               <div className="p-2 rounded-xl bg-[#F2ECE0] dark:bg-[#1A2230] border border-[#DFD5C6]/60 dark:border-[#283244]">
                 <span className="text-[9px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Biggest Loss</span>
                 <span className="text-xs font-black font-mono mt-1 text-[#DC2626] block">
-                  {quickStats.biggestLoss <= 0 ? `${quickStats.biggestLoss.toFixed(1)}R` : `-${quickStats.biggestLoss.toFixed(1)}R`}
+                  -{currSymbol}{Math.abs(quickStats.biggestLossPnl).toFixed(2)} ({quickStats.biggestLoss <= 0 ? `${quickStats.biggestLoss.toFixed(1)}R` : `-${quickStats.biggestLoss.toFixed(1)}R`})
                 </span>
               </div>
             </div>
@@ -1195,14 +1205,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 if (!c.day) {
                   return <div key={i} className="min-h-[28px]" />;
                 }
-                const isWin = c.hasTrade && (c.r || 0) > 0.001;
-                const isLoss = c.hasTrade && (c.r || 0) < -0.001;
-                const isBE = c.hasTrade && Math.abs(c.r || 0) <= 0.001;
+                const isWin = c.hasTrade && (c.pnl || 0) > 0.001;
+                const isLoss = c.hasTrade && (c.pnl || 0) < -0.001;
+                const isBE = c.hasTrade && Math.abs(c.pnl || 0) <= 0.001;
 
                 return (
                   <div
                     key={i}
                     onClick={() => c.dateStr && onSelectDate?.(c.dateStr)}
+                    title={c.hasTrade ? `${c.dateStr}: ${(c.pnl || 0) >= 0 ? '+' : '-'}${currSymbol}${Math.abs(c.pnl || 0).toFixed(2)} (${(c.r || 0) >= 0 ? '+' : ''}${(c.r || 0).toFixed(1)}R)` : undefined}
                     className={`p-1 rounded-md border min-h-[28px] flex flex-col justify-between cursor-pointer transition-all hover:scale-105 ${
                       isWin
                         ? 'bg-[#E8F8EE] dark:bg-[#132A1C] border-[#B7ECC8] dark:border-[#1E432A] text-[#15803D] dark:text-[#34D399]'
@@ -1216,7 +1227,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="text-[8px] font-bold block leading-none">{c.day}</span>
                     {c.hasTrade && (
                       <span className="text-[7px] font-bold block leading-none truncate">
-                        {(c.r || 0) >= 0 ? `+${(c.r || 0).toFixed(1)}R` : `${(c.r || 0).toFixed(1)}R`}
+                        {(c.pnl || 0) >= 0 ? `+${currSymbol}${Math.abs(c.pnl || 0).toFixed(0)}` : `-${currSymbol}${Math.abs(c.pnl || 0).toFixed(0)}`}
                       </span>
                     )}
                   </div>

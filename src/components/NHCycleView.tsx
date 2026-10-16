@@ -203,11 +203,11 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                 <div className="my-2">
                   {hasTrades ? (
                     <div>
-                      <div className={`text-base font-black font-mono ${dayR >= 0 ? 'text-[#15803D]' : hasViolation ? 'text-[#DC2626]' : 'text-[#9B671B]'}`}>
-                        {dayR >= 0 ? `+${dayR.toFixed(1)}R` : `${dayR.toFixed(1)}R`}
+                      <div className={`text-base font-black font-mono ${dayPnl >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>
+                        {dayPnl >= 0 ? `+${currSymbol}${dayPnl.toFixed(2)}` : `-${currSymbol}${Math.abs(dayPnl).toFixed(2)}`}
                       </div>
                       <div className="text-[11px] font-mono text-[#786F66]">
-                        {dayPnl >= 0 ? `+${currSymbol}${dayPnl.toFixed(2)}` : `${currSymbol}${dayPnl.toFixed(2)}`}
+                        {dayR >= 0 ? `+${dayR.toFixed(1)}R` : `${dayR.toFixed(1)}R`}
                       </div>
                     </div>
                   ) : isNoTrade ? (
