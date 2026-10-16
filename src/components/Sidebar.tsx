@@ -5,7 +5,6 @@ import {
   CalendarCheck,
   Trophy,
   BarChart2,
-  Calendar,
   FileText,
   Settings as SettingsIcon,
   X
@@ -31,7 +30,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarCheck },
     { id: 'challenge21' as TabType, label: '21 Days Challenge', icon: Trophy },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart2 },
-    { id: 'calendar' as TabType, label: 'Calendar', icon: Calendar },
     { id: 'notes' as TabType, label: 'Notes', icon: FileText },
     { id: 'settings' as TabType, label: 'Settings', icon: SettingsIcon },
   ];

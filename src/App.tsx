@@ -273,15 +273,6 @@ function AppInner() {
               />
             )}
 
-            {currentTab === 'calendar' && (
-              <NHCycleView
-                trades={trades}
-                days={days}
-                settings={settings}
-                onSelectDayForJournal={handleSelectDateForJournal}
-              />
-            )}
-
             {currentTab === 'notes' && (
               <NotesView
                 trades={trades}

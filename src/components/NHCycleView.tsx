@@ -107,10 +107,10 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
             <select
               value={cycleMonth}
               onChange={(e) => setCycleMonth(Number(e.target.value))}
-              className="bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl px-3 py-2 text-xs font-bold text-[#1F1A16] focus:border-[#DB9F35] outline-none"
+              className="bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl px-3 py-2 text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none cursor-pointer transition-colors"
             >
               {monthNames.map((name, i) => (
-                <option key={name} value={i + 1}>
+                <option key={name} value={i + 1} className="bg-white dark:bg-[#1A2230] text-[#1F1A16] dark:text-[#F0F4F8]">
                   {name}
                 </option>
               ))}
@@ -118,10 +118,10 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
             <select
               value={cycleYear}
               onChange={(e) => setCycleYear(Number(e.target.value))}
-              className="bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl px-3 py-2 text-xs font-bold text-[#1F1A16] focus:border-[#DB9F35] outline-none"
+              className="bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl px-3 py-2 text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none cursor-pointer transition-colors"
             >
               {[2025, 2026, 2027].map((yr) => (
-                <option key={yr} value={yr}>
+                <option key={yr} value={yr} className="bg-white dark:bg-[#1A2230] text-[#1F1A16] dark:text-[#F0F4F8]">
                   {yr}
                 </option>
               ))}
@@ -154,30 +154,36 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
             const isNoTrade = dayRecord?.isNoTradeDay;
 
             let statusBadge = '';
-            let cardBorder = 'border-[#E7E0D6]';
-            let cardBg = 'bg-[#FAF7F2]';
+            let cardBorder = 'border-[#E7E0D6] dark:border-[#242D3D]';
+            let cardBg = 'bg-[#FAF7F2] dark:bg-[#161D2B]';
+            let badgeStyle = 'bg-white dark:bg-[#1F2839] border-[#E7E0D6] dark:border-[#2E3A4E] text-[#1F1A16] dark:text-[#F0F4F8]';
 
             if (hasTrades) {
               if (dayR > 0.05 && allClean) {
-                cardBorder = 'border-[#B7ECC8]';
-                cardBg = 'bg-[#E8F8EE]';
+                cardBorder = 'border-[#B7ECC8] dark:border-[#10B981]/40';
+                cardBg = 'bg-[#E8F8EE] dark:bg-[#0D281E]';
+                badgeStyle = 'bg-white/90 dark:bg-[#10B981]/25 border-[#B7ECC8] dark:border-[#10B981]/40 text-[#15803D] dark:text-[#34D399]';
                 statusBadge = '🟢 CLEAN';
               } else if (dayR < -0.05 && hasViolation) {
-                cardBorder = 'border-[#FBC5C2]';
-                cardBg = 'bg-[#FEECEB]';
+                cardBorder = 'border-[#FBC5C2] dark:border-[#EF4444]/40';
+                cardBg = 'bg-[#FEECEB] dark:bg-[#2A1316]';
+                badgeStyle = 'bg-white/90 dark:bg-[#EF4444]/25 border-[#FBC5C2] dark:border-[#EF4444]/40 text-[#DC2626] dark:text-[#F87171]';
                 statusBadge = '🔴 VIOLATION';
               } else if (dayR < -0.05 && allClean) {
-                cardBorder = 'border-[#E2D1B8]';
-                cardBg = 'bg-[#F0E5D3]/50';
+                cardBorder = 'border-[#E2D1B8] dark:border-[#D97706]/40';
+                cardBg = 'bg-[#F0E5D3]/50 dark:bg-[#261C14]';
+                badgeStyle = 'bg-white/90 dark:bg-[#D97706]/25 border-[#E2D1B8] dark:border-[#D97706]/40 text-[#B45309] dark:text-[#FBBF24]';
                 statusBadge = '🔵 CLEAN LOSS';
               } else {
-                cardBorder = 'border-[#FDE68A]';
-                cardBg = 'bg-[#FFFBEB]';
+                cardBorder = 'border-[#FDE68A] dark:border-[#F59E0B]/40';
+                cardBg = 'bg-[#FFFBEB] dark:bg-[#252013]';
+                badgeStyle = 'bg-white/90 dark:bg-[#F59E0B]/25 border-[#FDE68A] dark:border-[#F59E0B]/40 text-[#92400E] dark:text-[#FCD34D]';
                 statusBadge = '🟡 BE / MIXED';
               }
             } else if (isNoTrade) {
-              cardBorder = 'border-[#E7E0D6]';
-              cardBg = 'bg-[#FAF7F2]';
+              cardBorder = 'border-[#E7E0D6] dark:border-[#242D3D]';
+              cardBg = 'bg-[#FAF7F2] dark:bg-[#121722]';
+              badgeStyle = 'bg-white dark:bg-[#1A2230] border-[#E7E0D6] dark:border-[#2E384D] text-[#786F66] dark:text-[#94A3B8]';
               statusBadge = '⚪ NO TRADE';
             }
 
@@ -192,10 +198,10 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                 className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between min-h-[105px] group hover:scale-[1.02] hover:shadow-xs ${cardBg} ${cardBorder}`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 rounded-md bg-white border border-[#E7E0D6] text-[10px] font-mono font-bold text-[#1F1A16]">
+                  <span className={`px-2 py-0.5 rounded-md border text-[10px] font-mono font-bold ${badgeStyle}`}>
                     DAY {String(dayNum).padStart(2, '0')}
                   </span>
-                  <span className="text-[10px] text-[#786F66] font-mono">
+                  <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] font-mono font-medium">
                     {dayNum} {monthNames[cycleMonth - 1].slice(0, 3)}
                   </span>
                 </div>
@@ -203,32 +209,32 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                 <div className="my-2">
                   {hasTrades ? (
                     <div>
-                      <div className={`text-base font-black font-mono ${dayPnl >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'}`}>
+                      <div className={`text-base font-black font-mono tracking-tight ${dayPnl >= 0 ? 'text-[#15803D] dark:text-[#34D399]' : 'text-[#DC2626] dark:text-[#F87171]'}`}>
                         {dayPnl >= 0 ? `+${currSymbol}${dayPnl.toFixed(2)}` : `-${currSymbol}${Math.abs(dayPnl).toFixed(2)}`}
                       </div>
-                      <div className="text-[11px] font-mono text-[#786F66]">
+                      <div className={`text-[11px] font-mono font-semibold mt-0.5 ${dayR >= 0 ? 'text-[#059669] dark:text-[#6EE7B7]' : 'text-[#DC2626] dark:text-[#F87171]'}`}>
                         {dayR >= 0 ? `+${dayR.toFixed(1)}R` : `${dayR.toFixed(1)}R`}
                       </div>
                     </div>
                   ) : isNoTrade ? (
-                    <div className="text-[11px] text-[#786F66] italic font-medium">
+                    <div className="text-[11px] text-[#786F66] dark:text-[#94A3B8] italic font-medium">
                       No Trade Day
                     </div>
                   ) : (
-                    <div className="text-xs text-[#9E958C] font-mono">
+                    <div className="text-xs text-[#9E958C] dark:text-[#64748B] font-mono">
                       P&L: ______
                     </div>
                   )}
                 </div>
 
-                <div className="pt-2 border-t border-[#E7E0D6]/80 flex items-center justify-between text-[10px] font-semibold">
+                <div className="pt-2 border-t border-[#E7E0D6]/80 dark:border-[#242D3D] flex items-center justify-between text-[10px] font-semibold">
                   {statusBadge ? (
                     <span>{statusBadge}</span>
                   ) : (
-                    <span className="text-[#9E958C] opacity-60">Open</span>
+                    <span className="text-[#9E958C] dark:text-[#64748B] opacity-60">Open</span>
                   )}
                   {hasTrades && (
-                    <span className="font-mono text-[#786F66] group-hover:text-[#DB9F35]">
+                    <span className="font-mono text-[#786F66] dark:text-[#94A3B8] group-hover:text-[#DB9F35] dark:group-hover:text-[#F59E0B]">
                       {dayTrades.length}T →
                     </span>
                   )}
@@ -239,14 +245,14 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
         </div>
 
         {/* 3. Quote Callout */}
-        <div className="mt-8 p-5 rounded-xl bg-[#F0E5D3]/60 border border-[#E2D1B8] flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="mt-8 p-5 rounded-xl bg-[#F0E5D3]/60 dark:bg-[#1A2230] border border-[#E2D1B8] dark:border-[#283244] flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors">
           <div className="flex items-center gap-3">
             <Quote className="w-7 h-7 text-[#DB9F35] shrink-0" />
             <div>
-              <p className="text-sm sm:text-base font-black text-[#1F1A16] uppercase tracking-wide">
+              <p className="text-sm sm:text-base font-black text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wide">
                 "Discipline today, profits tomorrow."
               </p>
-              <p className="text-xs text-[#786F66]">
+              <p className="text-xs text-[#786F66] dark:text-[#94A3B8]">
                 Small Steps | Consistent Action | Big Results
               </p>
             </div>
@@ -255,12 +261,12 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
             <span className="text-xs font-mono font-bold text-[#DB9F35] uppercase tracking-wider block">
               Trade Better, Be Better
             </span>
-            <span className="text-[11px] text-[#786F66]">TradeFlow Official Methodology</span>
+            <span className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">TradeFlow Official Methodology</span>
           </div>
         </div>
 
         {/* 4. NET RESULT Footer Bar */}
-        <div className="mt-6 bg-[#1F1A16] text-white rounded-xl p-5 shadow-xs border border-[#2D2620]">
+        <div className="mt-6 bg-[#1F1A16] dark:bg-[#0E121B] text-white rounded-xl p-5 shadow-xs border border-[#2D2620] dark:border-[#242D3D] transition-colors">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <span className="text-xs font-mono font-bold text-[#DB9F35] uppercase tracking-widest block">
@@ -268,28 +274,28 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
               </span>
               <div className="text-2xl sm:text-3xl font-black font-mono text-white mt-1">
                 {perf.netPnl >= 0 ? `+${currSymbol}${perf.netPnl.toFixed(2)}` : `-${currSymbol}${Math.abs(perf.netPnl).toFixed(2)}`}
-                <span className="text-lg font-normal text-[#16A34A] ml-2">
-                  ({perf.averageR >= 0 ? `+${perf.netPnl.toFixed(1)}` : ''})
+                <span className="text-lg font-normal text-[#10B981] dark:text-[#34D399] ml-2">
+                  ({perf.averageR >= 0 ? `+${perf.averageR.toFixed(1)}R` : `${perf.averageR.toFixed(1)}R`})
                 </span>
               </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
-              <div className="p-2.5 rounded-lg bg-white/10 border border-white/10">
-                <span className="text-[#C4B7A6] block text-[10px]">TOTAL TRADES</span>
+              <div className="p-2.5 rounded-lg bg-white/10 dark:bg-[#161D2B] border border-white/10 dark:border-[#242D3D]">
+                <span className="text-[#C4B7A6] dark:text-[#94A3B8] block text-[10px]">TOTAL TRADES</span>
                 <span className="text-sm font-bold text-white">{perf.totalTrades}</span>
               </div>
-              <div className="p-2.5 rounded-lg bg-white/10 border border-white/10">
-                <span className="text-[#C4B7A6] block text-[10px]">WIN RATE</span>
-                <span className="text-sm font-bold text-[#16A34A]">{perf.winRate.toFixed(1)}%</span>
+              <div className="p-2.5 rounded-lg bg-white/10 dark:bg-[#161D2B] border border-white/10 dark:border-[#242D3D]">
+                <span className="text-[#C4B7A6] dark:text-[#94A3B8] block text-[10px]">WIN RATE</span>
+                <span className="text-sm font-bold text-[#10B981] dark:text-[#34D399]">{perf.winRate.toFixed(1)}%</span>
               </div>
-              <div className="p-2.5 rounded-lg bg-white/10 border border-white/10">
-                <span className="text-[#C4B7A6] block text-[10px]">DISCIPLINE SCORE</span>
+              <div className="p-2.5 rounded-lg bg-white/10 dark:bg-[#161D2B] border border-white/10 dark:border-[#242D3D]">
+                <span className="text-[#C4B7A6] dark:text-[#94A3B8] block text-[10px]">DISCIPLINE SCORE</span>
                 <span className="text-sm font-bold text-[#DB9F35]">{disc.disciplineScore}%</span>
               </div>
-              <div className="p-2.5 rounded-lg bg-white/10 border border-white/10">
-                <span className="text-[#C4B7A6] block text-[10px]">CLEAN TRADES</span>
-                <span className="text-sm font-bold text-[#16A34A]">{disc.cleanTradesCount}</span>
+              <div className="p-2.5 rounded-lg bg-white/10 dark:bg-[#161D2B] border border-white/10 dark:border-[#242D3D]">
+                <span className="text-[#C4B7A6] dark:text-[#94A3B8] block text-[10px]">CLEAN TRADES</span>
+                <span className="text-sm font-bold text-[#10B981] dark:text-[#34D399]">{disc.cleanTradesCount}</span>
               </div>
             </div>
           </div>
