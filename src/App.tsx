@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AuthPage } from './components/AuthPage';
+import { supabase } from './lib/supabase';
 import { tradesApi } from './lib/api/tradesApi';
 import { dailyApi } from './lib/api/dailyApi';
 import { settingsApi } from './lib/api/settingsApi';
@@ -370,7 +371,7 @@ export function App() {
 }
 
 function AuthGate() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isPasswordRecovery, setIsPasswordRecovery } = useAuth();
 
   if (isLoading) {
     return (
@@ -383,9 +384,83 @@ function AuthGate() {
     );
   }
 
-  if (!user) return <AuthPage />;
+  return (
+    <>
+      {!user ? <AuthPage /> : <AppInner />}
+      {isPasswordRecovery && (
+        <SetNewPasswordModal onClose={() => setIsPasswordRecovery(false)} />
+      )}
+    </>
+  );
+}
 
-  return <AppInner />;
+function SetNewPasswordModal({ onClose }: { onClose: () => void }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isDone, setIsDone] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      setErrorMsg('Password must be at least 6 characters.');
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorMsg('');
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        setErrorMsg(error.message);
+      } else {
+        setIsDone(true);
+        setTimeout(() => {
+          onClose();
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        }, 1500);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update password');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-fade-in">
+      <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl max-w-sm w-full p-6 shadow-2xl text-[#1F1A16] dark:text-[#F0F4F8]">
+        <h3 className="text-lg font-black tracking-tight">Set New Password</h3>
+        <p className="text-xs text-[#786F66] dark:text-[#94A3B8] mt-1">
+          Enter your new password to update your account.
+        </p>
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New password (min. 6 chars)"
+            required
+            className="w-full px-3.5 py-2.5 bg-white dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-sm focus:border-[#10B981] outline-none"
+          />
+          {errorMsg && (
+            <p className="text-xs text-[#DC2626] font-medium">{errorMsg}</p>
+          )}
+          {isDone && (
+            <p className="text-xs text-[#10B981] font-bold">Password updated successfully! Redirecting...</p>
+          )}
+          <button
+            type="submit"
+            disabled={isSubmitting || isDone}
+            className="w-full py-2.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+          >
+            {isSubmitting ? 'Updating...' : 'Save New Password'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 export default App;

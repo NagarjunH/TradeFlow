@@ -19,6 +19,8 @@ interface AuthContextType {
   isLoading: boolean;
   signOut: () => Promise<void>;
   loginAsLocalUser: () => void;
+  isPasswordRecovery: boolean;
+  setIsPasswordRecovery: (val: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -27,6 +29,8 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   signOut: async () => {},
   loginAsLocalUser: () => {},
+  isPasswordRecovery: false,
+  setIsPasswordRecovery: () => {},
 });
 
 function getCachedSession(): { user: User | null; session: Session | null } {
@@ -59,6 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(cached.user);
   const [session, setSession] = useState<Session | null>(cached.session);
   const [isLoading, setIsLoading] = useState(!cached.user);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.hash.includes('type=recovery');
+    }
+    return false;
+  });
 
   useEffect(() => {
     // Verify & refresh session in background
@@ -82,7 +92,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsPasswordRecovery(true);
+        }
         if (session) {
           try { localStorage.removeItem(LOCAL_MODE_STORAGE_KEY); } catch (_) {}
           setSession(session);
@@ -121,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signOut, loginAsLocalUser }}>
+    <AuthContext.Provider value={{ user, session, isLoading, signOut, loginAsLocalUser, isPasswordRecovery, setIsPasswordRecovery }}>
       {children}
     </AuthContext.Provider>
   );
