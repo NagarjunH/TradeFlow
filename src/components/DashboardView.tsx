@@ -74,11 +74,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     y: number;
   } | null>(null);
   const [hoveredBar, setHoveredBar] = useState<{ day: number; r: number; pnl: number; count: number } | null>(null);
+  const [hoveredDaily, setHoveredDaily] = useState<{ date: string; pnl: number; count: number } | null>(null);
+  const [hoveredMonthly, setHoveredMonthly] = useState<{ key: string; label: string; pnl: number; count: number; winRate: number } | null>(null);
+  const [hoveredDrawdown, setHoveredDrawdown] = useState<{ date: string; ddPct: number; ddUsd: number } | null>(null);
 
   // Dynamic calculations from live data
   const perf = calculatePerformance(trades, settings);
   const discipline = calculateDiscipline(trades);
   const currSymbol = settings.currency === 'USD' ? '$' : '₹';
+  const initialCapital = settings.initialCapital || 10000;
 
   // Dynamic greeting based on current local time
   const greeting = useMemo(() => {
@@ -145,7 +149,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Equity Curve Points & SVG geometry
   const equityChartData = useMemo(() => {
-    const initialCapital = settings.initialCapital || 1000;
     const rawPoints = generateEquityCurve(filteredTradesForCurve, settings);
 
     if (rawPoints.length <= 1 && filteredTradesForCurve.length === 0) {
@@ -450,6 +453,261 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return daysList;
   }, [currentYear, currentMonthIdx, currentMonthStr, daysInCurrentMonth, trades]);
 
+  // Chronologically sorted closed trades for drawdown and time charts
+  const chronoTrades = useMemo(() => {
+    return [...trades].sort((a, b) => new Date(`${a.date}T${a.time || '00:00'}`).getTime() - new Date(`${b.date}T${b.time || '00:00'}`).getTime());
+  }, [trades]);
+
+  // Win/Loss Breakdown stats
+  const winningTrades = useMemo(() => trades.filter((t) => (t.pnl || 0) > 0.001), [trades]);
+  const losingTrades = useMemo(() => trades.filter((t) => (t.pnl || 0) < -0.001), [trades]);
+  const beTrades = useMemo(() => trades.filter((t) => Math.abs(t.pnl || 0) <= 0.001), [trades]);
+  const totalGrossProfit = useMemo(() => winningTrades.reduce((acc, t) => acc + (t.pnl || 0), 0), [winningTrades]);
+  const totalGrossLoss = useMemo(() => Math.abs(losingTrades.reduce((acc, t) => acc + (t.pnl || 0), 0)), [losingTrades]);
+  const avgWin = winningTrades.length > 0 ? totalGrossProfit / winningTrades.length : 0;
+  const avgLoss = losingTrades.length > 0 ? totalGrossLoss / losingTrades.length : 0;
+  const winLossRatio = losingTrades.length > 0
+    ? (winningTrades.length / losingTrades.length).toFixed(2) + ' : 1'
+    : winningTrades.length > 0
+    ? '∞ : 1'
+    : '0.00 : 1';
+
+  // 1. Daily P&L Data (aggregating trades by date)
+  const allDailyData = useMemo(() => {
+    const map = new Map<string, { pnl: number; count: number }>();
+    chronoTrades.forEach((t) => {
+      if (!t.date) return;
+      const cur = map.get(t.date) || { pnl: 0, count: 0 };
+      cur.pnl += (t.pnl || 0);
+      cur.count += 1;
+      map.set(t.date, cur);
+    });
+
+    return Array.from(map.entries())
+      .map(([date, data]) => ({
+        date,
+        label: date.split('-').slice(1).join('/'),
+        pnl: Number(data.pnl.toFixed(2)),
+        count: data.count,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [chronoTrades]);
+
+  // 2. Monthly Returns Data
+  const allMonthlyData = useMemo(() => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const map = new Map<string, { pnl: number; count: number; wins: number }>();
+
+    chronoTrades.forEach((t) => {
+      if (!t.date) return;
+      const key = t.date.slice(0, 7); // YYYY-MM
+      const cur = map.get(key) || { pnl: 0, count: 0, wins: 0 };
+      cur.pnl += (t.pnl || 0);
+      cur.count += 1;
+      if ((t.pnl || 0) > 0.001) cur.wins += 1;
+      map.set(key, cur);
+    });
+
+    if (map.size < 4) {
+      const now = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const key = `${y}-${m}`;
+        if (!map.has(key)) {
+          map.set(key, { pnl: 0, count: 0, wins: 0 });
+        }
+      }
+    }
+
+    return Array.from(map.entries())
+      .map(([key, data]) => {
+        const parts = key.split('-');
+        const monthIdx = parseInt(parts[1], 10) - 1;
+        const label = `${monthNames[monthIdx] || parts[1]}`;
+        const winRate = data.count > 0 ? (data.wins / data.count) * 100 : 0;
+        return {
+          key,
+          label,
+          pnl: Number(data.pnl.toFixed(2)),
+          count: data.count,
+          winRate,
+        };
+      })
+      .sort((a, b) => a.key.localeCompare(b.key));
+  }, [chronoTrades]);
+
+  // 3. Drawdown Underwater Data
+  const allDrawdownData = useMemo(() => {
+    const pts: { date: string; ddPct: number; ddUsd: number }[] = [];
+    let currentEquity = initialCapital;
+    let peakEquity = initialCapital;
+
+    pts.push({ date: 'Start', ddPct: 0, ddUsd: 0 });
+
+    chronoTrades.forEach((t) => {
+      currentEquity += (t.pnl || 0);
+      if (currentEquity > peakEquity) peakEquity = currentEquity;
+      const ddUsd = peakEquity - currentEquity;
+      const ddPct = peakEquity > 0 ? (ddUsd / peakEquity) * 100 : 0;
+      pts.push({
+        date: t.date,
+        ddPct: Number(ddPct.toFixed(2)),
+        ddUsd: Number(ddUsd.toFixed(2)),
+      });
+    });
+
+    return pts;
+  }, [chronoTrades, initialCapital]);
+
+  // 4. Daily SVG Data
+  const dailySvgData = useMemo(() => {
+    const W = 520;
+    const H = 190;
+    const L = 45;
+    const R = 15;
+    const T = 15;
+    const B = 28;
+    const iw = W - L - R;
+    const ih = H - T - B;
+
+    const items = allDailyData.slice(-30);
+    const vals = items.map((a) => a.pnl);
+    let min = Math.min(0, ...vals);
+    let max = Math.max(0, ...vals);
+    if (min === 0 && max === 0) {
+      min = -50;
+      max = 50;
+    }
+    const pad = (max - min) * 0.15 || 10;
+    min -= pad;
+    max += pad;
+
+    const getY = (v: number) => T + ((max - v) / (max - min)) * ih;
+    const baselineY = getY(0);
+    const step = items.length > 0 ? iw / items.length : iw;
+    const bw = Math.max(4, Math.min(24, step * 0.58));
+
+    const gridLevels = [0, 1, 2].map((stepIdx) => {
+      const v = min + ((max - min) * stepIdx) / 2;
+      const y = getY(v);
+      const label = `${v < 0 ? '-' : ''}${currSymbol}${Math.abs(Math.round(v / 1000))}k`;
+      return { y, label };
+    });
+
+    const bars = items.map((item, i) => {
+      const x = L + step * i + step / 2 - bw / 2;
+      const y = getY(item.pnl);
+      const height = Math.max(2, Math.abs(baselineY - y));
+      const barY = Math.min(y, baselineY);
+      return {
+        item,
+        x,
+        y: barY,
+        width: bw,
+        height,
+        isPositive: item.pnl >= 0,
+      };
+    });
+
+    return { W, H, L, R, T, B, baselineY, gridLevels, bars };
+  }, [allDailyData, currSymbol]);
+
+  // 5. Monthly SVG Data
+  const monthlySvgData = useMemo(() => {
+    const W = 520;
+    const H = 190;
+    const L = 45;
+    const R = 15;
+    const T = 15;
+    const B = 28;
+    const iw = W - L - R;
+    const ih = H - T - B;
+
+    const items = allMonthlyData;
+    const vals = items.map((a) => a.pnl);
+    let min = Math.min(0, ...vals);
+    let max = Math.max(0, ...vals);
+    if (min === 0 && max === 0) {
+      min = -100;
+      max = 100;
+    }
+    const pad = (max - min) * 0.15 || 20;
+    min -= pad;
+    max += pad;
+
+    const getY = (v: number) => T + ((max - v) / (max - min)) * ih;
+    const baselineY = getY(0);
+    const step = items.length > 0 ? iw / items.length : iw;
+    const bw = Math.max(6, Math.min(32, step * 0.52));
+
+    const gridLevels = [0, 1, 2].map((stepIdx) => {
+      const v = min + ((max - min) * stepIdx) / 2;
+      const y = getY(v);
+      const label = `${v < 0 ? '-' : ''}${currSymbol}${Math.abs(Math.round(v / 1000))}k`;
+      return { y, label };
+    });
+
+    const bars = items.map((item, i) => {
+      const x = L + step * i + step / 2 - bw / 2;
+      const y = getY(item.pnl);
+      const height = Math.max(2, Math.abs(baselineY - y));
+      const barY = Math.min(y, baselineY);
+      return {
+        item,
+        x,
+        y: barY,
+        width: bw,
+        height,
+        isPositive: item.pnl >= 0,
+      };
+    });
+
+    return { W, H, L, R, T, B, baselineY, gridLevels, bars };
+  }, [allMonthlyData, currSymbol]);
+
+  // 6. Drawdown SVG Data
+  const drawdownSvgData = useMemo(() => {
+    const W = 520;
+    const H = 190;
+    const L = 45;
+    const R = 15;
+    const T = 15;
+    const B = 28;
+    const iw = W - L - R;
+    const ih = H - T - B;
+
+    const pts = allDrawdownData;
+    const maxDdPct = Math.max(0.1, ...pts.map((p) => p.ddPct));
+    const maxScale = Math.max(5, Math.ceil(maxDdPct * 1.25));
+
+    const getX = (i: number) => L + (i * iw) / Math.max(1, pts.length - 1);
+    const getY = (pct: number) => T + (pct / maxScale) * ih;
+
+    const gridLevels = [0, 0.5, 1].map((ratio) => {
+      const pct = maxScale * ratio;
+      const y = getY(pct);
+      const label = `-${pct.toFixed(0)}%`;
+      return { y, label };
+    });
+
+    const pathD = pts
+      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getY(p.ddPct).toFixed(1)}`)
+      .join(' ');
+
+    const areaD = pts.length > 0
+      ? `${pathD} L ${getX(pts.length - 1).toFixed(1)} ${T} L ${getX(0).toFixed(1)} ${T} Z`
+      : '';
+
+    return { W, H, L, R, T, B, gridLevels, pathD, areaD, pts, getX, getY };
+  }, [allDrawdownData]);
+
+  // Donut circumference
+  const donutRadius = 43;
+  const donutCircumference = 2 * Math.PI * donutRadius;
+  const winArcLength = (perf.winRate / 100) * donutCircumference;
+
   return (
     <div className="space-y-4 animate-fade-in pb-12 text-[#1F1A16] dark:text-[#F0F4F8] font-sans selection:bg-[#DB9F35]/30 transition-colors">
       
@@ -571,12 +829,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-2">
             <div className={`text-xl sm:text-2xl font-black tracking-tight ${
-              trades.length === 0 ? 'text-[#786F66] dark:text-[#94A3B8]' : perf.expectancy >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+              trades.length === 0 ? 'text-[#786F66] dark:text-[#94A3B8]' : perf.expectancyUsd >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
             }`}>
-              {trades.length > 0 ? `${perf.expectancy >= 0 ? '+' : ''}${perf.expectancy.toFixed(2)}R` : '0.00R'}
+              {trades.length > 0 ? `${perf.expectancyUsd >= 0 ? '+' : '-'}${currSymbol}${Math.abs(perf.expectancyUsd).toFixed(2)}` : `${currSymbol}0.00`}
             </div>
             <div className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-0.5 truncate">
-              PF {trades.length > 0 ? (perf.profitFactor > 99 ? '∞' : perf.profitFactor.toFixed(2)) : '0.00'} | Avg: {trades.length > 0 ? `${perf.averageR >= 0 ? '+' : ''}${perf.averageR.toFixed(2)}R` : '0.00R'}
+              PF {trades.length > 0 ? (perf.profitFactor > 99 ? '∞' : perf.profitFactor.toFixed(2)) : '0.00'} | {trades.length > 0 ? `${perf.expectancy >= 0 ? '+' : ''}${perf.expectancy.toFixed(2)}R` : '0.00R'} / trade
             </div>
           </div>
         </div>
@@ -641,6 +899,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
                     Cumulative performance over time
                   </p>
+                </div>
+              </div>
+
+              <div className="hidden sm:block text-right">
+                <div className="text-sm font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8]">
+                  {currSymbol}{(initialCapital + perf.netPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className={`text-[10px] font-mono font-bold ${perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                  {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)} net return
                 </div>
               </div>
 
@@ -1018,7 +1285,460 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 4. Middle Row: 3-Column Balanced Feature Grid (Trading Rules removed per user request) */}
+      {/* 4. Portfolio Performance & Breakdown (TradeOS Graphs) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        {/* Panel 1: Daily P&L Bar Chart */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
+                  <BarChart2 className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                    Daily P&amp;L
+                  </h3>
+                  <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                    Closed trade results · {currSymbol}
+                  </p>
+                </div>
+              </div>
+              <div className="text-xs font-mono font-bold text-[#786F66] dark:text-[#94A3B8]">
+                {allDailyData.length} trading days
+              </div>
+            </div>
+
+            <div className="mt-3 relative">
+              <svg className="w-full h-auto block" viewBox={`0 0 ${dailySvgData.W} ${dailySvgData.H}`}>
+                {/* Gridlines */}
+                {dailySvgData.gridLevels.map((g, i) => (
+                  <g key={i}>
+                    <line
+                      x1={dailySvgData.L}
+                      y1={g.y}
+                      x2={dailySvgData.W - dailySvgData.R}
+                      y2={g.y}
+                      stroke="#E7E0D6"
+                      strokeDasharray="3 5"
+                      className="dark:stroke-[#202C40]"
+                    />
+                    <text
+                      x={dailySvgData.L - 6}
+                      y={g.y + 3}
+                      textAnchor="end"
+                      className="fill-[#786F66] dark:fill-[#8290A8] text-[9px] font-mono"
+                    >
+                      {g.label}
+                    </text>
+                  </g>
+                ))}
+
+                {/* Baseline at y = 0 */}
+                <line
+                  x1={dailySvgData.L}
+                  y1={dailySvgData.baselineY}
+                  x2={dailySvgData.W - dailySvgData.R}
+                  y2={dailySvgData.baselineY}
+                  stroke="#786F66"
+                  strokeWidth="1"
+                  opacity="0.4"
+                />
+
+                {/* Bars */}
+                {dailySvgData.bars.map((b, i) => (
+                  <rect
+                    key={i}
+                    x={b.x}
+                    y={b.y}
+                    width={b.width}
+                    height={b.height}
+                    rx="2"
+                    fill={b.isPositive ? '#10B981' : '#DC2626'}
+                    className="cursor-pointer transition-all hover:opacity-80"
+                    onMouseEnter={() => setHoveredDaily(b.item)}
+                    onMouseLeave={() => setHoveredDaily(null)}
+                    onClick={() => onSelectDate?.(b.item.date)}
+                  />
+                ))}
+
+                {/* X-axis labels */}
+                {dailySvgData.bars
+                  .filter((_, i) => dailySvgData.bars.length <= 8 || i % Math.ceil(dailySvgData.bars.length / 7) === 0)
+                  .map((b, i) => (
+                    <text
+                      key={i}
+                      x={b.x + b.width / 2}
+                      y={dailySvgData.H - 8}
+                      textAnchor="middle"
+                      className="fill-[#786F66] dark:fill-[#8290A8] text-[9px] font-mono"
+                    >
+                      {b.item.label}
+                    </text>
+                  ))}
+              </svg>
+
+              {/* Tooltip */}
+              {hoveredDaily && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white px-2.5 py-1 rounded-lg text-[10px] font-mono shadow-lg border border-[#3A322A] dark:border-[#242D3D] pointer-events-none z-20 whitespace-nowrap">
+                  <span>{hoveredDaily.date}: </span>
+                  <span className={hoveredDaily.pnl >= 0 ? 'text-[#34D399] font-bold' : 'text-[#F87171] font-bold'}>
+                    {hoveredDaily.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(hoveredDaily.pnl).toFixed(2)}
+                  </span>
+                  <span className="text-[#9E958C] ml-1.5">({hoveredDaily.count} trade{hoveredDaily.count === 1 ? '' : 's'})</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-[#786F66] dark:text-[#94A3B8] font-mono mt-3 pt-2 border-t border-[#E7E0D6]/50 dark:border-[#242D3D]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#10B981]" />
+              Profit
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#DC2626]" />
+              Loss
+            </span>
+          </div>
+        </div>
+
+        {/* Panel 2: Monthly Returns */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                    Monthly returns
+                  </h3>
+                  <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                    Monthly net performance · {currSymbol}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 relative">
+              <svg className="w-full h-auto block" viewBox={`0 0 ${monthlySvgData.W} ${monthlySvgData.H}`}>
+                {/* Gridlines */}
+                {monthlySvgData.gridLevels.map((g, i) => (
+                  <g key={i}>
+                    <line
+                      x1={monthlySvgData.L}
+                      y1={g.y}
+                      x2={monthlySvgData.W - monthlySvgData.R}
+                      y2={g.y}
+                      stroke="#E7E0D6"
+                      strokeDasharray="3 5"
+                      className="dark:stroke-[#202C40]"
+                    />
+                    <text
+                      x={monthlySvgData.L - 6}
+                      y={g.y + 3}
+                      textAnchor="end"
+                      className="fill-[#786F66] dark:fill-[#8290A8] text-[9px] font-mono"
+                    >
+                      {g.label}
+                    </text>
+                  </g>
+                ))}
+
+                {/* Baseline at y = 0 */}
+                <line
+                  x1={monthlySvgData.L}
+                  y1={monthlySvgData.baselineY}
+                  x2={monthlySvgData.W - monthlySvgData.R}
+                  y2={monthlySvgData.baselineY}
+                  stroke="#786F66"
+                  strokeWidth="1"
+                  opacity="0.4"
+                />
+
+                {/* Bars */}
+                {monthlySvgData.bars.map((b, i) => (
+                  <rect
+                    key={i}
+                    x={b.x}
+                    y={b.y}
+                    width={b.width}
+                    height={b.height}
+                    rx="3"
+                    fill={b.isPositive ? '#3B82F6' : '#DC2626'}
+                    className="cursor-pointer transition-all hover:opacity-80"
+                    onMouseEnter={() => setHoveredMonthly(b.item)}
+                    onMouseLeave={() => setHoveredMonthly(null)}
+                  />
+                ))}
+
+                {/* X-axis labels */}
+                {monthlySvgData.bars.map((b, i) => (
+                  <text
+                    key={i}
+                    x={b.x + b.width / 2}
+                    y={monthlySvgData.H - 8}
+                    textAnchor="middle"
+                    className="fill-[#786F66] dark:fill-[#8290A8] text-[9px] font-mono"
+                  >
+                    {b.item.label}
+                  </text>
+                ))}
+              </svg>
+
+              {/* Tooltip */}
+              {hoveredMonthly && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white px-2.5 py-1 rounded-lg text-[10px] font-mono shadow-lg border border-[#3A322A] dark:border-[#242D3D] pointer-events-none z-20 whitespace-nowrap">
+                  <span>{hoveredMonthly.label} ({hoveredMonthly.key}): </span>
+                  <span className={hoveredMonthly.pnl >= 0 ? 'text-[#34D399] font-bold' : 'text-[#F87171] font-bold'}>
+                    {hoveredMonthly.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(hoveredMonthly.pnl).toFixed(2)}
+                  </span>
+                  <span className="text-[#9E958C] ml-1.5">({hoveredMonthly.count} trades, {hoveredMonthly.winRate.toFixed(0)}% WR)</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-[#786F66] dark:text-[#94A3B8] font-mono mt-3 pt-2 border-t border-[#E7E0D6]/50 dark:border-[#242D3D]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#3B82F6]" />
+              Monthly P&amp;L
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 5. Drawdown Analysis & Performance Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        {/* Panel 3: Drawdown analysis */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center">
+                  <TrendingDown className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                    Drawdown analysis
+                  </h3>
+                  <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                    Decline from previous equity peak
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 relative">
+              <svg className="w-full h-auto block" viewBox={`0 0 ${drawdownSvgData.W} ${drawdownSvgData.H}`}>
+                <defs>
+                  <linearGradient id="drawdownGradientDash" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#DC2626" stopOpacity="0.05" />
+                    <stop offset="100%" stopColor="#DC2626" stopOpacity="0.3" />
+                  </linearGradient>
+                </defs>
+
+                {/* Gridlines */}
+                {drawdownSvgData.gridLevels.map((g, i) => (
+                  <g key={i}>
+                    <line
+                      x1={drawdownSvgData.L}
+                      y1={g.y}
+                      x2={drawdownSvgData.W - drawdownSvgData.R}
+                      y2={g.y}
+                      stroke="#E7E0D6"
+                      strokeDasharray="3 5"
+                      className="dark:stroke-[#202C40]"
+                    />
+                    <text
+                      x={drawdownSvgData.L - 6}
+                      y={g.y + 3}
+                      textAnchor="end"
+                      className="fill-[#786F66] dark:fill-[#8290A8] text-[9px] font-mono"
+                    >
+                      {g.label}
+                    </text>
+                  </g>
+                ))}
+
+                {/* Underwater Area */}
+                {drawdownSvgData.areaD && (
+                  <path d={drawdownSvgData.areaD} fill="url(#drawdownGradientDash)" />
+                )}
+
+                {/* Underwater Line */}
+                <path
+                  d={drawdownSvgData.pathD}
+                  fill="none"
+                  stroke="#DC2626"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+
+                {/* Interactive Points */}
+                {drawdownSvgData.pts.map((pt, i) => (
+                  <circle
+                    key={i}
+                    cx={drawdownSvgData.getX(i)}
+                    cy={drawdownSvgData.getY(pt.ddPct)}
+                    r={hoveredDrawdown?.date === pt.date ? 4.5 : 2.5}
+                    fill="#DC2626"
+                    stroke="#FFFFFF"
+                    strokeWidth={hoveredDrawdown?.date === pt.date ? 2 : 1}
+                    className="cursor-pointer transition-all hover:r-4"
+                    onMouseEnter={() => setHoveredDrawdown(pt)}
+                    onMouseLeave={() => setHoveredDrawdown(null)}
+                  />
+                ))}
+
+                {/* X labels */}
+                <text x={drawdownSvgData.L} y={drawdownSvgData.H - 8} className="fill-[#786F66] dark:fill-[#8290A8] text-[9px] font-mono">
+                  Peak Start
+                </text>
+                <text
+                  x={drawdownSvgData.W - drawdownSvgData.R}
+                  y={drawdownSvgData.H - 8}
+                  textAnchor="end"
+                  className="fill-[#786F66] dark:fill-[#8290A8] text-[9px] font-mono"
+                >
+                  Current
+                </text>
+              </svg>
+
+              {/* Tooltip */}
+              {hoveredDrawdown && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white px-2.5 py-1 rounded-lg text-[10px] font-mono shadow-lg border border-[#3A322A] dark:border-[#242D3D] pointer-events-none z-20 whitespace-nowrap">
+                  <span>{hoveredDrawdown.date}: </span>
+                  <span className="text-[#F87171] font-bold">-{hoveredDrawdown.ddPct.toFixed(2)}%</span>
+                  <span className="text-[#9E958C] ml-1.5">(-{currSymbol}{hoveredDrawdown.ddUsd.toFixed(2)})</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-3 mt-2 border-t border-[#E7E0D6]/50 dark:border-[#242D3D]">
+            <span className="text-[#786F66] dark:text-[#94A3B8]">Maximum drawdown</span>
+            <b className="text-[#DC2626] dark:text-[#F87171] font-mono">
+              -{perf.maxDrawdownPercent.toFixed(2)}% (-{currSymbol}{perf.maxDrawdownUsd.toFixed(2)})
+            </b>
+          </div>
+        </div>
+
+        {/* Panel 4: Performance breakdown */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
+          <div>
+            <div className="flex items-center justify-between pb-2 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
+                  <Target className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                    Performance breakdown
+                  </h3>
+                  <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                    Closed positions &amp; win/loss metrics
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-6 my-4">
+              {/* Donut SVG */}
+              <div className="w-[124px] h-[124px] shrink-0 relative flex items-center justify-center">
+                <svg viewBox="0 0 110 110" width="124" height="124">
+                  {/* Base Track (Losses) */}
+                  <circle
+                    cx="55"
+                    cy="55"
+                    r={donutRadius}
+                    fill="none"
+                    stroke="#DC2626"
+                    strokeWidth="12"
+                    opacity="0.85"
+                  />
+                  {/* Win Arc */}
+                  <circle
+                    cx="55"
+                    cy="55"
+                    r={donutRadius}
+                    fill="none"
+                    stroke="#10B981"
+                    strokeWidth="12"
+                    strokeDasharray={`${winArcLength} ${donutCircumference - winArcLength}`}
+                    transform="rotate(-90 55 55)"
+                    strokeLinecap="round"
+                  />
+                  <text
+                    x="55"
+                    y="52"
+                    fill="currentColor"
+                    textAnchor="middle"
+                    className="text-lg font-black fill-[#1F1A16] dark:fill-[#F0F4F8]"
+                  >
+                    {perf.winRate.toFixed(0)}%
+                  </text>
+                  <text
+                    x="55"
+                    y="67"
+                    fill="#786F66"
+                    textAnchor="middle"
+                    className="text-[9px] font-bold fill-[#786F66] dark:fill-[#94A3B8]"
+                  >
+                    WIN RATE
+                  </text>
+                </svg>
+              </div>
+
+              {/* Stats next to Donut */}
+              <div className="space-y-2">
+                <div>
+                  <div className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                    Win / loss ratio
+                  </div>
+                  <div className="text-2xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8]">
+                    {winLossRatio}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <span className="flex items-center gap-1.5 text-[#10B981]">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                    {winningTrades.length} winners
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[#DC2626]">
+                    <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
+                    {losingTrades.length} losers
+                  </span>
+                  {beTrades.length > 0 && (
+                    <span className="flex items-center gap-1.5 text-[#9E958C]">
+                      <span className="w-2 h-2 rounded-full bg-[#9E958C]" />
+                      {beTrades.length} BE
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-3 mt-2 border-t border-[#E7E0D6]/50 dark:border-[#242D3D]">
+            <span className="text-[#786F66] dark:text-[#94A3B8]">
+              Avg win: <b className="text-[#10B981] font-mono">+{currSymbol}{avgWin.toFixed(2)}</b>
+            </span>
+            <span className="text-[#786F66] dark:text-[#94A3B8]">
+              Avg loss: <b className="text-[#DC2626] font-mono">-{currSymbol}{avgLoss.toFixed(2)}</b>
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 6. Middle Row: 3-Column Balanced Feature Grid (Trading Rules removed per user request) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
         
         {/* Card 1: Monthly Cycle Progress */}
