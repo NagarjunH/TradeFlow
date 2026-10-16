@@ -2,11 +2,23 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+export const LOCAL_MODE_STORAGE_KEY = 'tradeflow_local_mode';
+
+export const MOCK_LOCAL_USER: User = {
+  id: '00000000-0000-0000-0000-000000000000',
+  app_metadata: { provider: 'local' },
+  user_metadata: { name: 'Local Trader' },
+  aud: 'authenticated',
+  created_at: new Date().toISOString(),
+  email: 'local@tradeflow.app',
+};
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
   signOut: () => Promise<void>;
+  loginAsLocalUser: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -14,11 +26,15 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   isLoading: true,
   signOut: async () => {},
+  loginAsLocalUser: () => {},
 });
 
 function getCachedSession(): { user: User | null; session: Session | null } {
   try {
     if (typeof window === 'undefined') return { user: null, session: null };
+    if (localStorage.getItem(LOCAL_MODE_STORAGE_KEY) === 'true') {
+      return { user: MOCK_LOCAL_USER, session: null };
+    }
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && (key.endsWith('-auth-token') || key.includes('supabase.auth.token'))) {
@@ -47,29 +63,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Verify & refresh session in background
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
+      if (session) {
+        setSession(session);
+        setUser(session.user);
+        setIsLoading(false);
+      } else {
+        const isLocal = typeof window !== 'undefined' && localStorage.getItem(LOCAL_MODE_STORAGE_KEY) === 'true';
+        if (isLocal) {
+          setUser(MOCK_LOCAL_USER);
+          setSession(null);
+        } else {
+          setUser(null);
+          setSession(null);
+        }
+        setIsLoading(false);
+      }
     });
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setIsLoading(false);
+        if (session) {
+          try { localStorage.removeItem(LOCAL_MODE_STORAGE_KEY); } catch (_) {}
+          setSession(session);
+          setUser(session.user);
+          setIsLoading(false);
+        } else {
+          const isLocal = typeof window !== 'undefined' && localStorage.getItem(LOCAL_MODE_STORAGE_KEY) === 'true';
+          if (!isLocal) {
+            setSession(null);
+            setUser(null);
+          }
+          setIsLoading(false);
+        }
       }
     );
 
     return () => subscription.unsubscribe();
   }, []);
 
+  const loginAsLocalUser = () => {
+    try {
+      localStorage.setItem(LOCAL_MODE_STORAGE_KEY, 'true');
+    } catch (_) {}
+    setUser(MOCK_LOCAL_USER);
+    setSession(null);
+    setIsLoading(false);
+  };
+
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      localStorage.removeItem(LOCAL_MODE_STORAGE_KEY);
+    } catch (_) {}
+    await supabase.auth.signOut().catch(() => {});
+    setUser(null);
+    setSession(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
+    <AuthContext.Provider value={{ user, session, isLoading, signOut, loginAsLocalUser }}>
       {children}
     </AuthContext.Provider>
   );

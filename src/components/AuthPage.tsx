@@ -1,50 +1,103 @@
 import { useState, type FormEvent } from 'react';
-import { TrendingUp, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Mail, Shield } from 'lucide-react';
+import { TrendingUp, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Mail, Shield, Zap, RefreshCw, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 type AuthMode = 'login' | 'signup' | 'forgot';
 
 export function AuthPage() {
+  const { loginAsLocalUser } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [unconfirmedEmailNotice, setUnconfirmedEmailNotice] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
+    setUnconfirmedEmailNotice(null);
     setIsLoading(true);
 
     try {
       if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (error) throw error;
+        const { error: signInError } = await supabase.auth.signInWithPassword({ 
+          email: email.trim(), 
+          password 
+        });
+
+        if (signInError) {
+          const msg = signInError.message.toLowerCase();
+          if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+            setError('Invalid credentials.');
+            setUnconfirmedEmailNotice(
+              'If you recently signed up, your email address may need confirmation. Please check your inbox & spam folder. Alternatively, disable "Confirm email" in Supabase Dashboard (Auth -> Providers -> Email) to allow instant login.'
+            );
+            return;
+          }
+          if (msg.includes('email not confirmed')) {
+            setError('Email not confirmed.');
+            setUnconfirmedEmailNotice(
+              'Please click the verification link sent to your email (check Spam folder). Or turn off "Confirm email" in Supabase Dashboard.'
+            );
+            return;
+          }
+          throw signInError;
+        }
 
       } else if (mode === 'signup') {
         if (!name.trim()) throw new Error('Please enter your name.');
         if (password.length < 6) throw new Error('Password must be at least 6 characters.');
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
             data: { name: name.trim() },
           },
         });
-        if (error) throw error;
-        setSuccessMsg('Account created successfully! You can now login.');
+
+        if (signUpError) {
+          const msg = signUpError.message.toLowerCase();
+          if (msg.includes('rate limit') || msg.includes('over_email_send_rate_limit')) {
+            throw new Error(
+              'Supabase email sending limit exceeded. To bypass email verification, turn OFF "Confirm email" in Supabase Dashboard (Authentication -> Providers -> Email), or click "Continue in Offline / Local Mode" below.'
+            );
+          }
+          throw signUpError;
+        }
+
+        // If auto-confirmed by Supabase (session present)
+        if (data.session) {
+          setSuccessMsg('Account created and verified! Redirecting to TradeFlow...');
+          return;
+        }
+
+        // If email was already taken
+        if (data.user && data.user.identities && data.user.identities.length === 0) {
+          setError('An account with this email already exists. Please log in or click "Forgot password".');
+          setMode('login');
+          return;
+        }
+
+        // When email verification is required by Supabase
+        setSuccessMsg(`Account created for ${email.trim()}!`);
+        setUnconfirmedEmailNotice(
+          'Verification email sent. Please check your email inbox and spam folder to confirm your account before logging in. (Tip: In Supabase Dashboard -> Auth -> Providers -> Email, disable "Confirm email" for instant login without emails).'
+        );
         setMode('login');
 
       } else if (mode === 'forgot') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: `${window.location.origin}/reset-password`,
         });
-        if (error) throw error;
+        if (resetError) throw resetError;
         setSuccessMsg('Password reset email sent. Check your inbox.');
       }
     } catch (err: unknown) {
@@ -52,6 +105,33 @@ export function AuthPage() {
       setError(msg);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!email.trim()) {
+      setError('Please enter your email above to resend confirmation.');
+      return;
+    }
+    setIsResending(true);
+    setError(null);
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+      });
+      if (resendError) {
+        if (resendError.message.toLowerCase().includes('rate limit')) {
+          throw new Error('Email rate limit exceeded by Supabase. Turn off "Confirm email" in Supabase Dashboard to log in without email verification.');
+        }
+        throw resendError;
+      }
+      setSuccessMsg(`Confirmation email resent to ${email.trim()}! Please check your inbox and spam folder.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to resend confirmation.';
+      setError(msg);
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -87,7 +167,12 @@ export function AuthPage() {
               {['login', 'signup'].map((m) => (
                 <button
                   key={m}
-                  onClick={() => { setMode(m as AuthMode); setError(null); setSuccessMsg(null); }}
+                  onClick={() => { 
+                    setMode(m as AuthMode); 
+                    setError(null); 
+                    setSuccessMsg(null); 
+                    setUnconfirmedEmailNotice(null);
+                  }}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     mode === m
                       ? 'bg-[#10B981]/15 text-[#059669] dark:text-[#34D399] border border-[#10B981]/40 shadow-xs'
@@ -167,10 +252,31 @@ export function AuthPage() {
                 {mode === 'login' && (
                   <button
                     type="button"
-                    onClick={() => { setMode('forgot'); setError(null); }}
+                    onClick={() => { setMode('forgot'); setError(null); setSuccessMsg(null); setUnconfirmedEmailNotice(null); }}
                     className="text-[10px] text-[#786F66] dark:text-[#94A3B8] hover:text-[#10B981] transition-colors cursor-pointer"
                   >
                     Forgot password?
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Unconfirmed Email Notice Banner */}
+            {unconfirmedEmailNotice && (
+              <div className="p-3.5 bg-[#FAF2E6] dark:bg-[#251E14] border border-[#ECD9BE] dark:border-[#523E23] rounded-xl text-xs space-y-2 text-[#7A541A] dark:text-[#FBBF24] animate-fade-in">
+                <div className="flex items-start gap-2">
+                  <Info className="w-4 h-4 shrink-0 mt-0.5 text-[#D97706]" />
+                  <span className="leading-relaxed">{unconfirmedEmailNotice}</span>
+                </div>
+                {email && (
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={isResending}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D97706] hover:bg-[#B45309] text-white text-[11px] font-bold cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isResending ? 'animate-spin' : ''}`} />
+                    {isResending ? 'Sending...' : 'Resend Confirmation Email'}
                   </button>
                 )}
               </div>
@@ -216,6 +322,26 @@ export function AuthPage() {
                   Send Password Reset Link
                 </>
               )}
+            </button>
+
+            {/* Divider */}
+            <div className="relative py-1">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-[#E7E0D6] dark:border-[#242D3D]" />
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-wider text-[#9E958C] dark:text-[#64748B]">
+                <span className="bg-[#FAF6EE] dark:bg-[#131822] px-2">OR</span>
+              </div>
+            </div>
+
+            {/* Instant Offline / Local Mode Button */}
+            <button
+              type="button"
+              onClick={loginAsLocalUser}
+              className="w-full py-2.5 px-3.5 bg-white dark:bg-[#1A2230] hover:bg-[#F2ECE1] dark:hover:bg-[#242E40] border border-[#D5CBBE] dark:border-[#333F54] rounded-xl text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer active:scale-[0.99]"
+            >
+              <Zap className="w-3.5 h-3.5 text-[#F59E0B]" />
+              <span>Continue in Offline / Local Mode (Instant Access)</span>
             </button>
 
             {mode === 'forgot' && (

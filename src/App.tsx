@@ -83,6 +83,7 @@ function AppInner() {
     }
 
     if (!user) return;
+    if (user.id === '00000000-0000-0000-0000-000000000000') return;
 
     // Step 2: Background cloud sync
     setIsSyncing(true);
