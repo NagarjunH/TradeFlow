@@ -1348,65 +1348,82 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </span>
             </div>
 
-            {/* Daily Bar Chart with Y-Axis */}
-            <div className="h-32 w-full pt-2 relative flex items-center">
-              {/* Y-axis Ticks on Left */}
-              <div className="h-full flex flex-col justify-between text-[9px] font-mono text-[#9E958C] pr-1.5 shrink-0 text-right select-none">
-                <span>{currSymbol}{monthlyBarChartData.roundedMax}</span>
-                <span>{currSymbol}{Math.round(monthlyBarChartData.roundedMax / 2)}</span>
-                <span>{currSymbol}0</span>
-                <span>-{currSymbol}{Math.round(monthlyBarChartData.roundedMax / 2)}</span>
-                <span>-{currSymbol}{monthlyBarChartData.roundedMax}</span>
-              </div>
+            {/* Daily Bar Chart - SVG based */}
+            <div className="relative w-full mt-2">
+              <svg
+                className="w-full h-auto block"
+                viewBox="0 0 320 110"
+                preserveAspectRatio="xMidYMid meet"
+              >
+                {/* Y-axis labels */}
+                <text x="2" y="12" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">{currSymbol}{monthlyBarChartData.roundedMax}</text>
+                <text x="2" y="36" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">{currSymbol}{Math.round(monthlyBarChartData.roundedMax / 2)}</text>
+                <text x="2" y="59" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">{currSymbol}0</text>
+                <text x="2" y="82" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">-{currSymbol}{Math.round(monthlyBarChartData.roundedMax / 2)}</text>
+                <text x="2" y="105" textAnchor="start" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">-{currSymbol}{monthlyBarChartData.roundedMax}</text>
 
-              <div className="relative flex-1 h-full flex items-center">
-                {/* Horizontal $0 Midline */}
-                <div className="absolute inset-x-0 top-1/2 border-b border-dashed border-[#E7E0D6] dark:border-[#2E384D]" />
-                
+                {/* Gridlines */}
+                {[8, 32, 56, 80, 104].map((y, i) => (
+                  <line key={i} x1="30" y1={y} x2="318" y2={y} stroke="#E7E0D6" strokeDasharray="2 4" strokeWidth="0.5" className="dark:stroke-[#202C40]" />
+                ))}
+
+                {/* $0 Baseline – thicker */}
+                <line x1="30" y1="56" x2="318" y2="56" stroke="#9E958C" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
+
                 {/* Bars */}
-                <div className="w-full flex items-end justify-between gap-0.5 sm:gap-1 h-full z-10 px-1">
-                  {monthlyBarChartData.daysArr.map((item) => {
-                    const isPositive = item.pnl > 0.001;
-                    const isNegative = item.pnl < -0.001;
-                    const heightPercent = Math.min(46, (Math.abs(item.pnl) / monthlyBarChartData.roundedMax) * 46);
+                {monthlyBarChartData.daysArr.map((item, idx) => {
+                  const totalDays = monthlyBarChartData.daysArr.length;
+                  const chartW = 288; // 318 - 30
+                  const barW = Math.max(3, Math.floor((chartW / totalDays) * 0.65));
+                  const gap = chartW / totalDays;
+                  const cx = 30 + idx * gap + gap / 2;
+                  const x = cx - barW / 2;
+                  const baselineY = 56;
+                  const maxPx = 48; // pixels from baseline to top/bottom
+                  const isPositive = item.pnl > 0.001;
+                  const isNegative = item.pnl < -0.001;
+                  const barH = Math.max(2, Math.min(maxPx, (Math.abs(item.pnl) / monthlyBarChartData.roundedMax) * maxPx));
 
+                  if (!isPositive && !isNegative) {
                     return (
-                      <div 
-                        key={item.day} 
-                        className="flex-1 flex flex-col items-center h-full justify-center group relative cursor-pointer"
+                      <rect key={item.day} x={x} y={baselineY - 0.5} width={barW} height={1} rx="0.5" fill="#D1D5DB" opacity="0.4" />
+                    );
+                  }
+
+                  return (
+                    <g key={item.day} className="cursor-pointer" onClick={() => { onSelectDate?.(`${currentMonthStr}-${String(item.day).padStart(2, '0')}`); }}>
+                      <rect
+                        x={x}
+                        y={isPositive ? baselineY - barH : baselineY}
+                        width={barW}
+                        height={barH}
+                        rx="1.5"
+                        fill={isPositive ? '#10B981' : '#EF4444'}
+                        opacity="0.9"
                         onMouseEnter={() => setHoveredBar(item)}
                         onMouseLeave={() => setHoveredBar(null)}
-                        onClick={() => {
-                          const dateStr = `${currentMonthStr}-${String(item.day).padStart(2, '0')}`;
-                          onSelectDate?.(dateStr);
-                        }}
-                      >
-                        {isPositive ? (
-                          <div className="w-full flex flex-col items-center justify-end h-1/2">
-                            <div
-                              style={{ height: `${Math.max(14, heightPercent * 2)}%` }}
-                              className="w-full max-w-[6px] rounded-t-sm bg-[#10B981] group-hover:bg-[#059669] transition-all"
-                            />
-                          </div>
-                        ) : isNegative ? (
-                          <div className="w-full flex flex-col items-center justify-start h-1/2">
-                            <div
-                              style={{ height: `${Math.max(14, heightPercent * 2)}%` }}
-                              className="w-full max-w-[6px] rounded-b-sm bg-[#EF4444] group-hover:bg-[#DC2626] transition-all"
-                            />
-                          </div>
-                        ) : (
-                          <div className="w-1 h-1 rounded-full bg-[#E7E0D6] dark:bg-[#242D3D] group-hover:bg-[#DB9F35] transition-colors" />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      />
+                    </g>
+                  );
+                })}
+
+                {/* X-Axis day labels */}
+                {[1, 5, 10, 15, 20, 25, 31].map((day) => {
+                  const totalDays = monthlyBarChartData.daysArr.length;
+                  const chartW = 288;
+                  const gap = chartW / totalDays;
+                  const cx = 30 + (day - 1) * gap + gap / 2;
+                  return (
+                    <text key={day} x={cx} y="110" textAnchor="middle" className="fill-[#9E958C] dark:fill-[#64748B] text-[8px] font-mono" fontSize="8">
+                      {day}
+                    </text>
+                  );
+                })}
+              </svg>
 
               {/* Bar Hover Tooltip */}
               {hoveredBar && (
-                <div className="absolute top-1 left-1/2 -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white px-2.5 py-1 rounded-lg text-[10px] font-mono shadow-lg border border-[#3A322A] dark:border-[#242D3D] pointer-events-none z-20 whitespace-nowrap">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-[#1F1A16] dark:bg-[#0B0F17] text-white px-2.5 py-1 rounded-lg text-[10px] font-mono shadow-lg border border-[#3A322A] dark:border-[#242D3D] pointer-events-none z-20 whitespace-nowrap">
                   <span>Day {hoveredBar.day}: </span>
                   <span className={hoveredBar.pnl > 0 ? 'text-[#10B981] font-bold' : hoveredBar.pnl < 0 ? 'text-[#EF4444] font-bold' : 'text-[#9E958C]'}>
                     {hoveredBar.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(hoveredBar.pnl).toFixed(2)} ({hoveredBar.r >= 0 ? '+' : ''}{hoveredBar.r.toFixed(1)}R)
@@ -1416,16 +1433,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               )}
             </div>
 
-            {/* X-Axis labels for days */}
-            <div className="flex justify-between pl-6 text-[9px] font-mono text-[#9E958C] dark:text-[#64748B] border-t border-[#E7E0D6]/60 dark:border-[#242D3D] pt-1 mt-1">
-              <span>1</span>
-              <span>5</span>
-              <span>10</span>
-              <span>15</span>
-              <span>20</span>
-              <span>25</span>
-              <span>31</span>
-            </div>
           </div>
 
           {/* Bottom Card: Quick Stats */}
