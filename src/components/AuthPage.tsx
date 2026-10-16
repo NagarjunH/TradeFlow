@@ -25,26 +25,29 @@ export function AuthPage() {
     setUnconfirmedEmailNotice(null);
     setIsLoading(true);
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
     try {
       if (mode === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ 
-          email: email.trim(), 
-          password 
+          email: cleanEmail, 
+          password: cleanPassword 
         });
 
         if (signInError) {
           const msg = signInError.message.toLowerCase();
           if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
-            setError('Invalid credentials.');
+            setError('Invalid email or password.');
             setUnconfirmedEmailNotice(
-              'If you recently signed up, your email address may need confirmation. Please check your inbox & spam folder. Alternatively, disable "Confirm email" in Supabase Dashboard (Auth -> Providers -> Email) to allow instant login.'
+              'If this account was created earlier when email confirmation was required, your email might not be verified yet. You can click "Forgot password" below to set a new password, or click "Continue in Offline / Local Mode" for instant access.'
             );
             return;
           }
           if (msg.includes('email not confirmed')) {
             setError('Email not confirmed.');
             setUnconfirmedEmailNotice(
-              'Please click the verification link sent to your email (check Spam folder). Or turn off "Confirm email" in Supabase Dashboard.'
+              'Please check your inbox & spam folder for the confirmation email, or reset your password below.'
             );
             return;
           }
@@ -53,11 +56,11 @@ export function AuthPage() {
 
       } else if (mode === 'signup') {
         if (!name.trim()) throw new Error('Please enter your name.');
-        if (password.length < 6) throw new Error('Password must be at least 6 characters.');
+        if (cleanPassword.length < 6) throw new Error('Password must be at least 6 characters.');
 
         const { data, error: signUpError } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
+          email: cleanEmail,
+          password: cleanPassword,
           options: {
             data: { name: name.trim() },
           },
@@ -65,9 +68,14 @@ export function AuthPage() {
 
         if (signUpError) {
           const msg = signUpError.message.toLowerCase();
+          if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user_already_exists')) {
+            setError('This email is already registered! Please log in with your password, or click "Forgot password" to reset it.');
+            setMode('login');
+            return;
+          }
           if (msg.includes('rate limit') || msg.includes('over_email_send_rate_limit')) {
             throw new Error(
-              'Supabase email sending limit exceeded. To bypass email verification, turn OFF "Confirm email" in Supabase Dashboard (Authentication -> Providers -> Email), or click "Continue in Offline / Local Mode" below.'
+              'Email rate limit exceeded by Supabase. Please click "Continue in Offline / Local Mode" below to access TradeFlow instantly.'
             );
           }
           throw signUpError;
@@ -87,18 +95,18 @@ export function AuthPage() {
         }
 
         // When email verification is required by Supabase
-        setSuccessMsg(`Account created for ${email.trim()}!`);
+        setSuccessMsg(`Account created for ${cleanEmail}!`);
         setUnconfirmedEmailNotice(
-          'Verification email sent. Please check your email inbox and spam folder to confirm your account before logging in. (Tip: In Supabase Dashboard -> Auth -> Providers -> Email, disable "Confirm email" for instant login without emails).'
+          'Account created! You can now log in with your email and password.'
         );
         setMode('login');
 
       } else if (mode === 'forgot') {
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: `${window.location.origin}/reset-password`,
         });
         if (resetError) throw resetError;
-        setSuccessMsg('Password reset email sent. Check your inbox.');
+        setSuccessMsg('Password reset email sent. Check your inbox & spam folder.');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong.';
@@ -109,7 +117,8 @@ export function AuthPage() {
   };
 
   const handleResendConfirmation = async () => {
-    if (!email.trim()) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
       setError('Please enter your email above to resend confirmation.');
       return;
     }
@@ -118,7 +127,7 @@ export function AuthPage() {
     try {
       const { error: resendError } = await supabase.auth.resend({
         type: 'signup',
-        email: email.trim(),
+        email: cleanEmail,
       });
       if (resendError) {
         if (resendError.message.toLowerCase().includes('rate limit')) {
@@ -220,6 +229,7 @@ export function AuthPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setEmail((prev) => prev.trim().toLowerCase())}
                 placeholder="your@email.com"
                 required
                 autoComplete="email"
