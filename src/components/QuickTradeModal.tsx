@@ -361,19 +361,22 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
 
           <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
             {/* Row 1: Pair & BUY/SELL & Date */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#786F66] uppercase tracking-wider mb-1.5">Pair</label>
-                <div className="flex gap-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-start">
+              {/* Pair: 5 columns */}
+              <div className="sm:col-span-5 min-w-0">
+                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                  Pair
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
                   {['XAU/USD', 'EUR/USD', 'GBP/USD'].map((p) => (
                     <button
                       key={p}
                       type="button"
                       onClick={() => setPair(p)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                      className={`py-2 px-1 rounded-xl text-[11px] sm:text-xs font-bold border transition-all text-center truncate cursor-pointer ${
                         pair === p
                           ? 'bg-[#DB9F35] text-[#1F1A16] border-[#DB9F35] shadow-xs'
-                          : 'bg-[#FAF7F2] text-[#786F66] border-[#E7E0D6] hover:text-[#1F1A16]'
+                          : 'bg-[#FAF7F2] dark:bg-[#1A2230] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
                       }`}
                     >
                       {p}
@@ -382,16 +385,19 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#786F66] uppercase tracking-wider mb-1.5">Direction</label>
-                <div className="grid grid-cols-2 gap-2">
+              {/* Direction: 3 columns */}
+              <div className="sm:col-span-3 min-w-0">
+                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                  Direction
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
                     onClick={() => setOrder('BUY')}
-                    className={`py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1 ${
+                    className={`py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
                       order === 'BUY'
                         ? 'bg-[#16A34A] text-white border-[#16A34A] shadow-xs'
-                        : 'bg-[#E8F8EE] text-[#15803D] border-[#B7ECC8] hover:bg-[#D8F3E2]'
+                        : 'bg-[#E8F8EE] dark:bg-[#152E20] text-[#15803D] dark:text-[#4ADE80] border-[#B7ECC8] dark:border-[#1E4D30] hover:bg-[#D8F3E2] dark:hover:bg-[#1A3828]'
                     }`}
                   >
                     BUY 🟢
@@ -399,10 +405,10 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setOrder('SELL')}
-                    className={`py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1 ${
+                    className={`py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
                       order === 'SELL'
                         ? 'bg-[#DC2626] text-white border-[#DC2626] shadow-xs'
-                        : 'bg-[#FEECEB] text-[#B91C1C] border-[#FBC5C2] hover:bg-[#FCD8D5]'
+                        : 'bg-[#FEECEB] dark:bg-[#331818] text-[#B91C1C] dark:text-[#F87171] border-[#FBC5C2] dark:border-[#522020] hover:bg-[#FCD8D5] dark:hover:bg-[#401E1E]'
                     }`}
                   >
                     SELL 🔴
@@ -410,35 +416,38 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#786F66] uppercase tracking-wider mb-1.5">Date & Time</label>
+              {/* Date & Time: 4 columns */}
+              <div className="sm:col-span-4 min-w-0">
+                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                  Date & Time
+                </label>
                 <div className="flex gap-1.5">
                   <input
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="flex-1 bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] focus:border-[#DB9F35] outline-none"
+                    className="flex-1 min-w-0 bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-2 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none [color-scheme:light] dark:[color-scheme:dark]"
                   />
                   <input
                     type="time"
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
-                    className="w-20 bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl px-2 py-1.5 text-xs text-[#1F1A16] focus:border-[#DB9F35] outline-none"
+                    className="w-20 shrink-0 bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2 py-2 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none [color-scheme:light] dark:[color-scheme:dark]"
                   />
                 </div>
               </div>
             </div>
 
             {/* Row 2: Lot Size & Risk Calculator */}
-            <div className="bg-[#FAF7F2] border border-[#E7E0D6] rounded-xl p-3.5 space-y-2">
+            <div className="bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#786F66] uppercase tracking-wider">
+                <span className="text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
                   Position Size (Lots)
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowRiskCalc(true)}
-                  className="text-xs text-[#9B671B] hover:text-[#1F1A16] font-semibold flex items-center gap-1 transition-colors"
+                  className="text-xs text-[#9B671B] dark:text-[#E5A93C] hover:text-[#1F1A16] dark:hover:text-white font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <Calculator className="w-3.5 h-3.5 text-[#DB9F35]" />
                   Auto-Calculate by SL
@@ -451,10 +460,10 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                     key={lot}
                     type="button"
                     onClick={() => setLotSize(lot)}
-                    className={`flex-1 py-1.5 rounded-xl text-xs font-mono font-bold border transition-all ${
+                    className={`flex-1 py-1.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer ${
                       lotSize === lot
                         ? 'bg-[#DB9F35] text-[#1F1A16] border-[#DB9F35]'
-                        : 'bg-white text-[#786F66] border-[#E7E0D6] hover:text-[#1F1A16]'
+                        : 'bg-white dark:bg-[#131822] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
                     }`}
                   >
                     {lot}
@@ -465,7 +474,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                   step="0.01"
                   value={lotSize}
                   onChange={(e) => setLotSize(parseFloat(e.target.value) || 0.01)}
-                  className="w-16 px-2 py-1.5 bg-white border border-[#E7E0D6] rounded-xl text-xs font-mono text-center text-[#1F1A16] focus:border-[#DB9F35] outline-none"
+                  className="w-16 px-2 py-1.5 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono text-center text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
                 />
               </div>
             </div>
@@ -756,8 +765,8 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
             </div>
 
             {isLockedOut && !isHardLock && (
-              <div className="p-3 bg-[#FFFBEB] border border-[#FDE68A] rounded-xl space-y-2">
-                <label className="block text-xs font-bold text-[#92400E]">
+              <div className="p-3 bg-[#FFFBEB] dark:bg-[#2A2315] border border-[#FDE68A] dark:border-[#4D3A18] rounded-xl space-y-2">
+                <label className="block text-xs font-bold text-[#92400E] dark:text-[#FBBF24]">
                   Required: Override Reason (Logged in Audit Trail)
                 </label>
                 <input
@@ -766,7 +775,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                   placeholder="Why are you taking this trade after daily loss limit?"
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-[#FDE68A] rounded-xl text-xs text-[#1F1A16] focus:border-[#DB9F35] outline-none"
+                  className="w-full px-3 py-1.5 bg-white dark:bg-[#1C2331] border border-[#FDE68A] dark:border-[#4D3A18] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
                 />
               </div>
             )}
