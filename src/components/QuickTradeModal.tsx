@@ -68,7 +68,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
   const [violationReason, setViolationReason] = useState<ViolationType>('None');
   const [emotion, setEmotion] = useState<EmotionType>('FOCUSED');
 
-  const [setupType, setSetupType] = useState<string>('On Support');
+  const [setupType, setSetupType] = useState<string>('');
   const [htfContext, setHtfContext] = useState<string>('1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
   const [entryReason, setEntryReason] = useState<string>('On Support and Pullback of HTF Support');
   const [session, setSession] = useState<'Tokyo' | 'London' | 'New York' | 'London/NY Overlap' | string>('Tokyo');
@@ -142,7 +142,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setExecution(editTrade.execution || 'CLEAN');
       setViolationReason(editTrade.violationReason || 'None');
       setEmotion(editTrade.emotion || 'FOCUSED');
-      setSetupType(editTrade.setupType || 'On Support');
+      setSetupType(editTrade.setupType || '');
       setHtfContext(editTrade.htfContext || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
       setEntryReason(editTrade.entryReason || '');
       setSession(editTrade.session === 'Asian' ? 'Tokyo' : (editTrade.session || 'Tokyo'));
@@ -163,7 +163,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setExecution('CLEAN');
       setViolationReason('None');
       setEmotion('FOCUSED');
-      setSetupType('On Support');
+      setSetupType('');
       setHtfContext('1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
       setEntryReason('On Support and Pullback of HTF Support');
       setSession('Tokyo');
@@ -606,21 +606,11 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  list="setup-presets"
                   value={setupType}
                   onChange={(e) => setSetupType(e.target.value)}
-                  placeholder="On Support, Important 1H Support and Pullback, MSS + FVG"
-                  className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
+                  placeholder="Type your setup name (e.g. FVG Retest, MSS, Breakout...)"
+                  className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none placeholder:text-[#9E958C]"
                 />
-                <datalist id="setup-presets">
-                  <option value="On Support" />
-                  <option value="Important 1H Support and Pullback" />
-                  <option value="MSS + FVG" />
-                  <option value="Liquidity Sweep" />
-                  <option value="Order Block Tap" />
-                  <option value="Turtle Soup" />
-                  <option value="Range Breakout" />
-                </datalist>
               </div>
 
               <div>
@@ -630,12 +620,20 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                 <select
                   value={session}
                   onChange={(e) => setSession(e.target.value)}
-                  className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none font-semibold"
+                  className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none font-semibold cursor-pointer"
                 >
-                  <option value="Tokyo">Tokyo (Asian)</option>
-                  <option value="London">London</option>
-                  <option value="New York">New York</option>
-                  <option value="London/NY Overlap">London/NY Overlap</option>
+                  <optgroup label="Major Sessions">
+                    <option value="Tokyo">Tokyo (Asian)</option>
+                    <option value="London">London (European)</option>
+                    <option value="New York">New York (US)</option>
+                    <option value="Sydney">Sydney (Pacific)</option>
+                  </optgroup>
+                  <optgroup label="Session Overlaps">
+                    <option value="London/NY Overlap">London / New York Overlap (High Volume)</option>
+                    <option value="Asian/London Overlap">Asian / London Overlap (Tokyo / London)</option>
+                    <option value="Sydney/Tokyo Overlap">Sydney / Tokyo Overlap (Pacific / Asian)</option>
+                    <option value="NY/Asian Overlap">New York / Asian Overlap</option>
+                  </optgroup>
                 </select>
               </div>
             </div>

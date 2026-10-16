@@ -209,7 +209,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
       emotion: (t.emotion || 'FOCUSED').toUpperCase(),
       tradeSuccessRate: successRate,
       exitReason: t.exitReason || t.notes || '',
-      setupType: t.setupType || 'On Support',
+      setupType: t.setupType || '',
       htfContext: t.htfContext || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m',
       entryReason: t.entryReason || 'On Support and Pullback of HTF Support',
       chart: t.chartScreenshot || '',
@@ -475,10 +475,18 @@ export const JournalView: React.FC<JournalViewProps> = ({
               className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
               <option value="ALL">All Sessions</option>
-              <option value="Tokyo">Tokyo (Asian)</option>
-              <option value="London">London</option>
-              <option value="New York">New York</option>
-              <option value="London/NY Overlap">London/NY Overlap</option>
+              <optgroup label="Major Sessions">
+                <option value="Tokyo">Tokyo (Asian)</option>
+                <option value="London">London (European)</option>
+                <option value="New York">New York (US)</option>
+                <option value="Sydney">Sydney (Pacific)</option>
+              </optgroup>
+              <optgroup label="Session Overlaps">
+                <option value="London/NY Overlap">London / NY Overlap</option>
+                <option value="Asian/London Overlap">Asian / London Overlap</option>
+                <option value="Sydney/Tokyo Overlap">Sydney / Tokyo Overlap</option>
+                <option value="NY/Asian Overlap">NY / Asian Overlap</option>
+              </optgroup>
             </select>
             <Clock className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
             <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
@@ -877,7 +885,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
                     {/* 13. Setup Type */}
                     <td className="py-2.5 px-3 text-[11px] font-medium text-[#1F1A16] dark:text-[#F0F4F8]">
-                      {t.setupType}
+                      {t.setupType || '-'}
                     </td>
 
                     {/* 14. HTF Context */}

@@ -5,33 +5,63 @@
 import { supabase } from '../supabase';
 import { db, type Trade } from '../../db/db';
 
-/** Extract custom HTF context embedded in notes (e.g. "[HTF: Bearish on 1H]") */
-function parseHtfFromNotes(notes?: string | null): { cleanNotes?: string; htfContext?: string } {
+/** Extract custom HTF context and custom Session embedded in notes */
+function parseMetadataFromNotes(notes?: string | null): { cleanNotes?: string; htfContext?: string; session?: string } {
   if (!notes) return {};
-  const match = notes.match(/\n?\[HTF:\s*(.*?)\]$/s);
-  if (match) {
-    const clean = notes.replace(/\n?\[HTF:\s*(.*?)\]$/s, '').trim();
-    return {
-      cleanNotes: clean.length > 0 ? clean : undefined,
-      htfContext: match[1].trim(),
-    };
+  let clean = notes;
+  let htfContext: string | undefined;
+  let session: string | undefined;
+
+  const htfMatch = clean.match(/\n?\[HTF:\s*(.*?)\]/s);
+  if (htfMatch) {
+    htfContext = htfMatch[1].trim();
+    clean = clean.replace(/\n?\[HTF:\s*(.*?)\]/s, '').trim();
   }
-  return { cleanNotes: notes };
+
+  const sessionMatch = clean.match(/\n?\[SESSION:\s*(.*?)\]/s);
+  if (sessionMatch) {
+    session = sessionMatch[1].trim();
+    clean = clean.replace(/\n?\[SESSION:\s*(.*?)\]/s, '').trim();
+  }
+
+  return {
+    cleanNotes: clean.length > 0 ? clean : undefined,
+    htfContext,
+    session,
+  };
 }
 
-/** Embed custom HTF context into notes string to avoid Supabase check constraint while preserving full text */
-function formatNotesWithHtf(notes?: string | null, customHtf?: string | null, existingNotes?: string | null): string | null {
+/** Embed custom HTF and Session into notes string to avoid Supabase check constraints while preserving full text */
+function formatNotesWithMetadata(
+  notes?: string | null,
+  customHtf?: string | null,
+  customSession?: string | null,
+  existingNotes?: string | null
+): string | null {
   let htfToSave = customHtf;
-  if (!htfToSave && existingNotes) {
-    const existingParsed = parseHtfFromNotes(existingNotes);
-    if (existingParsed.htfContext) htfToSave = existingParsed.htfContext;
+  let sessionToSave = customSession;
+
+  if (existingNotes) {
+    const existingParsed = parseMetadataFromNotes(existingNotes);
+    if (!htfToSave && existingParsed.htfContext) htfToSave = existingParsed.htfContext;
+    if (!sessionToSave && existingParsed.session) sessionToSave = existingParsed.session;
   }
-  const baseNotes = notes ? notes.replace(/\n?\[HTF:\s*(.*?)\]$/s, '').trim() : '';
+
+  let clean = notes ? notes.replace(/\n?\[HTF:\s*(.*?)\]/s, '').replace(/\n?\[SESSION:\s*(.*?)\]/s, '').trim() : '';
+
+  const tags: string[] = [];
   if (htfToSave && !['Bullish', 'Bearish', 'Neutral'].includes(htfToSave.trim())) {
-    const htfTag = `[HTF: ${htfToSave.trim()}]`;
-    return baseNotes ? `${baseNotes}\n${htfTag}` : htfTag;
+    tags.push(`[HTF: ${htfToSave.trim()}]`);
   }
-  return baseNotes || null;
+  if (sessionToSave && !['London', 'New York', 'Asian', 'London/NY Overlap'].includes(sessionToSave.trim())) {
+    tags.push(`[SESSION: ${sessionToSave.trim()}]`);
+  }
+
+  if (tags.length > 0) {
+    const tagString = tags.join('\n');
+    return clean ? `${clean}\n${tagString}` : tagString;
+  }
+  return clean || null;
 }
 
 /** Map any custom HTF text into valid Supabase check enum ('Bullish' | 'Bearish' | 'Neutral') */
@@ -49,6 +79,21 @@ function mapHtfContextForDb(htf?: string | null): 'Bullish' | 'Bearish' | 'Neutr
   return 'Neutral';
 }
 
+/** Map any session/overlap into valid Supabase check enum ('London' | 'New York' | 'Asian' | 'London/NY Overlap') */
+function mapSessionForDb(session?: string | null): string {
+  if (!session) return 'Asian';
+  const trimmed = session.trim();
+  if (trimmed === 'Tokyo') return 'Asian';
+  if (['London', 'New York', 'Asian', 'London/NY Overlap'].includes(trimmed)) {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('london') && (lower.includes('ny') || lower.includes('new york'))) return 'London/NY Overlap';
+  if (lower.includes('london')) return 'London';
+  if (lower.includes('new york') || lower.includes('ny')) return 'New York';
+  return 'Asian';
+}
+
 // Map Supabase DB row → app-level Trade object
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToTrade(row: any): Trade {
@@ -58,13 +103,14 @@ function rowToTrade(row: any): Trade {
   else if (row.exit_type === 'BREAKEVEN') tradeSuccessRate = 'Breakeven';
   else if (row.exit_type === 'MANUAL_EXIT') tradeSuccessRate = 'Exit Before Target';
 
-  let session = (row.session as string) || 'Tokyo';
+  const { cleanNotes, htfContext: parsedHtf, session: parsedSession } = parseMetadataFromNotes(row.notes);
+
+  let session = parsedSession || (row.session as string) || 'Tokyo';
   if (session === 'Asian') session = 'Tokyo';
 
   const rMult = row.r_multiple != null ? Number(row.r_multiple) : 0;
   const riskReward = rMult !== 0 ? `1:${Math.abs(rMult).toFixed(rMult % 1 === 0 ? 0 : 1)}` : '1:1';
 
-  const { cleanNotes, htfContext: parsedHtf } = parseHtfFromNotes(row.notes);
   const htfContext = parsedHtf || (row.htf_context as string | undefined) || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m';
 
   return {
@@ -103,11 +149,7 @@ function rowToTrade(row: any): Trade {
 
 // Map app Trade → Supabase insert/update shape
 function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
-  let dbSession = trade.session;
-  if (dbSession === 'Tokyo') dbSession = 'Asian';
-  else if (!['London', 'New York', 'Asian', 'London/NY Overlap'].includes(dbSession || '')) {
-    dbSession = 'Asian';
-  }
+  const dbSession = mapSessionForDb(trade.session);
 
   let exitType = trade.exitType || 'MANUAL_EXIT';
   if (trade.tradeSuccessRate) {
@@ -118,7 +160,7 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
   }
 
   const rawNotes = trade.exitReason || trade.notes || null;
-  const notesWithHtf = formatNotesWithHtf(rawNotes, trade.htfContext);
+  const notesWithMeta = formatNotesWithMetadata(rawNotes, trade.htfContext, trade.session);
   const dbHtf = mapHtfContextForDb(trade.htfContext);
 
   return {
@@ -144,7 +186,7 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
     htf_context: dbHtf,
     entry_reason: trade.entryReason ?? null,
     session: dbSession,
-    notes: notesWithHtf,
+    notes: notesWithMeta,
     chart_url: trade.chartScreenshot && trade.chartScreenshot.trim() ? trade.chartScreenshot : null,
     updated_at: new Date().toISOString(),
   };
@@ -291,14 +333,16 @@ export const tradesApi = {
     }
     if (updates.entryReason !== undefined) partial.entry_reason = updates.entryReason;
     if (updates.session !== undefined) {
-      let s = updates.session;
-      if (s === 'Tokyo') s = 'Asian';
-      else if (!['London', 'New York', 'Asian', 'London/NY Overlap'].includes(s || '')) s = 'Asian';
-      partial.session = s;
+      partial.session = mapSessionForDb(updates.session);
     }
-    if (updates.exitReason !== undefined || updates.notes !== undefined || updates.htfContext !== undefined) {
+    if (
+      updates.exitReason !== undefined ||
+      updates.notes !== undefined ||
+      updates.htfContext !== undefined ||
+      updates.session !== undefined
+    ) {
       const baseN = updates.exitReason ?? updates.notes;
-      partial.notes = formatNotesWithHtf(baseN, updates.htfContext);
+      partial.notes = formatNotesWithMetadata(baseN, updates.htfContext, updates.session);
     }
     if (updates.chartScreenshot !== undefined) {
       partial.chart_url = updates.chartScreenshot && updates.chartScreenshot.trim() ? updates.chartScreenshot : null;
