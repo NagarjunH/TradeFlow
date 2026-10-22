@@ -125,10 +125,24 @@ function rowToTrade(row: any): Trade {
   let session = parsedSession || (row.session as string) || 'Tokyo';
   if (session === 'Asian') session = 'Tokyo';
 
-  const rMult = row.r_multiple != null ? Number(row.r_multiple) : 0;
+  const rawPnl = Number(row.pnl) || 0;
+  let rMult = row.r_multiple != null ? Number(row.r_multiple) : 0;
+  // Ensure financial consistency: negative PnL must have negative R-multiple
+  if (rawPnl < -0.001) {
+    rMult = rMult > 0 ? -rMult : (rMult < 0 ? rMult : -1.0);
+  } else if (rawPnl > 0.001) {
+    rMult = rMult < 0 ? Math.abs(rMult) : (rMult > 0 ? rMult : 1.0);
+  } else {
+    rMult = 0;
+  }
+
   const riskReward = rMult !== 0 ? `1:${Math.abs(rMult).toFixed(rMult % 1 === 0 ? 0 : 1)}` : '1:1';
 
   const htfContext = parsedHtf || (row.htf_context as string | undefined) || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m';
+
+  const rawExecution = (row.execution || '').toUpperCase();
+  const rawQuality = (row.trade_quality || '').toUpperCase();
+  const execution: 'CLEAN' | 'VIOLATION' = rawExecution === 'VIOLATION' || rawQuality === 'VIOLATION' ? 'VIOLATION' : 'CLEAN';
 
   return {
     id: row.id,
@@ -141,14 +155,14 @@ function rowToTrade(row: any): Trade {
     entryPrice: row.entry_price != null ? Number(row.entry_price) : undefined,
     slPrice: row.sl_price != null ? Number(row.sl_price) : undefined,
     tpPrice: row.tp_price != null ? Number(row.tp_price) : undefined,
-    pnl: Number(row.pnl),
+    pnl: rawPnl,
     rMultiple: rMult,
     riskReward,
     pips: row.pips != null ? Number(row.pips) : undefined,
     exitType: row.exit_type as Trade['exitType'],
-    tradeQuality: row.trade_quality as Trade['tradeQuality'],
+    tradeQuality: (rawQuality === 'VIOLATION' ? 'VIOLATION' : rawQuality === 'MANAGEABLE_MISTAKE' ? 'MANAGEABLE_MISTAKE' : 'CLEAN') as Trade['tradeQuality'],
     emotion: (row.emotion || 'FOCUSED') as Trade['emotion'],
-    execution: (row.execution || 'CLEAN') as 'CLEAN' | 'VIOLATION',
+    execution,
     violationReason: row.violation_reason as Trade['violationReason'],
     setupType: row.setup_type as string | undefined,
     htfContext,
@@ -180,6 +194,19 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
   const notesWithMeta = formatNotesWithMetadata(rawNotes, trade.htfContext, trade.session, null, trade.tradeSuccessRate);
   const dbHtf = mapHtfContextForDb(trade.htfContext);
 
+  const numPnl = Number(trade.pnl) || 0;
+  let finalR = Number(trade.rMultiple) || 0;
+  if (numPnl < -0.001) {
+    finalR = finalR > 0 ? -finalR : (finalR < 0 ? finalR : -1.0);
+  } else if (numPnl > 0.001) {
+    finalR = finalR < 0 ? Math.abs(finalR) : (finalR > 0 ? finalR : 1.0);
+  } else {
+    finalR = 0;
+  }
+
+  const execution = (trade.execution || 'CLEAN').toUpperCase();
+  const tradeQuality = (trade.tradeQuality || (execution === 'VIOLATION' ? 'VIOLATION' : 'CLEAN')).toUpperCase();
+
   return {
     user_id: userId,
     trade_number: trade.tradeNumber,
@@ -191,13 +218,13 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
     entry_price: trade.entryPrice ?? null,
     sl_price: trade.slPrice ?? null,
     tp_price: trade.tpPrice ?? null,
-    pnl: trade.pnl,
-    r_multiple: trade.rMultiple,
+    pnl: numPnl,
+    r_multiple: finalR,
     pips: trade.pips ?? null,
     exit_type: exitType,
-    trade_quality: trade.tradeQuality || 'CLEAN',
+    trade_quality: tradeQuality,
     emotion: trade.emotion || 'FOCUSED',
-    execution: trade.execution || 'CLEAN',
+    execution: execution,
     violation_reason: trade.violationReason ?? null,
     setup_type: trade.setupType ?? null,
     htf_context: dbHtf,

@@ -8,7 +8,8 @@ import {
   Lock, 
   Loader2,
   AlertCircle,
-  Upload
+  Upload,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   type Trade, 
@@ -219,7 +220,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
             ? 'VIOLATION'
             : 'MANAGEABLE_MISTAKE';
 
-      const numPnl = parseFloat(pnl) || 0;
+      let numPnl = parseFloat(pnl) || 0;
       const validNumbers = trades
         .map((t) => Number(t.tradeNumber))
         .filter((n) => !isNaN(n) && isFinite(n));
@@ -233,6 +234,40 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       else if (tradeSuccessRate === 'Breakeven') finalExitType = 'BREAKEVEN';
       else if (tradeSuccessRate) finalExitType = 'MANUAL_EXIT';
 
+      // Auto-align financial signs with trade outcome
+      if ((tradeSuccessRate === 'Stop Loss' || tradeSuccessRate === 'Stop Loss Hit' || finalExitType === 'STOP_LOSS') && numPnl > 0) {
+        numPnl = -Math.abs(numPnl);
+      } else if ((tradeSuccessRate === 'TARGET' || tradeSuccessRate === 'Target Hit' || finalExitType === 'TARGET') && numPnl < 0) {
+        numPnl = Math.abs(numPnl);
+      } else if (tradeSuccessRate === 'Breakeven' && Math.abs(numPnl) > 0.001) {
+        numPnl = 0;
+      }
+
+      // Parse Risk:Reward ratio
+      let ratioVal = 1.0;
+      const cleanRr = riskReward.trim();
+      if (cleanRr) {
+        if (cleanRr.includes(':')) {
+          const parts = cleanRr.split(':');
+          const parsed = parseFloat(parts[1] || parts[0]);
+          if (!isNaN(parsed) && parsed > 0) ratioVal = parsed;
+        } else {
+          const parsed = parseFloat(cleanRr);
+          if (!isNaN(parsed) && parsed > 0) ratioVal = parsed;
+        }
+      }
+
+      let calculatedR = 0;
+      if (numPnl > 0.001) {
+        calculatedR = ratioVal;
+      } else if (numPnl < -0.001) {
+        calculatedR = -1.0;
+      } else {
+        calculatedR = 0;
+      }
+
+      const formattedRr = cleanRr || (calculatedR !== 0 ? `1:${Math.abs(calculatedR)}` : '1:1');
+
       const tradeData: Omit<Trade, 'id'> = {
         tradeNumber: nextTradeNumber,
         date,
@@ -244,8 +279,8 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         slPrice: slPrice ? parseFloat(slPrice) : undefined,
         tpPrice: tpPrice ? parseFloat(tpPrice) : undefined,
         pnl: numPnl,
-        rMultiple: Number(rMultiple) || 0,
-        riskReward: riskReward.trim() || (rMultiple !== 0 ? `1:${Math.abs(rMultiple)}` : undefined),
+        rMultiple: calculatedR,
+        riskReward: formattedRr,
         pips: undefined,
         exitType: finalExitType,
         tradeSuccessRate: tradeSuccessRate || undefined,
@@ -584,6 +619,9 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                         if (em === 'FOMO' || em === 'REVENGE') {
                           setExecution('VIOLATION');
                           setViolationReason(em === 'FOMO' ? 'FOMO' : 'Revenge');
+                        } else if (em === 'FOCUSED' || em === 'CALM') {
+                          setExecution('CLEAN');
+                          setViolationReason('None');
                         }
                       }}
                       className={`py-1.5 px-1.5 rounded-xl text-[10px] font-semibold border text-center transition-colors uppercase ${
@@ -599,6 +637,68 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Discipline & Plan Execution */}
+            <div className="p-3 rounded-xl bg-[#FAF7F2] dark:bg-[#161D2A] border border-[#E7E0D6] dark:border-[#242D3D] space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#10B981]" />
+                  Trading Plan Discipline
+                </label>
+                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Directly affects Discipline Score KPI</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExecution('CLEAN');
+                    setViolationReason('None');
+                  }}
+                  className={`py-1.5 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    execution === 'CLEAN'
+                      ? 'bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399] border-[#10B981] shadow-xs'
+                      : 'bg-white dark:bg-[#1C2331] text-[#786F66] dark:text-[#94A3B8] border-[#DFD5C6] dark:border-[#2E384D]'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Clean (Plan Followed)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExecution('VIOLATION');
+                    if (violationReason === 'None') setViolationReason('FOMO');
+                  }}
+                  className={`py-1.5 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    execution === 'VIOLATION'
+                      ? 'bg-[#FEECEB] dark:bg-[#3D1D1D] text-[#B91C1C] dark:text-[#F87171] border-[#EF4444] shadow-xs'
+                      : 'bg-white dark:bg-[#1C2331] text-[#786F66] dark:text-[#94A3B8] border-[#DFD5C6] dark:border-[#2E384D]'
+                  }`}
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Rule Violation / Mistake
+                </button>
+              </div>
+
+              {execution === 'VIOLATION' && (
+                <div className="pt-1.5 flex items-center gap-2">
+                  <span className="text-[11px] text-[#B91C1C] dark:text-[#F87171] font-semibold shrink-0">Violation Reason:</span>
+                  <select
+                    value={violationReason}
+                    onChange={(e) => setViolationReason(e.target.value as ViolationType)}
+                    className="flex-1 py-1 px-2.5 bg-white dark:bg-[#1C2331] border border-[#FBC5C2] dark:border-[#7F1D1D] rounded-lg text-xs font-semibold text-[#B91C1C] dark:text-[#F87171] outline-none"
+                  >
+                    <option value="FOMO">FOMO (Fear of missing out)</option>
+                    <option value="Revenge">Revenge Trading</option>
+                    <option value="Moved SL">Moved / Removed Stop Loss</option>
+                    <option value="Over-risk">Over-risked position size</option>
+                    <option value="No Setup">No Valid Edge / Setup</option>
+                    <option value="Chased Price">Chased Price / Bad Entry</option>
+                    <option value="Impulsive Exit">Impulsive Early Exit</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Row 5: Exit Reason */}

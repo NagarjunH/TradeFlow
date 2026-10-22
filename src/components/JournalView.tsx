@@ -141,50 +141,21 @@ export const JournalView: React.FC<JournalViewProps> = ({
     return dateStr;
   };
 
-  // Dynamic KPI calculation from live trades
-  const perf = React.useMemo(() => {
-    const total = trades.length;
-    const wins = trades.filter((t) => (t.rMultiple || 0) > 0);
-    const losses = trades.filter((t) => (t.rMultiple || 0) < 0);
-    const bes = trades.filter((t) => (t.rMultiple || 0) === 0);
-    const winRate = total > 0 ? (wins.length / total) * 100 : 0;
-    const netPnl = trades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-    const netR = trades.reduce((sum, t) => sum + (t.rMultiple || 0), 0);
-    const totalWinR = wins.reduce((sum, t) => sum + (t.rMultiple || 0), 0);
-    const totalLossR = Math.abs(losses.reduce((sum, t) => sum + (t.rMultiple || 0), 0));
-    const profitFactor = totalLossR > 0 ? totalWinR / totalLossR : totalWinR > 0 ? 99 : 1.0;
-    const avgWinR = wins.length > 0 ? totalWinR / wins.length : 0;
-    const avgLossR = losses.length > 0 ? totalLossR / losses.length : 0;
-    const cleanTrades = trades.filter((t) => t.execution === 'CLEAN').length;
-    const disciplineScore = total > 0 ? Math.round((cleanTrades / total) * 100) : 100;
-
-    return {
-      total,
-      wins: wins.length,
-      losses: losses.length,
-      bes: bes.length,
-      winRate,
-      netPnl,
-      netR,
-      profitFactor,
-      avgWinR,
-      avgLossR,
-      cleanTrades,
-      disciplineScore,
-    };
-  }, [trades]);
-
   // Convert db trades into user's exact Notion journal points
   const dbMappedTrades: TradeRow[] = trades.map((t, idx) => {
     const rawPnl = Number(t.pnl) || 0;
-    const rMult = t.rMultiple != null ? Number(t.rMultiple) : 0;
-    const rDisplay = t.riskReward || (rMult !== 0 ? `1:${Math.abs(rMult)}` : '1:1');
+    let rMult = t.rMultiple != null ? Number(t.rMultiple) : 0;
+    if (rawPnl < -0.001 && rMult > 0) rMult = -rMult;
+    else if (rawPnl > 0.001 && rMult < 0) rMult = Math.abs(rMult);
+    else if (Math.abs(rawPnl) <= 0.001) rMult = 0;
+
+    const rDisplay = t.riskReward || (rMult !== 0 ? `1:${Math.abs(rMult).toFixed(rMult % 1 === 0 ? 0 : 1)}` : '1:1');
     const pipsVal = t.pips != null ? Number(t.pips) : Math.round(Math.abs(rawPnl) * 100);
 
     let successRate = t.tradeSuccessRate;
     if (!successRate) {
-      if (t.exitType === 'TARGET') successRate = 'Target Hit';
-      else if (t.exitType === 'STOP_LOSS') successRate = 'Stop Loss Hit';
+      if (t.exitType === 'TARGET') successRate = 'TARGET';
+      else if (t.exitType === 'STOP_LOSS') successRate = 'Stop Loss';
       else if (t.exitType === 'BREAKEVEN') successRate = 'Breakeven';
       else successRate = 'Exit Before Target';
     }
@@ -215,7 +186,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
       htfContext: t.htfContext || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m',
       entryReason: t.entryReason || 'On Support and Pullback of HTF Support',
       chart: t.chartScreenshot || '',
-      rawTrade: t,
+      rawTrade: { ...t, rMultiple: rMult },
     };
   });
 
@@ -267,6 +238,89 @@ export const JournalView: React.FC<JournalViewProps> = ({
     filterSuccessRate !== 'ALL' ||
     filterSetup !== 'ALL' ||
     Boolean(selectedDateFilter);
+
+  // Dynamic KPI calculation from active trades
+  const perf = React.useMemo(() => {
+    const activeTrades = hasActiveFilters
+      ? (filteredList.map((r) => r.rawTrade).filter(Boolean) as Trade[])
+      : trades;
+
+    const total = activeTrades.length;
+
+    const getEffectiveR = (t: Trade): number => {
+      const pnl = Number(t.pnl) || 0;
+      let r = Number(t.rMultiple) || 0;
+      if (pnl < -0.001) return r < 0 ? r : -(Math.abs(r) || 1.0);
+      if (pnl > 0.001) return r > 0 ? r : (Math.abs(r) || 1.0);
+      return 0;
+    };
+
+    // Classify based on true financial PnL
+    const wins = activeTrades.filter((t) => (Number(t.pnl) || 0) > 0.001 || (Number(t.pnl) === 0 && getEffectiveR(t) > 0));
+    const losses = activeTrades.filter((t) => (Number(t.pnl) || 0) < -0.001 || (Number(t.pnl) === 0 && getEffectiveR(t) < 0));
+    const bes = activeTrades.filter((t) => Math.abs(Number(t.pnl) || 0) <= 0.001 && Math.abs(getEffectiveR(t)) <= 0.001);
+
+    const winRate = total > 0 ? (wins.length / total) * 100 : 0;
+    const netPnl = activeTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
+    const netR = activeTrades.reduce((sum, t) => sum + getEffectiveR(t), 0);
+
+    // Standard Gross Profit & Gross Loss
+    const grossProfit = wins.reduce((sum, t) => sum + Math.max(0, Number(t.pnl) || 0), 0);
+    const grossLoss = losses.reduce((sum, t) => sum + Math.abs(Math.min(0, Number(t.pnl) || 0)), 0);
+
+    let profitFactor = 0;
+    if (grossLoss > 0.001) {
+      profitFactor = Number((grossProfit / grossLoss).toFixed(2));
+    } else if (grossProfit > 0.001) {
+      profitFactor = grossProfit > 100 ? 99.9 : Number(grossProfit.toFixed(2));
+    } else {
+      profitFactor = 0;
+    }
+
+    const totalWinR = wins.reduce((sum, t) => sum + Math.abs(getEffectiveR(t)), 0);
+    const totalLossR = losses.reduce((sum, t) => sum + Math.abs(getEffectiveR(t)), 0);
+    const avgWinR = wins.length > 0 ? totalWinR / wins.length : 0;
+    const avgLossR = losses.length > 0 ? totalLossR / losses.length : 0;
+    const avgWinUsd = wins.length > 0 ? grossProfit / wins.length : 0;
+    const avgLossUsd = losses.length > 0 ? grossLoss / losses.length : 0;
+
+    const cleanTrades = activeTrades.filter((t) => {
+      const exec = (t.execution || '').toUpperCase();
+      const qual = (t.tradeQuality || '').toUpperCase();
+      const em = (t.emotion || '').toUpperCase();
+      const viol = t.violationReason;
+
+      const isViolation = 
+        exec === 'VIOLATION' || 
+        qual === 'VIOLATION' || 
+        (Boolean(viol) && viol !== 'None') || 
+        em === 'FOMO' || 
+        em === 'REVENGE';
+
+      return !isViolation && (exec === 'CLEAN' || qual === 'CLEAN' || (!exec && !qual));
+    }).length;
+
+    const disciplineScore = total > 0 ? Math.round((cleanTrades / total) * 100) : 100;
+
+    return {
+      total,
+      wins: wins.length,
+      losses: losses.length,
+      bes: bes.length,
+      winRate,
+      netPnl,
+      netR,
+      grossProfit,
+      grossLoss,
+      profitFactor,
+      avgWinR,
+      avgLossR,
+      avgWinUsd,
+      avgLossUsd,
+      cleanTrades,
+      disciplineScore,
+    };
+  }, [trades, filteredList, hasActiveFilters]);
 
   const activeFilterCount = 
     (filterDateRange !== 'ALL' ? 1 : 0) +
@@ -405,9 +459,16 @@ export const JournalView: React.FC<JournalViewProps> = ({
               <BarChart2 className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="flex items-baseline justify-between mt-2">
-            <div className="text-sm font-black font-mono leading-none">
-              <span className="text-[#10B981]">+{perf.avgWinR.toFixed(1)}R</span> / <span className="text-[#DC2626]">-{perf.avgLossR.toFixed(1)}R</span>
+          <div className="mt-2">
+            <div className="text-base font-black font-mono leading-none flex items-center gap-1">
+              <span className="text-[#10B981]">+{perf.avgWinR.toFixed(1)}R</span>
+              <span className="text-[#786F66] dark:text-[#64748B]">/</span>
+              <span className="text-[#DC2626]">-{perf.avgLossR.toFixed(1)}R</span>
+            </div>
+            <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-1.5 flex items-center gap-1">
+              <span className="text-[#10B981]">+{currSymbol}{perf.avgWinUsd.toFixed(2)}</span>
+              <span>/</span>
+              <span className="text-[#DC2626]">-{currSymbol}{perf.avgLossUsd.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -422,7 +483,10 @@ export const JournalView: React.FC<JournalViewProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">{perf.profitFactor.toFixed(2)}</div>
-            <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8] mt-1">Ratio</div>
+            <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8] mt-1 flex items-center justify-between font-mono">
+              <span>Ratio</span>
+              <span>{currSymbol}{perf.grossProfit.toFixed(1)} / {currSymbol}{perf.grossLoss.toFixed(1)}</span>
+            </div>
           </div>
         </div>
 
@@ -436,7 +500,12 @@ export const JournalView: React.FC<JournalViewProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none">{perf.disciplineScore}%</div>
-            <div className="text-[10px] font-bold text-[#10B981] mt-1">{perf.cleanTrades}/{perf.total} Clean</div>
+            <div className="text-[10px] font-bold text-[#10B981] mt-1 flex items-center justify-between">
+              <span>{perf.cleanTrades}/{perf.total} Clean</span>
+              {perf.total - perf.cleanTrades > 0 && (
+                <span className="text-[#DC2626] font-normal text-[9px]">{perf.total - perf.cleanTrades} Violations</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -236,9 +236,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         ...p,
         x,
         y,
-        isWin: (p.rMultiple || 0) > 0.001,
-        isLoss: (p.rMultiple || 0) < -0.001,
-        isBE: Math.abs(p.rMultiple || 0) <= 0.001,
+        isWin: (p.pnl || 0) > 0.001 || ((p.pnl || 0) === 0 && (p.rMultiple || 0) > 0.001),
+        isLoss: (p.pnl || 0) < -0.001 || ((p.pnl || 0) === 0 && (p.rMultiple || 0) < -0.001),
+        isBE: Math.abs(p.pnl || 0) <= 0.001 && Math.abs(p.rMultiple || 0) <= 0.001,
       };
     });
 
@@ -366,8 +366,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const totalCount = trades.length;
     const wr = Math.round(perf.winRate);
     const avgR = perf.averageR;
-    const wins = trades.filter((t) => (t.rMultiple || 0) > 0);
-    const losses = trades.filter((t) => (t.rMultiple || 0) < 0);
+    const wins = trades.filter((t) => (t.pnl || 0) > 0.001 || ((t.pnl || 0) === 0 && (t.rMultiple || 0) > 0));
+    const losses = trades.filter((t) => (t.pnl || 0) < -0.001 || ((t.pnl || 0) === 0 && (t.rMultiple || 0) < 0));
     const bigWin = wins.length > 0 ? Math.max(...wins.map((t) => t.rMultiple || 0)) : (perf.bestTrade?.rMultiple || 0);
     const bigLoss = losses.length > 0 ? Math.min(...losses.map((t) => t.rMultiple || 0)) : (perf.worstTrade && perf.worstTrade.rMultiple < 0 ? perf.worstTrade.rMultiple : 0);
     const bigWinPnl = wins.length > 0 ? Math.max(...wins.map((t) => t.pnl || 0)) : (perf.bestTrade?.pnl || 0);

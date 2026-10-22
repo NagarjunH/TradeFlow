@@ -99,8 +99,15 @@ export function calculatePerformance(trades: Trade[], settings: AppSettings): Pe
   let runningLossStreak = 0;
 
   for (const t of sorted) {
-    const pnl = t.pnl;
-    const r = t.rMultiple;
+    const pnl = Number(t.pnl) || 0;
+    let r = Number(t.rMultiple) || 0;
+    if (pnl < -0.001 && r > 0) {
+      r = -r;
+    } else if (pnl > 0.001 && r < 0) {
+      r = Math.abs(r);
+    } else if (Math.abs(pnl) <= 0.001) {
+      r = 0;
+    }
     currentBalance += pnl;
     totalR += r;
 
@@ -209,9 +216,29 @@ export function calculateDiscipline(trades: Trade[]): DisciplineMetrics {
   const violationBreakdown: Record<string, { count: number; netPnl: number; netR: number }> = {};
 
   for (const t of trades) {
-    const isClean = t.execution === 'CLEAN';
-    const pnl = t.pnl;
-    const r = t.rMultiple;
+    const exec = (t.execution || '').toUpperCase();
+    const qual = (t.tradeQuality || '').toUpperCase();
+    const em = (t.emotion || '').toUpperCase();
+    const viol = t.violationReason;
+
+    const isViolation = 
+      exec === 'VIOLATION' || 
+      qual === 'VIOLATION' || 
+      (Boolean(viol) && viol !== 'None') || 
+      em === 'FOMO' || 
+      em === 'REVENGE';
+
+    const isClean = !isViolation && (exec === 'CLEAN' || qual === 'CLEAN' || (!exec && !qual));
+
+    const pnl = Number(t.pnl) || 0;
+    let r = Number(t.rMultiple) || 0;
+    if (pnl < -0.001 && r > 0) {
+      r = -r;
+    } else if (pnl > 0.001 && r < 0) {
+      r = Math.abs(r);
+    } else if (Math.abs(pnl) <= 0.001) {
+      r = 0;
+    }
 
     if (isClean) {
       cleanTradesCount++;
