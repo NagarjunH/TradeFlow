@@ -56,21 +56,20 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
   const [slPrice, setSlPrice] = useState<string>('');
   const [tpPrice, setTpPrice] = useState<string>('');
   
-  const [rMultiple, setRMultiple] = useState<number>(1.0);
-  const [riskReward, setRiskReward] = useState<string>('1:1');
-  const [pnl, setPnl] = useState<string>('5.55');
-  const [pips, setPips] = useState<string>('555');
+  const [rMultiple, setRMultiple] = useState<number>(0);
+  const [riskReward, setRiskReward] = useState<string>('');
+  const [pnl, setPnl] = useState<string>('');
 
   const [exitType, setExitType] = useState<ExitType>('MANUAL_EXIT');
-  const [tradeSuccessRate, setTradeSuccessRate] = useState<string>('Exit Before Target');
-  const [exitReason, setExitReason] = useState<string>('Strong Resistance was there and Candle closed weak');
+  const [tradeSuccessRate, setTradeSuccessRate] = useState<string>('');
+  const [exitReason, setExitReason] = useState<string>('');
   const [execution, setExecution] = useState<'CLEAN' | 'VIOLATION'>('CLEAN');
   const [violationReason, setViolationReason] = useState<ViolationType>('None');
   const [emotion, setEmotion] = useState<EmotionType>('FOCUSED');
 
   const [setupType, setSetupType] = useState<string>('');
-  const [htfContext, setHtfContext] = useState<string>('1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
-  const [entryReason, setEntryReason] = useState<string>('On Support and Pullback of HTF Support');
+  const [htfContext, setHtfContext] = useState<string>('');
+  const [entryReason, setEntryReason] = useState<string>('');
   const [session, setSession] = useState<'Tokyo' | 'London' | 'New York' | 'London/NY Overlap' | string>('Tokyo');
 
   const [chartScreenshot, setChartScreenshot] = useState<string>('');
@@ -129,21 +128,17 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setEntryPrice(editTrade.entryPrice?.toString() || '');
       setSlPrice(editTrade.slPrice?.toString() || '');
       setTpPrice(editTrade.tpPrice?.toString() || '');
-      setRMultiple(editTrade.rMultiple ?? 1.0);
-      setRiskReward(editTrade.riskReward || (editTrade.rMultiple ? `1:${Math.abs(editTrade.rMultiple)}` : '1:1'));
-      setPnl(editTrade.pnl != null ? editTrade.pnl.toString() : '5.55');
-      setPips(editTrade.pips?.toString() || '');
+      setRMultiple(editTrade.rMultiple ?? 0);
+      setRiskReward(editTrade.riskReward || (editTrade.rMultiple ? `1:${Math.abs(editTrade.rMultiple)}` : ''));
+      setPnl(editTrade.pnl != null ? editTrade.pnl.toString() : '');
       setExitType(editTrade.exitType || 'MANUAL_EXIT');
-      setTradeSuccessRate(
-        editTrade.tradeSuccessRate ||
-        (editTrade.exitType === 'TARGET' ? 'Target Hit' : editTrade.exitType === 'STOP_LOSS' ? 'Stop Loss Hit' : editTrade.exitType === 'BREAKEVEN' ? 'Breakeven' : 'Exit Before Target')
-      );
+      setTradeSuccessRate(editTrade.tradeSuccessRate || '');
       setExitReason(editTrade.exitReason || editTrade.notes || '');
       setExecution(editTrade.execution || 'CLEAN');
       setViolationReason(editTrade.violationReason || 'None');
       setEmotion(editTrade.emotion || 'FOCUSED');
       setSetupType(editTrade.setupType || '');
-      setHtfContext(editTrade.htfContext || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
+      setHtfContext(editTrade.htfContext || '');
       setEntryReason(editTrade.entryReason || '');
       setSession(editTrade.session === 'Asian' ? 'Tokyo' : (editTrade.session || 'Tokyo'));
       setChartScreenshot(editTrade.chartScreenshot || '');
@@ -153,19 +148,18 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setPair(settings.defaultPair || 'XAU/USD');
       setOrder('BUY');
       setLotSize(settings.defaultLot || 0.01);
-      setRMultiple(1.0);
-      setRiskReward('1:1');
-      setPnl('5.55');
-      setPips('555');
+      setRMultiple(0);
+      setRiskReward('');
+      setPnl('');
       setExitType('MANUAL_EXIT');
-      setTradeSuccessRate('Exit Before Target');
-      setExitReason('Strong Resistance was there and Candle closed weak');
+      setTradeSuccessRate('');
+      setExitReason('');
       setExecution('CLEAN');
       setViolationReason('None');
       setEmotion('FOCUSED');
       setSetupType('');
-      setHtfContext('1. Bearish on 1H, 4H 2. Bullish on 15m, 5m');
-      setEntryReason('On Support and Pullback of HTF Support');
+      setHtfContext('');
+      setEntryReason('');
       setSession('Tokyo');
       setChartScreenshot('');
     }
@@ -232,15 +226,15 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         : (validNumbers.length > 0 ? Math.max(...validNumbers) + 1 : 1);
 
       let finalExitType: ExitType = exitType;
-      if (tradeSuccessRate === 'Target Hit') finalExitType = 'TARGET';
-      else if (tradeSuccessRate === 'Stop Loss Hit') finalExitType = 'STOP_LOSS';
+      if (tradeSuccessRate === 'TARGET' || tradeSuccessRate === 'Target Hit') finalExitType = 'TARGET';
+      else if (tradeSuccessRate === 'Stop Loss' || tradeSuccessRate === 'Stop Loss Hit') finalExitType = 'STOP_LOSS';
       else if (tradeSuccessRate === 'Breakeven') finalExitType = 'BREAKEVEN';
-      else if (tradeSuccessRate === 'Exit Before Target') finalExitType = 'MANUAL_EXIT';
+      else if (tradeSuccessRate) finalExitType = 'MANUAL_EXIT';
 
       const tradeData: Omit<Trade, 'id'> = {
         tradeNumber: nextTradeNumber,
         date,
-        time,
+        time: time || new Date().toTimeString().slice(0, 5),
         pair: pair || 'XAU/USD',
         order,
         lotSize: Number(lotSize) || 0.01,
@@ -249,10 +243,10 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         tpPrice: tpPrice ? parseFloat(tpPrice) : undefined,
         pnl: numPnl,
         rMultiple: Number(rMultiple) || 0,
-        riskReward: riskReward || (rMultiple !== 0 ? `1:${Math.abs(rMultiple)}` : '1:1'),
-        pips: pips ? parseFloat(pips) : undefined,
+        riskReward: riskReward.trim() || (rMultiple !== 0 ? `1:${Math.abs(rMultiple)}` : undefined),
+        pips: undefined,
         exitType: finalExitType,
-        tradeSuccessRate,
+        tradeSuccessRate: tradeSuccessRate || undefined,
         exitReason: exitReason.trim() || undefined,
         tradeQuality,
         emotion,
@@ -416,25 +410,17 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                 </div>
               </div>
 
-              {/* Date & Time: 4 columns */}
+              {/* Date: 4 columns */}
               <div className="sm:col-span-4 min-w-0">
                 <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5">
-                  Date & Time
+                  Date
                 </label>
-                <div className="flex gap-1.5">
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="flex-1 min-w-0 bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-2 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none [color-scheme:light] dark:[color-scheme:dark]"
-                  />
-                  <input
-                    type="time"
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    className="w-20 shrink-0 bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2 py-2 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none [color-scheme:light] dark:[color-scheme:dark]"
-                  />
-                </div>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-3 py-2 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                />
               </div>
             </div>
 
@@ -479,9 +465,9 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               </div>
             </div>
 
-            {/* Row 3: P/L, Risk:Reward & PIP Captured */}
+            {/* Row 3: P/L & Risk:Reward */}
             <div className="bg-[#FAF7F2] dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl p-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
                     Net P&L ({settings.currency === 'USD' ? '$' : '₹'})
@@ -491,8 +477,13 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                     step="0.01"
                     value={pnl}
                     onChange={(e) => setPnl(e.target.value)}
-                    className={`w-full px-3 py-1.5 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono font-bold focus:border-[#DB9F35] outline-none ${
-                      parseFloat(pnl) >= 0 ? 'text-[#15803D] dark:text-[#4ADE80]' : 'text-[#DC2626] dark:text-[#F87171]'
+                    placeholder="0.00"
+                    className={`w-full px-3 py-2 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono font-bold focus:border-[#DB9F35] outline-none ${
+                      !pnl 
+                        ? 'text-[#1F1A16] dark:text-[#F0F4F8]' 
+                        : parseFloat(pnl) >= 0 
+                          ? 'text-[#15803D] dark:text-[#4ADE80]' 
+                          : 'text-[#DC2626] dark:text-[#F87171]'
                     }`}
                   />
                 </div>
@@ -504,21 +495,8 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                     type="text"
                     value={riskReward}
                     onChange={(e) => setRiskReward(e.target.value)}
-                    placeholder="1:1"
-                    className="w-full px-3 py-1.5 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
-                    PIP Captured
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={pips}
-                    onChange={(e) => setPips(e.target.value)}
-                    placeholder="555"
-                    className="w-full px-3 py-1.5 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
+                    placeholder="e.g. 1:2"
+                    className="w-full px-3 py-2 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs font-mono text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
                   />
                 </div>
               </div>
@@ -532,25 +510,56 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                 </label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { id: 'Exit Before Target', label: '✋ Exit Before Target' },
-                    { id: 'Target Hit', label: '🎯 Target Hit' },
-                    { id: 'Stop Loss Hit', label: '🛑 Stop Loss Hit' },
-                    { id: 'Breakeven', label: '🔄 Breakeven' },
+                    { 
+                      id: 'Scalping Trade', 
+                      label: 'Scalping Trade', 
+                      activeClass: 'bg-[#FCE7F3] dark:bg-[#3D1429] text-[#BE185D] dark:text-[#F472B6] border-[#F472B6] dark:border-[#831843] font-bold shadow-xs',
+                      inactiveHover: 'hover:text-[#BE185D] dark:hover:text-[#F472B6]'
+                    },
+                    { 
+                      id: 'Exit Before Target', 
+                      label: 'Exit Before Target', 
+                      activeClass: 'bg-[#F3F4F6] dark:bg-[#28303F] text-[#374151] dark:text-[#E5E7EB] border-[#9CA3AF] dark:border-[#4B5563] font-bold shadow-xs',
+                      inactiveHover: 'hover:text-[#374151] dark:hover:text-[#E5E7EB]'
+                    },
+                    { 
+                      id: 'Exit Before SL', 
+                      label: 'Exit Before SL', 
+                      activeClass: 'bg-[#FEF3C7] dark:bg-[#3E2E16] text-[#92400E] dark:text-[#FCD34D] border-[#F59E0B] dark:border-[#78350F] font-bold shadow-xs',
+                      inactiveHover: 'hover:text-[#92400E] dark:hover:text-[#FCD34D]'
+                    },
+                    { 
+                      id: 'Stop Loss', 
+                      label: 'Stop Loss', 
+                      activeClass: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#B91C1C] dark:text-[#F87171] border-[#EF4444] dark:border-[#7F1D1D] font-bold shadow-xs',
+                      inactiveHover: 'hover:text-[#B91C1C] dark:hover:text-[#F87171]'
+                    },
+                    { 
+                      id: 'TARGET', 
+                      label: 'TARGET', 
+                      activeClass: 'bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80] border-[#22C55E] dark:border-[#14532D] font-bold shadow-xs',
+                      inactiveHover: 'hover:text-[#15803D] dark:hover:text-[#4ADE80]'
+                    },
+                    { 
+                      id: 'MANUAL EXIT', 
+                      label: 'MANUAL EXIT', 
+                      activeClass: 'bg-[#DBEAFE] dark:bg-[#172E54] text-[#1D4ED8] dark:text-[#93C5FD] border-[#3B82F6] dark:border-[#1E3A8A] font-bold shadow-xs',
+                      inactiveHover: 'hover:text-[#1D4ED8] dark:hover:text-[#93C5FD]'
+                    },
                   ].map((ex) => (
                     <button
                       key={ex.id}
                       type="button"
                       onClick={() => {
                         setTradeSuccessRate(ex.id);
-                        if (ex.id === 'Target Hit') setExitType('TARGET');
-                        else if (ex.id === 'Stop Loss Hit') setExitType('STOP_LOSS');
-                        else if (ex.id === 'Breakeven') setExitType('BREAKEVEN');
+                        if (ex.id === 'TARGET') setExitType('TARGET');
+                        else if (ex.id === 'Stop Loss') setExitType('STOP_LOSS');
                         else setExitType('MANUAL_EXIT');
                       }}
-                      className={`py-1.5 px-2 rounded-xl text-[11px] font-medium border text-center transition-colors ${
+                      className={`py-2 px-2 rounded-xl text-[11px] font-semibold border text-center transition-all cursor-pointer truncate ${
                         tradeSuccessRate === ex.id
-                          ? 'bg-[#E8F8EE] dark:bg-[#1E3326] text-[#15803D] dark:text-[#86EFAC] border-[#B7ECC8] dark:border-[#2E4D3A] font-bold'
-                          : 'bg-[#FAF7F2] dark:bg-[#1A2230] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] hover:text-[#1F1A16]'
+                          ? ex.activeClass
+                          : `bg-[#FAF7F2] dark:bg-[#1A2230] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] ${ex.inactiveHover}`
                       }`}
                     >
                       {ex.label}

@@ -547,10 +547,15 @@ export const JournalView: React.FC<JournalViewProps> = ({
               className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
             >
               <option value="ALL">All Trade Outcomes</option>
+              <option value="Scalping Trade">Scalping Trade</option>
               <option value="Exit Before Target">Exit Before Target</option>
-              <option value="Target Hit">Target Hit</option>
-              <option value="Stop Loss Hit">Stop Loss Hit</option>
-              <option value="Breakeven">Breakeven</option>
+              <option value="Exit Before SL">Exit Before SL</option>
+              <option value="Stop Loss">Stop Loss</option>
+              <option value="TARGET">TARGET</option>
+              <option value="MANUAL EXIT">MANUAL EXIT</option>
+              <option value="Target Hit">Target Hit (Legacy)</option>
+              <option value="Stop Loss Hit">Stop Loss Hit (Legacy)</option>
+              <option value="Breakeven">Breakeven (Legacy)</option>
             </select>
             <Target className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
             <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
@@ -853,13 +858,19 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     <td className="py-2.5 px-3 text-center">
                       <span
                         className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-semibold ${
-                          t.tradeSuccessRate === 'Target Hit'
-                            ? 'bg-[#E2F5E9] dark:bg-[#193B26] text-[#137333] dark:text-[#4ADE80]'
-                            : t.tradeSuccessRate === 'Stop Loss Hit'
-                            ? 'bg-[#FCE8E6] dark:bg-[#3D1D1D] text-[#C5221F] dark:text-[#F87171]'
+                          t.tradeSuccessRate === 'TARGET' || t.tradeSuccessRate === 'Target Hit'
+                            ? 'bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80]'
+                            : t.tradeSuccessRate === 'Stop Loss' || t.tradeSuccessRate === 'Stop Loss Hit'
+                            ? 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#B91C1C] dark:text-[#F87171]'
+                            : t.tradeSuccessRate === 'Exit Before SL'
+                            ? 'bg-[#FEF3C7] dark:bg-[#3E2E16] text-[#92400E] dark:text-[#FCD34D]'
+                            : t.tradeSuccessRate === 'Scalping Trade'
+                            ? 'bg-[#FCE7F3] dark:bg-[#3D1429] text-[#BE185D] dark:text-[#F472B6]'
+                            : t.tradeSuccessRate === 'MANUAL EXIT'
+                            ? 'bg-[#DBEAFE] dark:bg-[#172E54] text-[#1D4ED8] dark:text-[#93C5FD]'
                             : t.tradeSuccessRate === 'Breakeven'
                             ? 'bg-[#FEF3C7] dark:bg-[#3E2E16] text-[#92400E] dark:text-[#FCD34D]'
-                            : 'bg-[#EDEDED] dark:bg-[#2A2B2E] text-[#4B5563] dark:text-[#D1D5DB]'
+                            : 'bg-[#F3F4F6] dark:bg-[#1F2937] text-[#374151] dark:text-[#D1D5DB]'
                         }`}
                       >
                         {t.tradeSuccessRate}

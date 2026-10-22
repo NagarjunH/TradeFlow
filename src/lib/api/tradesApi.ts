@@ -5,12 +5,13 @@
 import { supabase } from '../supabase';
 import { db, type Trade } from '../../db/db';
 
-/** Extract custom HTF context and custom Session embedded in notes */
-function parseMetadataFromNotes(notes?: string | null): { cleanNotes?: string; htfContext?: string; session?: string } {
+/** Extract custom HTF context, custom Session, and Outcome embedded in notes */
+function parseMetadataFromNotes(notes?: string | null): { cleanNotes?: string; htfContext?: string; session?: string; outcome?: string } {
   if (!notes) return {};
   let clean = notes;
   let htfContext: string | undefined;
   let session: string | undefined;
+  let outcome: string | undefined;
 
   const htfMatch = clean.match(/\n?\[HTF:\s*(.*?)\]/s);
   if (htfMatch) {
@@ -24,30 +25,40 @@ function parseMetadataFromNotes(notes?: string | null): { cleanNotes?: string; h
     clean = clean.replace(/\n?\[SESSION:\s*(.*?)\]/s, '').trim();
   }
 
+  const outcomeMatch = clean.match(/\n?\[OUTCOME:\s*(.*?)\]/s);
+  if (outcomeMatch) {
+    outcome = outcomeMatch[1].trim();
+    clean = clean.replace(/\n?\[OUTCOME:\s*(.*?)\]/s, '').trim();
+  }
+
   return {
     cleanNotes: clean.length > 0 ? clean : undefined,
     htfContext,
     session,
+    outcome,
   };
 }
 
-/** Embed custom HTF and Session into notes string to avoid Supabase check constraints while preserving full text */
+/** Embed custom HTF, Session, and Outcome into notes string to avoid Supabase check constraints while preserving full text */
 function formatNotesWithMetadata(
   notes?: string | null,
   customHtf?: string | null,
   customSession?: string | null,
-  existingNotes?: string | null
+  existingNotes?: string | null,
+  customOutcome?: string | null
 ): string | null {
   let htfToSave = customHtf;
   let sessionToSave = customSession;
+  let outcomeToSave = customOutcome;
 
   if (existingNotes) {
     const existingParsed = parseMetadataFromNotes(existingNotes);
     if (!htfToSave && existingParsed.htfContext) htfToSave = existingParsed.htfContext;
     if (!sessionToSave && existingParsed.session) sessionToSave = existingParsed.session;
+    if (!outcomeToSave && existingParsed.outcome) outcomeToSave = existingParsed.outcome;
   }
 
-  let clean = notes ? notes.replace(/\n?\[HTF:\s*(.*?)\]/s, '').replace(/\n?\[SESSION:\s*(.*?)\]/s, '').trim() : '';
+  let clean = notes ? notes.replace(/\n?\[HTF:\s*(.*?)\]/s, '').replace(/\n?\[SESSION:\s*(.*?)\]/s, '').replace(/\n?\[OUTCOME:\s*(.*?)\]/s, '').trim() : '';
 
   const tags: string[] = [];
   if (htfToSave && !['Bullish', 'Bearish', 'Neutral'].includes(htfToSave.trim())) {
@@ -55,6 +66,9 @@ function formatNotesWithMetadata(
   }
   if (sessionToSave && !['London', 'New York', 'Asian', 'London/NY Overlap'].includes(sessionToSave.trim())) {
     tags.push(`[SESSION: ${sessionToSave.trim()}]`);
+  }
+  if (outcomeToSave) {
+    tags.push(`[OUTCOME: ${outcomeToSave.trim()}]`);
   }
 
   if (tags.length > 0) {
@@ -97,13 +111,16 @@ function mapSessionForDb(session?: string | null): string {
 // Map Supabase DB row → app-level Trade object
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToTrade(row: any): Trade {
-  let tradeSuccessRate = 'Exit Before Target';
-  if (row.exit_type === 'TARGET') tradeSuccessRate = 'Target Hit';
-  else if (row.exit_type === 'STOP_LOSS') tradeSuccessRate = 'Stop Loss Hit';
-  else if (row.exit_type === 'BREAKEVEN') tradeSuccessRate = 'Breakeven';
-  else if (row.exit_type === 'MANUAL_EXIT') tradeSuccessRate = 'Exit Before Target';
+  const { cleanNotes, htfContext: parsedHtf, session: parsedSession, outcome: parsedOutcome } = parseMetadataFromNotes(row.notes);
 
-  const { cleanNotes, htfContext: parsedHtf, session: parsedSession } = parseMetadataFromNotes(row.notes);
+  let tradeSuccessRate = parsedOutcome;
+  if (!tradeSuccessRate) {
+    if (row.exit_type === 'TARGET') tradeSuccessRate = 'TARGET';
+    else if (row.exit_type === 'STOP_LOSS') tradeSuccessRate = 'Stop Loss';
+    else if (row.exit_type === 'BREAKEVEN') tradeSuccessRate = 'Breakeven';
+    else if (row.exit_type === 'MANUAL_EXIT') tradeSuccessRate = 'MANUAL EXIT';
+    else tradeSuccessRate = 'MANUAL EXIT';
+  }
 
   let session = parsedSession || (row.session as string) || 'Tokyo';
   if (session === 'Asian') session = 'Tokyo';
@@ -153,14 +170,14 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
 
   let exitType = trade.exitType || 'MANUAL_EXIT';
   if (trade.tradeSuccessRate) {
-    if (trade.tradeSuccessRate === 'Target Hit') exitType = 'TARGET';
-    else if (trade.tradeSuccessRate === 'Stop Loss Hit') exitType = 'STOP_LOSS';
+    if (trade.tradeSuccessRate === 'TARGET' || trade.tradeSuccessRate === 'Target Hit') exitType = 'TARGET';
+    else if (trade.tradeSuccessRate === 'Stop Loss' || trade.tradeSuccessRate === 'Stop Loss Hit') exitType = 'STOP_LOSS';
     else if (trade.tradeSuccessRate === 'Breakeven') exitType = 'BREAKEVEN';
-    else if (trade.tradeSuccessRate === 'Exit Before Target') exitType = 'MANUAL_EXIT';
+    else exitType = 'MANUAL_EXIT';
   }
 
   const rawNotes = trade.exitReason || trade.notes || null;
-  const notesWithMeta = formatNotesWithMetadata(rawNotes, trade.htfContext, trade.session);
+  const notesWithMeta = formatNotesWithMetadata(rawNotes, trade.htfContext, trade.session, null, trade.tradeSuccessRate);
   const dbHtf = mapHtfContextForDb(trade.htfContext);
 
   return {
@@ -316,8 +333,8 @@ export const tradesApi = {
     if (updates.rMultiple !== undefined) partial.r_multiple = updates.rMultiple;
     if (updates.pips !== undefined) partial.pips = updates.pips;
     if (updates.tradeSuccessRate !== undefined) {
-      if (updates.tradeSuccessRate === 'Target Hit') partial.exit_type = 'TARGET';
-      else if (updates.tradeSuccessRate === 'Stop Loss Hit') partial.exit_type = 'STOP_LOSS';
+      if (updates.tradeSuccessRate === 'TARGET' || updates.tradeSuccessRate === 'Target Hit') partial.exit_type = 'TARGET';
+      else if (updates.tradeSuccessRate === 'Stop Loss' || updates.tradeSuccessRate === 'Stop Loss Hit') partial.exit_type = 'STOP_LOSS';
       else if (updates.tradeSuccessRate === 'Breakeven') partial.exit_type = 'BREAKEVEN';
       else partial.exit_type = 'MANUAL_EXIT';
     } else if (updates.exitType !== undefined) {
@@ -339,10 +356,11 @@ export const tradesApi = {
       updates.exitReason !== undefined ||
       updates.notes !== undefined ||
       updates.htfContext !== undefined ||
-      updates.session !== undefined
+      updates.session !== undefined ||
+      updates.tradeSuccessRate !== undefined
     ) {
       const baseN = updates.exitReason ?? updates.notes;
-      partial.notes = formatNotesWithMetadata(baseN, updates.htfContext, updates.session);
+      partial.notes = formatNotesWithMetadata(baseN, updates.htfContext, updates.session, null, updates.tradeSuccessRate);
     }
     if (updates.chartScreenshot !== undefined) {
       partial.chart_url = updates.chartScreenshot && updates.chartScreenshot.trim() ? updates.chartScreenshot : null;
