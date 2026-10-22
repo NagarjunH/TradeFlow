@@ -47,6 +47,7 @@ function AppInner() {
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isQuickTradeOpen, setIsQuickTradeOpen] = useState(false);
+  const [quickTradeInitialDate, setQuickTradeInitialDate] = useState<string | undefined>(undefined);
   const [editTrade, setEditTrade] = useState<Trade | null>(null);
   const [isDailyCloseOpen, setIsDailyCloseOpen] = useState(false);
   const [imageModal, setImageModal] = useState<{ isOpen: boolean; url: string; title?: string }>({
@@ -261,6 +262,13 @@ function AppInner() {
                 days={days}
                 settings={settings}
                 onSelectDayForJournal={handleSelectDateForJournal}
+                userId={user?.id}
+                onDaysChange={setDays}
+                onOpenQuickTradeForDate={(dateStr) => {
+                  setEditTrade(null);
+                  setQuickTradeInitialDate(dateStr);
+                  setIsQuickTradeOpen(true);
+                }}
               />
             )}
 
@@ -318,17 +326,20 @@ function AppInner() {
             onClose={() => {
               setIsQuickTradeOpen(false);
               setEditTrade(null);
+              setQuickTradeInitialDate(undefined);
             }}
             trades={trades}
             settings={settings}
             onTradeSaved={() => {
               setIsQuickTradeOpen(false);
               setEditTrade(null);
+              setQuickTradeInitialDate(undefined);
               loadAllData();
             }}
             editTrade={editTrade}
             userId={user?.id}
             onTradesChange={setTrades}
+            initialDate={quickTradeInitialDate}
           />
         )}
 

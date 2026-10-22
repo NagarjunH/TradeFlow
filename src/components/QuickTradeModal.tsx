@@ -32,6 +32,7 @@ interface QuickTradeModalProps {
   editTrade?: Trade | null;
   userId?: string;
   onTradesChange?: React.Dispatch<React.SetStateAction<Trade[]>>;
+  initialDate?: string;
 }
 
 export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
@@ -43,11 +44,12 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
   editTrade,
   userId,
   onTradesChange,
+  initialDate,
 }) => {
   const [showRiskCalc, setShowRiskCalc] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const [date, setDate] = useState(todayStr);
+  const [date, setDate] = useState(initialDate || todayStr);
   const [time, setTime] = useState(new Date().toTimeString().slice(0, 5));
   const [pair, setPair] = useState('XAU/USD');
   const [order, setOrder] = useState<'BUY' | 'SELL'>('BUY');
@@ -143,7 +145,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setSession(editTrade.session === 'Asian' ? 'Tokyo' : (editTrade.session || 'Tokyo'));
       setChartScreenshot(editTrade.chartScreenshot || '');
     } else {
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(initialDate || new Date().toISOString().split('T')[0]);
       setTime(new Date().toTimeString().slice(0, 5));
       setPair(settings.defaultPair || 'XAU/USD');
       setOrder('BUY');
