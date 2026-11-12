@@ -310,19 +310,27 @@
         if (inlineMoney && inlineMoney.val >= 0) return inlineMoney;
       }
 
-      // Check siblings, parent's siblings, and compact parent (common flex/grid label+value layouts)
+      // Check siblings, up to 2 ancestor levels' siblings, and compact container
       const neighbors = [
         el.nextElementSibling,
         el.previousElementSibling,
         el.parentElement?.nextElementSibling,
         el.parentElement?.previousElementSibling,
+        el.parentElement?.parentElement?.nextElementSibling,
+        el.parentElement?.parentElement?.previousElementSibling,
         el.parentElement,
+        el.parentElement?.parentElement,
       ];
       for (const n of neighbors) {
         if (!n) continue;
         const nTxt = (n.innerText || n.textContent || '').replace(/\s+/g, ' ').trim();
-        if (!nTxt || nTxt.length > 70 || !/\d/.test(nTxt)) continue;
-        if (n === el.parentElement && /\b(equity|margin|leverage|credit|account\s*#)\b/i.test(nTxt)) continue;
+        if (!nTxt || nTxt.length > 85 || !/\d/.test(nTxt)) continue;
+        if (
+          (n === el.parentElement || n === el.parentElement?.parentElement) &&
+          /\b(equity|margin|leverage|credit|account\s*#)\b/i.test(nTxt)
+        ) {
+          continue;
+        }
         const cleaned = nTxt.replace(labelRegex, '').trim();
         if (!cleaned || !/\d/.test(cleaned)) continue;
         const m = extractMoneyValue(cleaned);
@@ -331,8 +339,10 @@
       return null;
     };
 
-    const balanceLabelRx = /^(?:(?:Account|Available|Wallet|Cash|Total)\s+)?Balance(?:\s*\([A-Z]{3}\))?\s*:?/i;
-    const equityLabelRx = /^(?:(?:Account|Net)\s+)?Equity(?:\s*\([A-Z]{3}\))?\s*:?/i;
+    const balanceLabelRx =
+      /^(?:(?:Account|Available|Wallet|Cash|Total|Net|Free)\s+)?(?:Balance|Funds|Assets|Value|Liquidation)(?:\s*\((?:[A-Z]{3}|[\$₹€£])\))?\s*:?/i;
+    const equityLabelRx =
+      /^(?:(?:Account|Net|Total)\s+)?Equity(?:\s*\((?:[A-Z]{3}|[\$₹€£])\))?\s*:?/i;
 
     for (const el of candidates) {
       if (currentBalance == null) {
@@ -352,12 +362,17 @@
       if (currentBalance != null && equity != null) break;
     }
 
-    // Strategy 2: Full body text regex fallback (handles multi-line labels & bottom account bars)
-    const bodyText = document.body?.innerText || '';
+    // Strategy 2: Full body + Shadow DOM text regex fallback
+    let fullText = document.body?.innerText || '';
+    for (const el of queryAllDeep('*')) {
+      if (el.shadowRoot && el.shadowRoot.textContent) {
+        fullText += '\n' + el.shadowRoot.textContent;
+      }
+    }
 
     if (currentBalance == null) {
-      const balMatch = bodyText.match(
-        /(?:^|\s)(?:(?:Account|Available|Wallet|Cash|Total)\s+)?Balance(?:\s*\([A-Z]{3}\))?\s*[:\s]+((?:USD|INR|EUR|GBP|AUD|CAD|SGD)?\s*[\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD|CAD|SGD))?)/i
+      const balMatch = fullText.match(
+        /(?:^|\s)(?:(?:Account|Available|Wallet|Cash|Total|Net|Free)\s+)?(?:Balance|Funds|Assets|Value)(?:\s*\((?:[A-Z]{3}|[\$₹€£])\))?\s*[:\s]+((?:USD|INR|EUR|GBP|AUD|CAD|SGD)?\s*[\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD|CAD|SGD))?)/i
       );
       if (balMatch) {
         const m = extractMoneyValue(balMatch[1]);
@@ -369,8 +384,8 @@
     }
 
     if (equity == null) {
-      const eqMatch = bodyText.match(
-        /(?:^|\s)(?:(?:Account|Net)\s+)?Equity(?:\s*\([A-Z]{3}\))?\s*[:\s]+((?:USD|INR|EUR|GBP|AUD|CAD|SGD)?\s*[\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD|CAD|SGD))?)/i
+      const eqMatch = fullText.match(
+        /(?:^|\s)(?:(?:Account|Net|Total)\s+)?Equity(?:\s*\((?:[A-Z]{3}|[\$₹€£])\))?\s*[:\s]+((?:USD|INR|EUR|GBP|AUD|CAD|SGD)?\s*[\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD|CAD|SGD))?)/i
       );
       if (eqMatch) {
         const m = extractMoneyValue(eqMatch[1]);
@@ -381,15 +396,63 @@
       }
     }
 
+    // Strategy 3: Top-bar account pill fallback (e.g. "Live | USD 0.00" or "$0.00" inside top 110px bar)
+    for (const el of candidates) {
+      try {
+        if (el.children && el.children.length > 3) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0 || rect.top > 110) continue;
+        const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!txt || txt.length > 55) continue;
+        if (/\b(?:XAUUSD|XAGUSD|EURUSD|GBPUSD|AUDUSD|NZDUSD|USDCAD|USDJPY|USDCHF|BTCUSD|ETHUSD|SOLUSD|US30|NAS100|SPX500)\b/i.test(txt)) {
+          continue;
+        }
+        if (
+          /[\$₹€£]\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?|\b(?:USD|INR)\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?|(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?\s*(?:USD|INR)\b/i.test(
+            txt
+          )
+        ) {
+          if (currentBalance == null) {
+            const m = extractMoneyValue(txt);
+            if (m && m.val >= 0) {
+              currentBalance = m.val;
+              if (!currency && m.currency) currency = m.currency;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     // Position History summary bar: "Closed PnL: -87.74  Net PnL: -87.74"
     let visibleNetPnl = null;
-    const netPnlMatch = bodyText.match(/Net\s*PnL\s*:\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})/i);
+    const netPnlMatch = fullText.match(/Net\s*PnL\s*:\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})/i);
     if (netPnlMatch) {
       const parsed = parseFloat(netPnlMatch[1].replace(/,/g, ''));
       if (!isNaN(parsed) && isFinite(parsed)) visibleNetPnl = parsed;
     }
 
     const funding = scrapeFundingHistoryNet();
+
+    // Helpful header diagnostic only when balance still wasn't found
+    let debugTopText = null;
+    if (currentBalance == null) {
+      const seen = new Set();
+      const topSnippets = [];
+      for (const el of candidates) {
+        try {
+          if (el.children && el.children.length > 0) continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0 || rect.top > 130) continue;
+          const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!t || t.length > 40 || seen.has(t)) continue;
+          seen.add(t);
+          topSnippets.push(t);
+          if (topSnippets.length >= 16) break;
+        } catch (_) {}
+      }
+      if (topSnippets.length > 0) debugTopText = topSnippets.join(' | ');
+    }
 
     return {
       currentBalance,
@@ -398,6 +461,7 @@
       visibleNetPnl,
       fundingNet: funding?.netFunded ?? null,
       fundingRowCount: funding?.rowCount ?? 0,
+      debugTopText,
       scrapedAt: new Date().toISOString(),
     };
   }

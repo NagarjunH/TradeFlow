@@ -294,7 +294,8 @@ if (syncBalanceBtn) {
         );
         await refreshUI();
       } else {
-        showMsg(balanceMsg, res?.note || res?.error || 'Could not detect live Balance on page.', true);
+        const hint = res?.account?.debugTopText ? ` Top bar read: [${res.account.debugTopText}]` : '';
+        showMsg(balanceMsg, (res?.note || res?.error || 'Could not detect live Balance on page.') + hint, true);
       }
     } catch (err) {
       showMsg(
