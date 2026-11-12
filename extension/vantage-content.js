@@ -268,16 +268,30 @@
     };
   }
 
+  /** Query elements including open Shadow DOM roots */
+  function queryAllDeep(selector, root = document, acc = []) {
+    if (!root) return acc;
+    try {
+      const nodes = root.querySelectorAll(selector);
+      for (let i = 0; i < nodes.length; i++) acc.push(nodes[i]);
+      const all = root.querySelectorAll('*');
+      for (let i = 0; i < all.length; i++) {
+        if (all[i].shadowRoot) {
+          queryAllDeep(selector, all[i].shadowRoot, acc);
+        }
+      }
+    } catch (_) {}
+    return acc;
+  }
+
   /** Scrape live Current Balance, Equity, Currency, Position History Net PnL & Funding Net */
   function scrapeVantageAccountBalance() {
     let currentBalance = null;
     let equity = null;
     let currency = null;
 
-    // Strategy 1: Scan all compact label nodes across the terminal (header, top bar, or bottom account bar)
-    const candidates = Array.from(
-      document.querySelectorAll('span, div, p, td, th, dt, dd, label, strong, b')
-    );
+    // Strategy 1: Scan all compact label nodes across DOM + Shadow DOM (header, top bar, or bottom account bar)
+    const candidates = queryAllDeep('span, div, p, td, th, dt, dd, label, strong, b, button');
 
     const inspectLabel = (el, labelRegex) => {
       const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
@@ -508,29 +522,68 @@
     } catch (_) {}
   }, 15000);
 
-  // Listen to manual triggers from Popup
+  // Listen to manual triggers from Popup (multi-frame safe for iframe-hosted terminals)
+  const isChildFrame = window.top !== window.self;
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'SCRAPE_AND_SYNC_NOW') {
-      runSync(true, Boolean(msg.captureScreenshot))
-        .then((res) => sendResponse(res))
-        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      const hasContent =
+        scrapeVantagePositionHistory().length > 0 ||
+        (() => {
+          const a = scrapeVantageAccountBalance();
+          return a.currentBalance != null || a.fundingNet != null;
+        })();
+
+      if (isChildFrame && !hasContent) return false;
+
+      const exec = () =>
+        runSync(true, Boolean(msg.captureScreenshot))
+          .then((res) => sendResponse(res))
+          .catch((err) => sendResponse({ ok: false, error: err.message }));
+
+      if (!isChildFrame && !hasContent && document.querySelector('iframe')) {
+        setTimeout(exec, 90);
+      } else {
+        exec();
+      }
       return true;
     }
 
     if (msg.type === 'SYNC_BALANCE_NOW') {
-      syncBalanceOnly(true, {
-        forceUpdateStarted: true,
-        customStartedBalance: msg.customStartedBalance ?? null,
-      })
-        .then((res) => sendResponse(res))
-        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      const a = scrapeVantageAccountBalance();
+      const hasBal = a.currentBalance != null || a.fundingNet != null;
+      if (isChildFrame && !hasBal) return false;
+
+      const exec = () =>
+        syncBalanceOnly(true, {
+          forceUpdateStarted: true,
+          customStartedBalance: msg.customStartedBalance ?? null,
+        })
+          .then((res) => sendResponse(res))
+          .catch((err) => sendResponse({ ok: false, error: err.message }));
+
+      if (!isChildFrame && !hasBal && document.querySelector('iframe')) {
+        setTimeout(exec, 90);
+      } else {
+        exec();
+      }
       return true;
     }
 
     if (msg.type === 'PREVIEW_VANTAGE_TRADES') {
       const trades = scrapeVantagePositionHistory();
       const account = scrapeVantageAccountBalance();
-      sendResponse({ ok: true, count: trades.length, trades: trades.slice(0, 5), account });
+      const hasContent = trades.length > 0 || account.currentBalance != null || account.fundingNet != null;
+
+      if (isChildFrame && !hasContent) return false;
+
+      if (!isChildFrame && !hasContent && document.querySelector('iframe')) {
+        setTimeout(() => {
+          sendResponse({ ok: true, count: trades.length, trades: trades.slice(0, 5), account });
+        }, 90);
+      } else {
+        sendResponse({ ok: true, count: trades.length, trades: trades.slice(0, 5), account });
+      }
       return true;
     }
   });

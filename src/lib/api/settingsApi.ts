@@ -65,7 +65,6 @@ export const settingsApi = {
           id: userId,
           base_currency: settings.currency,
           initial_capital: settings.initialCapital,
-          current_balance: settings.currentBalance,
         } as never, { onConflict: 'id' })
         .then(({ error }) => error),
       supabase

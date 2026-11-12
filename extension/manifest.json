@@ -39,11 +39,13 @@
     {
       "matches": [
         "https://secure.vantagemarkets.com/web-trade*",
-        "https://*.vantagemarkets.com/web-trade*"
+        "https://*.vantagemarkets.com/web-trade*",
+        "https://secure.vantagemarkets.com/*"
       ],
       "js": [
         "vantage-content.js"
       ],
+      "all_frames": true,
       "run_at": "document_idle"
     },
     {
