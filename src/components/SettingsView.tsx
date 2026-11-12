@@ -11,7 +11,8 @@ import {
   AlertTriangle,
   X,
   Smartphone,
-  CheckCircle2
+  CheckCircle2,
+  Zap
 } from 'lucide-react';
 import { type AppSettings } from '../db/db';
 import { settingsApi } from '../lib/api/settingsApi';
@@ -23,12 +24,14 @@ interface SettingsViewProps {
   settings: AppSettings;
   onSettingsUpdated: () => void;
   userId?: string;
+  onOpenVantageSync?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
   onSettingsUpdated,
   userId,
+  onOpenVantageSync,
 }) => {
   const [formData, setFormData] = useState<AppSettings>(settings);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -316,6 +319,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </button>
         </div>
       </form>
+
+      {/* 2B. Vantage Web-Trade Auto-Sync & Broker Bridge */}
+      {onOpenVantageSync && (
+        <div className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 space-y-4 shadow-2xs transition-colors">
+          <div className="flex items-center justify-between border-b border-[#E7E0D6] dark:border-[#242D3D] pb-3">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-[#10B981]" />
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider">
+                  Vantage Web-Trade Auto-Sync
+                </h3>
+                <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                  Automatically capture closed positions from secure.vantagemarkets.com/web-trade
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-full bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399] text-[10px] font-bold uppercase tracking-wider">
+              Chrome Bridge + CSV
+            </span>
+          </div>
+          <p className="text-xs text-[#786F66] dark:text-[#94A3B8] leading-relaxed">
+            Connect TradeFlow directly with your Vantage browser terminal using our zero-cost Chrome Extension or paste Position History rows for instant deduplicated import.
+          </p>
+          <button
+            type="button"
+            onClick={onOpenVantageSync}
+            className="px-5 py-2.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#052E16] text-xs font-extrabold flex items-center gap-2 transition-all shadow-xs cursor-pointer"
+          >
+            <Zap className="w-4 h-4" />
+            Configure Vantage Sync / Import Trades
+          </button>
+        </div>
+      )}
 
       {/* 3. Cloud Data Backup & Danger Zone */}
       <div className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 space-y-4 shadow-2xs transition-colors">

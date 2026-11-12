@@ -5,13 +5,22 @@
 import { supabase } from '../supabase';
 import { db, type Trade } from '../../db/db';
 
-/** Extract custom HTF context, custom Session, and Outcome embedded in notes */
-function parseMetadataFromNotes(notes?: string | null): { cleanNotes?: string; htfContext?: string; session?: string; outcome?: string } {
+/** Extract custom HTF context, Session, Outcome, Ticket ID, and Broker embedded in notes */
+function parseMetadataFromNotes(notes?: string | null): {
+  cleanNotes?: string;
+  htfContext?: string;
+  session?: string;
+  outcome?: string;
+  brokerTicketId?: string;
+  brokerSource?: string;
+} {
   if (!notes) return {};
   let clean = notes;
   let htfContext: string | undefined;
   let session: string | undefined;
   let outcome: string | undefined;
+  let brokerTicketId: string | undefined;
+  let brokerSource: string | undefined;
 
   const htfMatch = clean.match(/\n?\[HTF:\s*(.*?)\]/s);
   if (htfMatch) {
@@ -31,34 +40,62 @@ function parseMetadataFromNotes(notes?: string | null): { cleanNotes?: string; h
     clean = clean.replace(/\n?\[OUTCOME:\s*(.*?)\]/s, '').trim();
   }
 
+  const ticketMatch = clean.match(/\n?\[TICKET:\s*(.*?)\]/s);
+  if (ticketMatch) {
+    brokerTicketId = ticketMatch[1].trim();
+    clean = clean.replace(/\n?\[TICKET:\s*(.*?)\]/s, '').trim();
+  }
+
+  const brokerMatch = clean.match(/\n?\[BROKER:\s*(.*?)\]/s);
+  if (brokerMatch) {
+    brokerSource = brokerMatch[1].trim();
+    clean = clean.replace(/\n?\[BROKER:\s*(.*?)\]/s, '').trim();
+  }
+
   return {
     cleanNotes: clean.length > 0 ? clean : undefined,
     htfContext,
     session,
     outcome,
+    brokerTicketId,
+    brokerSource,
   };
 }
 
-/** Embed custom HTF, Session, and Outcome into notes string to avoid Supabase check constraints while preserving full text */
+/** Embed custom HTF, Session, Outcome, Ticket, and Broker into notes string to avoid Supabase check constraints while preserving full text */
 function formatNotesWithMetadata(
   notes?: string | null,
   customHtf?: string | null,
   customSession?: string | null,
   existingNotes?: string | null,
-  customOutcome?: string | null
+  customOutcome?: string | null,
+  customTicketId?: string | null,
+  customBroker?: string | null
 ): string | null {
   let htfToSave = customHtf;
   let sessionToSave = customSession;
   let outcomeToSave = customOutcome;
+  let ticketToSave = customTicketId;
+  let brokerToSave = customBroker;
 
   if (existingNotes) {
     const existingParsed = parseMetadataFromNotes(existingNotes);
     if (!htfToSave && existingParsed.htfContext) htfToSave = existingParsed.htfContext;
     if (!sessionToSave && existingParsed.session) sessionToSave = existingParsed.session;
     if (!outcomeToSave && existingParsed.outcome) outcomeToSave = existingParsed.outcome;
+    if (!ticketToSave && existingParsed.brokerTicketId) ticketToSave = existingParsed.brokerTicketId;
+    if (!brokerToSave && existingParsed.brokerSource) brokerToSave = existingParsed.brokerSource;
   }
 
-  let clean = notes ? notes.replace(/\n?\[HTF:\s*(.*?)\]/s, '').replace(/\n?\[SESSION:\s*(.*?)\]/s, '').replace(/\n?\[OUTCOME:\s*(.*?)\]/s, '').trim() : '';
+  let clean = notes
+    ? notes
+        .replace(/\n?\[HTF:\s*(.*?)\]/s, '')
+        .replace(/\n?\[SESSION:\s*(.*?)\]/s, '')
+        .replace(/\n?\[OUTCOME:\s*(.*?)\]/s, '')
+        .replace(/\n?\[TICKET:\s*(.*?)\]/s, '')
+        .replace(/\n?\[BROKER:\s*(.*?)\]/s, '')
+        .trim()
+    : '';
 
   const tags: string[] = [];
   if (htfToSave && !['Bullish', 'Bearish', 'Neutral'].includes(htfToSave.trim())) {
@@ -69,6 +106,12 @@ function formatNotesWithMetadata(
   }
   if (outcomeToSave) {
     tags.push(`[OUTCOME: ${outcomeToSave.trim()}]`);
+  }
+  if (ticketToSave) {
+    tags.push(`[TICKET: ${ticketToSave.trim()}]`);
+  }
+  if (brokerToSave) {
+    tags.push(`[BROKER: ${brokerToSave.trim()}]`);
   }
 
   if (tags.length > 0) {
@@ -111,7 +154,14 @@ function mapSessionForDb(session?: string | null): string {
 // Map Supabase DB row → app-level Trade object
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToTrade(row: any): Trade {
-  const { cleanNotes, htfContext: parsedHtf, session: parsedSession, outcome: parsedOutcome } = parseMetadataFromNotes(row.notes);
+  const {
+    cleanNotes,
+    htfContext: parsedHtf,
+    session: parsedSession,
+    outcome: parsedOutcome,
+    brokerTicketId,
+    brokerSource,
+  } = parseMetadataFromNotes(row.notes);
 
   let tradeSuccessRate = parsedOutcome;
   if (!tradeSuccessRate) {
@@ -172,6 +222,8 @@ function rowToTrade(row: any): Trade {
     session,
     chartScreenshot: row.chart_url as string | undefined,
     notes: cleanNotes,
+    brokerTicketId,
+    brokerSource,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     _uuid: row.id as string,
@@ -191,7 +243,15 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
   }
 
   const rawNotes = trade.exitReason || trade.notes || null;
-  const notesWithMeta = formatNotesWithMetadata(rawNotes, trade.htfContext, trade.session, null, trade.tradeSuccessRate);
+  const notesWithMeta = formatNotesWithMetadata(
+    rawNotes,
+    trade.htfContext,
+    trade.session,
+    null,
+    trade.tradeSuccessRate,
+    trade.brokerTicketId,
+    trade.brokerSource
+  );
   const dbHtf = mapHtfContextForDb(trade.htfContext);
 
   const numPnl = Number(trade.pnl) || 0;
@@ -384,10 +444,30 @@ export const tradesApi = {
       updates.notes !== undefined ||
       updates.htfContext !== undefined ||
       updates.session !== undefined ||
-      updates.tradeSuccessRate !== undefined
+      updates.tradeSuccessRate !== undefined ||
+      updates.brokerTicketId !== undefined ||
+      updates.brokerSource !== undefined
     ) {
+      let existingTicket = updates.brokerTicketId;
+      let existingBroker = updates.brokerSource;
+      try {
+        const localAll = await db.trades.toArray();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const existingLocal = localAll.find((t: any) => t._uuid === uuid || String(t.id) === uuid);
+        if (!existingTicket && existingLocal?.brokerTicketId) existingTicket = existingLocal.brokerTicketId;
+        if (!existingBroker && existingLocal?.brokerSource) existingBroker = existingLocal.brokerSource;
+      } catch (_) {}
+
       const baseN = updates.exitReason ?? updates.notes;
-      partial.notes = formatNotesWithMetadata(baseN, updates.htfContext, updates.session, null, updates.tradeSuccessRate);
+      partial.notes = formatNotesWithMetadata(
+        baseN,
+        updates.htfContext,
+        updates.session,
+        null,
+        updates.tradeSuccessRate,
+        existingTicket,
+        existingBroker
+      );
     }
     if (updates.chartScreenshot !== undefined) {
       partial.chart_url = updates.chartScreenshot && updates.chartScreenshot.trim() ? updates.chartScreenshot : null;
@@ -426,5 +506,50 @@ export const tradesApi = {
         await db.trades.delete(match.id);
       }
     } catch (_) {}
+  },
+
+  /** Bulk-import broker trades with strict deduplication by brokerTicketId & trade signature */
+  async importBrokerTrades(
+    incoming: Omit<Trade, 'id' | 'tradeNumber'>[],
+    userId: string
+  ): Promise<{ inserted: Trade[]; skipped: number }> {
+    const existing = await this.getAll();
+    const existingTickets = new Set(
+      existing.map((t) => t.brokerTicketId).filter(Boolean) as string[]
+    );
+    const existingSignatures = new Set(
+      existing.map(
+        (t) =>
+          `${t.date}_${t.time}_${(t.pair || '').replace('/', '')}_${t.order}_${Number(t.lotSize).toFixed(2)}_${Number(t.pnl).toFixed(2)}`
+      )
+    );
+
+    const validNums = existing
+      .map((t) => Number(t.tradeNumber))
+      .filter((n) => !isNaN(n) && isFinite(n));
+    let nextNum = validNums.length > 0 ? Math.max(...validNums) + 1 : 1;
+
+    const inserted: Trade[] = [];
+    let skipped = 0;
+
+    for (const item of incoming) {
+      const sig = `${item.date}_${item.time}_${(item.pair || '').replace('/', '')}_${item.order}_${Number(item.lotSize).toFixed(2)}_${Number(item.pnl).toFixed(2)}`;
+      if ((item.brokerTicketId && existingTickets.has(item.brokerTicketId)) || existingSignatures.has(sig)) {
+        skipped++;
+        continue;
+      }
+
+      const fullTrade: Omit<Trade, 'id'> = {
+        ...item,
+        tradeNumber: nextNum++,
+      };
+
+      const saved = await this.create(fullTrade, userId);
+      inserted.push(saved);
+      if (item.brokerTicketId) existingTickets.add(item.brokerTicketId);
+      existingSignatures.add(sig);
+    }
+
+    return { inserted, skipped };
   },
 };

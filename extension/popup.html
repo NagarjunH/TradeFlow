@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TradeFlow Vantage Bridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 340px;
+      background: #0b0f19;
+      color: #f0f4f8;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 14px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #1e293b;
+      margin-bottom: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #0b0f19;
+      font-size: 14px;
+    }
+    .brand-title { font-size: 13px; font-weight: 800; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 10px; color: #94a3b8; }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .badge-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-off { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }
+    .card {
+      background: #131822;
+      border: 1px solid #242d3d;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .card-title { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .btn {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-primary { background: #10b981; color: #052e16; }
+    .btn-primary:hover { background: #34d399; }
+    .btn-secondary { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+    .btn-secondary:hover { background: #283548; }
+    .btn-danger { background: transparent; color: #f87171; border: 1px solid rgba(239,68,68,0.3); font-size: 10px; padding: 4px 8px; width: auto; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .input {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #2e384d;
+      background: #0f141d;
+      color: #f0f4f8;
+      font-size: 12px;
+      margin-bottom: 8px;
+      outline: none;
+    }
+    .input:focus { border-color: #10b981; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .text-xs { font-size: 11px; color: #cbd5e1; }
+    .text-muted { font-size: 10px; color: #94a3b8; }
+    .status-msg {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      display: none;
+    }
+    .status-msg.ok { display: block; background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status-msg.err { display: block; background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .divider {
+      text-align: center;
+      font-size: 10px;
+      color: #64748b;
+      margin: 10px 0;
+      position: relative;
+    }
+    .switch-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toggle {
+      appearance: none;
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: #334155;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle:checked { background: #10b981; }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: white;
+      transition: transform 0.2s;
+    }
+    .toggle:checked::after { transform: translateX(16px); }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">TF</div>
+      <div>
+        <div class="brand-title">TradeFlow Bridge</div>
+        <div class="brand-sub">Vantage Web-Trade Auto-Sync</div>
+      </div>
+    </div>
+    <span id="connBadge" class="badge badge-off">● Not Connected</span>
+  </div>
+
+  <!-- Auth Section -->
+  <div id="authSection" class="card">
+    <div class="card-title">Step 1: Connect TradeFlow Account</div>
+    <button id="autoConnectBtn" class="btn btn-secondary">⚡ Auto-Connect from Open TradeFlow Tab</button>
+    <div class="divider">— or sign in with email —</div>
+    <input id="emailInput" type="email" class="input" placeholder="TradeFlow Email" />
+    <input id="passwordInput" type="password" class="input" placeholder="Password" />
+    <button id="signInBtn" class="btn btn-primary">Connect Account</button>
+    <div id="authMsg" class="status-msg"></div>
+  </div>
+
+  <!-- Sync Section (Connected) -->
+  <div id="syncSection" class="hidden">
+    <div class="card">
+      <div class="row-between">
+        <div>
+          <div class="text-muted">Connected Account</div>
+          <div id="userEmailLabel" class="text-xs" style="font-weight:700; margin-top:2px;">-</div>
+        </div>
+        <button id="signOutBtn" class="btn btn-danger">Disconnect</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Vantage Terminal Status</div>
+      <div id="vantageStatusText" class="text-xs" style="margin-bottom:10px;">Checking Vantage Web-Trade tab...</div>
+
+      <div class="switch-wrap" style="margin-bottom:12px; padding-top:8px; border-top:1px solid #1e293b;">
+        <div>
+          <div class="text-xs" style="font-weight:700;">Real-Time Auto-Sync</div>
+          <div class="text-muted">Auto-imports closed trades from Position History</div>
+        </div>
+        <input id="autoSyncToggle" type="checkbox" class="toggle" checked />
+      </div>
+
+      <button id="syncNowBtn" class="btn btn-primary">🔄 Sync Position History Now</button>
+      <div id="syncMsg" class="status-msg"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:0;">
+      <div class="row-between">
+        <span class="text-muted">Last Sync</span>
+        <span id="lastSyncLabel" class="text-xs" style="font-family:monospace;">Never</span>
+      </div>
+      <div class="row-between" style="margin-top:4px;">
+        <span class="text-muted">Total Synced via Bridge</span>
+        <span id="totalSyncedLabel" class="text-xs" style="font-weight:800; color:#34d399;">0</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

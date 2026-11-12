@@ -34,6 +34,8 @@ export interface Trade {
   session?: 'Tokyo' | 'Asian' | 'London' | 'New York' | 'London/NY Overlap' | string;
   chartScreenshot?: string; // base64 / URL
   notes?: string;
+  brokerTicketId?: string;
+  brokerSource?: string;
   createdAt: string;
   updatedAt: string;
 }

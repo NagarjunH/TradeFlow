@@ -33,7 +33,8 @@ import {
   Link2,
   LogIn,
   Paperclip,
-  FileText
+  FileText,
+  Zap
 } from 'lucide-react';
 import type { Trade, AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
@@ -73,6 +74,7 @@ interface JournalViewProps {
   selectedDateFilter?: string;
   onClearDateFilter?: () => void;
   onTabChange?: (tab: TabType) => void;
+  onOpenVantageSync?: () => void;
 }
 
 export const JournalView: React.FC<JournalViewProps> = ({
@@ -86,6 +88,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   selectedDateFilter,
   onClearDateFilter,
   onTabChange,
+  onOpenVantageSync,
 }) => {
   const currSymbol = settings?.currency === 'USD' ? '$' : '₹';
 
@@ -366,6 +369,16 @@ export const JournalView: React.FC<JournalViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {onOpenVantageSync && (
+            <button
+              type="button"
+              onClick={onOpenVantageSync}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#E8F8EE] dark:bg-[#132A1C] hover:bg-[#D1F2DD] dark:hover:bg-[#193B27] text-[#15803D] dark:text-[#34D399] border border-[#10B981]/30 text-xs font-bold shadow-xs transition-all cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>Vantage Sync</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenQuickTrade}

@@ -25,6 +25,7 @@ const SettingsView = lazy(() => import('./components/SettingsView').then((m) => 
 const QuickTradeModal = lazy(() => import('./components/QuickTradeModal').then((m) => ({ default: m.QuickTradeModal })));
 const DailyCloseModal = lazy(() => import('./components/DailyCloseModal').then((m) => ({ default: m.DailyCloseModal })));
 const ImageViewerModal = lazy(() => import('./components/ImageViewerModal').then((m) => ({ default: m.ImageViewerModal })));
+const VantageSyncModal = lazy(() => import('./components/VantageSyncModal').then((m) => ({ default: m.VantageSyncModal })));
 
 function TabSkeleton() {
   return (
@@ -50,6 +51,7 @@ function AppInner() {
   const [quickTradeInitialDate, setQuickTradeInitialDate] = useState<string | undefined>(undefined);
   const [editTrade, setEditTrade] = useState<Trade | null>(null);
   const [isDailyCloseOpen, setIsDailyCloseOpen] = useState(false);
+  const [isVantageSyncOpen, setIsVantageSyncOpen] = useState(false);
   const [imageModal, setImageModal] = useState<{ isOpen: boolean; url: string; title?: string }>({
     isOpen: false,
     url: '',
@@ -116,6 +118,35 @@ function AppInner() {
   useEffect(() => {
     loadAllData();
   }, [loadAllData]);
+
+  useEffect(() => {
+    const handleBrokerSync = () => {
+      loadAllData();
+    };
+    window.addEventListener('tradeflow:broker-synced', handleBrokerSync);
+
+    if (!user?.id) {
+      return () => {
+        window.removeEventListener('tradeflow:broker-synced', handleBrokerSync);
+      };
+    }
+
+    const channel = supabase
+      .channel(`tradeflow-trades-sync-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trades', filter: `user_id=eq.${user.id}` },
+        () => {
+          loadAllData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('tradeflow:broker-synced', handleBrokerSync);
+      supabase.removeChannel(channel);
+    };
+  }, [loadAllData, user?.id]);
 
   // Keyboard shortcut: N = quick trade
   useEffect(() => {
@@ -253,6 +284,7 @@ function AppInner() {
                 selectedDateFilter={journalDateFilter}
                 onClearDateFilter={() => setJournalDateFilter(undefined)}
                 onTabChange={setCurrentTab}
+                onOpenVantageSync={() => setIsVantageSyncOpen(true)}
               />
             )}
 
@@ -312,6 +344,7 @@ function AppInner() {
                 settings={settings}
                 onSettingsUpdated={loadAllData}
                 userId={user?.id}
+                onOpenVantageSync={() => setIsVantageSyncOpen(true)}
               />
             )}
           </Suspense>
@@ -363,6 +396,17 @@ function AppInner() {
             onClose={() => setImageModal({ isOpen: false, url: '', title: '' })}
             imageUrl={imageModal.url}
             title={imageModal.title}
+          />
+        )}
+
+        {isVantageSyncOpen && (
+          <VantageSyncModal
+            isOpen={isVantageSyncOpen}
+            onClose={() => setIsVantageSyncOpen(false)}
+            trades={trades}
+            userId={user?.id || '00000000-0000-0000-0000-000000000000'}
+            settings={settings}
+            onSyncComplete={loadAllData}
           />
         )}
       </Suspense>
