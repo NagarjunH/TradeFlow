@@ -62,65 +62,78 @@ async function findTradeFlowTab() {
   );
 }
 
-/** Collect scraped trades + live account balance cleanly across ALL frames (immune to multi-frame sendMessage races) */
+/** Collect scraped trades + live account balance (via chrome.scripting if granted, else tabs.sendMessage) */
 async function scrapeVantageAllFrames(tabId) {
-  let frameCalls;
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      files: ['vantage-content.js'],
-    });
-    frameCalls = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      func: () => (typeof window.__tradeflowScrapeVantage === 'function' ? window.__tradeflowScrapeVantage() : null),
-    });
-  } catch (_) {
-    await chrome.scripting.executeScript({
-      target: { tabId, allFrames: false },
-      files: ['vantage-content.js'],
-    });
-    frameCalls = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: false },
-      func: () => (typeof window.__tradeflowScrapeVantage === 'function' ? window.__tradeflowScrapeVantage() : null),
-    });
-  }
-
-  const results = (frameCalls || []).map((f) => f?.result).filter(Boolean);
-  let bestTrades = [];
-  let bestAccount = null;
-  const debugParts = [];
-
-  for (const r of results) {
-    if (Array.isArray(r.trades) && r.trades.length > bestTrades.length) {
-      bestTrades = r.trades;
+  if (chrome.scripting?.executeScript) {
+    let frameCalls;
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        files: ['vantage-content.js'],
+      });
+      frameCalls = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: () => (typeof window.__tradeflowScrapeVantage === 'function' ? window.__tradeflowScrapeVantage() : null),
+      });
+    } catch (_) {
+      await chrome.scripting.executeScript({
+        target: { tabId, allFrames: false },
+        files: ['vantage-content.js'],
+      });
+      frameCalls = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: false },
+        func: () => (typeof window.__tradeflowScrapeVantage === 'function' ? window.__tradeflowScrapeVantage() : null),
+      });
     }
-    if (r.account) {
-      if (r.account.currentBalance != null) {
-        bestAccount = r.account;
-      } else if (!bestAccount && r.account.fundingNet != null) {
-        bestAccount = r.account;
+
+    const results = (frameCalls || []).map((f) => f?.result).filter(Boolean);
+    let bestTrades = [];
+    let bestAccount = null;
+    const debugParts = [];
+
+    for (const r of results) {
+      if (Array.isArray(r.trades) && r.trades.length > bestTrades.length) {
+        bestTrades = r.trades;
       }
-      if (r.account.debugTopText) {
-        debugParts.push(r.account.debugTopText);
+      if (r.account) {
+        if (r.account.currentBalance != null) {
+          bestAccount = r.account;
+        } else if (!bestAccount && r.account.fundingNet != null) {
+          bestAccount = r.account;
+        }
+        if (r.account.debugTopText) {
+          debugParts.push(r.account.debugTopText);
+        }
       }
     }
+
+    if (!bestAccount) {
+      bestAccount = results[0]?.account || { currentBalance: null, equity: null, fundingNet: null };
+    }
+    if (bestAccount.currentBalance == null && debugParts.length > 0) {
+      bestAccount = { ...bestAccount, debugTopText: debugParts.join(' || ') };
+    }
+
+    return { count: bestTrades.length, trades: bestTrades, account: bestAccount };
   }
 
-  if (!bestAccount) {
-    bestAccount = results[0]?.account || { currentBalance: null, equity: null, fundingNet: null };
-  }
-  if (bestAccount.currentBalance == null && debugParts.length > 0) {
-    bestAccount = { ...bestAccount, debugTopText: debugParts.join(' || ') };
-  }
-
-  return { count: bestTrades.length, trades: bestTrades, account: bestAccount };
+  // Fallback when chrome.scripting API is unavailable: use content-script messaging directly
+  const preview = await chrome.tabs.sendMessage(tabId, { type: 'PREVIEW_VANTAGE_TRADES' });
+  return {
+    count: preview?.count || 0,
+    trades: preview?.trades || [],
+    account: preview?.account || { currentBalance: null, equity: null, fundingNet: null },
+  };
 }
 
-/** Send message to Vantage tab, auto-injecting vantage-content.js if tab wasn't refreshed after extension reload */
+/** Send message to Vantage tab, auto-injecting vantage-content.js when chrome.scripting is available */
 async function sendToVantageTab(tabId, msg) {
   try {
     return await chrome.tabs.sendMessage(tabId, msg);
-  } catch (_) {
+  } catch (err) {
+    if (!chrome.scripting?.executeScript) {
+      throw err;
+    }
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
       files: ['vantage-content.js'],
@@ -133,7 +146,10 @@ async function sendToVantageTab(tabId, msg) {
 async function sendToTradeFlowTab(tabId, msg) {
   try {
     return await chrome.tabs.sendMessage(tabId, msg);
-  } catch (_) {
+  } catch (err) {
+    if (!chrome.scripting?.executeScript) {
+      throw err;
+    }
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['tradeflow-bridge.js'],

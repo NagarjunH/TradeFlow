@@ -8,6 +8,7 @@ const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0bW1lZGRreWN2aGVsdnhnb25lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5MTkyMTIsImV4cCI6MjEwNTQ5NTIxMn0.E0A6jzjg-HXyY-tRw1zKvaVsuNR3JfAHIaSZY2D6tf8';
 
 async function reinjectExtensionScripts() {
+  if (!chrome.scripting?.executeScript) return;
   try {
     const tabs = await chrome.tabs.query({});
     for (const tab of tabs) {
