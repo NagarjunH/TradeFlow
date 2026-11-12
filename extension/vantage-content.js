@@ -434,24 +434,28 @@
 
     const funding = scrapeFundingHistoryNet();
 
-    // Helpful header diagnostic only when balance still wasn't found
+    // Helpful header/footer diagnostic only when balance still wasn't found
     let debugTopText = null;
     if (currentBalance == null) {
       const seen = new Set();
-      const topSnippets = [];
+      const snippets = [];
+      const vh = window.innerHeight || 900;
       for (const el of candidates) {
         try {
           if (el.children && el.children.length > 0) continue;
           const rect = el.getBoundingClientRect();
-          if (rect.width <= 0 || rect.height <= 0 || rect.top > 130) continue;
+          if (rect.width <= 0 || rect.height <= 0) continue;
           const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-          if (!t || t.length > 40 || seen.has(t)) continue;
+          if (!t || t.length > 45 || seen.has(t)) continue;
+          const isHeaderOrFooter = rect.top <= 140 || rect.bottom >= vh - 90;
+          const isMoneyOrLabel = /(\$|₹|USD|INR|balance|equity|available|funds|assets)/i.test(t);
+          if (!isHeaderOrFooter && !isMoneyOrLabel) continue;
           seen.add(t);
-          topSnippets.push(t);
-          if (topSnippets.length >= 16) break;
+          snippets.push(t);
+          if (snippets.length >= 20) break;
         } catch (_) {}
       }
-      if (topSnippets.length > 0) debugTopText = topSnippets.join(' | ');
+      if (snippets.length > 0) debugTopText = snippets.join(' | ');
     }
 
     return {
@@ -658,12 +662,21 @@
 
   chrome.runtime.onMessage.addListener(onRuntimeMessage);
 
+  window.__tradeflowScrapeVantage = () => ({
+    trades: scrapeVantagePositionHistory(),
+    account: scrapeVantageAccountBalance(),
+    frameHref: window.location?.href || '',
+  });
+
   window.__tradeflowVantageCleanup = () => {
     clearTimeout(syncTimer);
     clearInterval(pollTimer);
     observer.disconnect();
     try {
       chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+    } catch (_) {}
+    try {
+      delete window.__tradeflowScrapeVantage;
     } catch (_) {}
   };
 })();

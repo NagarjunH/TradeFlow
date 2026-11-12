@@ -62,6 +62,60 @@ async function findTradeFlowTab() {
   );
 }
 
+/** Collect scraped trades + live account balance cleanly across ALL frames (immune to multi-frame sendMessage races) */
+async function scrapeVantageAllFrames(tabId) {
+  let frameCalls;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      files: ['vantage-content.js'],
+    });
+    frameCalls = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: () => (typeof window.__tradeflowScrapeVantage === 'function' ? window.__tradeflowScrapeVantage() : null),
+    });
+  } catch (_) {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      files: ['vantage-content.js'],
+    });
+    frameCalls = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      func: () => (typeof window.__tradeflowScrapeVantage === 'function' ? window.__tradeflowScrapeVantage() : null),
+    });
+  }
+
+  const results = (frameCalls || []).map((f) => f?.result).filter(Boolean);
+  let bestTrades = [];
+  let bestAccount = null;
+  const debugParts = [];
+
+  for (const r of results) {
+    if (Array.isArray(r.trades) && r.trades.length > bestTrades.length) {
+      bestTrades = r.trades;
+    }
+    if (r.account) {
+      if (r.account.currentBalance != null) {
+        bestAccount = r.account;
+      } else if (!bestAccount && r.account.fundingNet != null) {
+        bestAccount = r.account;
+      }
+      if (r.account.debugTopText) {
+        debugParts.push(r.account.debugTopText);
+      }
+    }
+  }
+
+  if (!bestAccount) {
+    bestAccount = results[0]?.account || { currentBalance: null, equity: null, fundingNet: null };
+  }
+  if (bestAccount.currentBalance == null && debugParts.length > 0) {
+    bestAccount = { ...bestAccount, debugTopText: debugParts.join(' || ') };
+  }
+
+  return { count: bestTrades.length, trades: bestTrades, account: bestAccount };
+}
+
 /** Send message to Vantage tab, auto-injecting vantage-content.js if tab wasn't refreshed after extension reload */
 async function sendToVantageTab(tabId, msg) {
   try {
@@ -155,8 +209,8 @@ async function refreshUI() {
       if (snapChartBtn) snapChartBtn.disabled = false;
       if (syncBalanceBtn) syncBalanceBtn.disabled = false;
       try {
-        const preview = await sendToVantageTab(vTab.id, { type: 'PREVIEW_VANTAGE_TRADES' });
-        if (preview?.ok) {
+        const preview = await scrapeVantageAllFrames(vTab.id);
+        if (preview) {
           const pSym = preview.account?.currency === 'INR' ? '₹' : '$';
           if (liveBalanceLabel) {
             if (preview.account?.currentBalance != null) {
@@ -175,9 +229,9 @@ async function refreshUI() {
               '<span style="color:#94a3b8;">ℹ Vantage Terminal open. Click <b>Position History</b> tab to view closed orders.</span>';
           }
         }
-      } catch (_) {
+      } catch (err) {
         vantageStatusText.innerHTML =
-          '<span style="color:#fbbf24;">↻ Refresh the Vantage Web-Trade tab once so the sync script activates.</span>';
+          `<span style="color:#fbbf24;">↻ Refresh the Vantage Web-Trade tab once (${err?.message || 'waiting'}).</span>`;
       }
     }
   } else {
@@ -282,20 +336,28 @@ if (syncBalanceBtn) {
     syncBalanceBtn.disabled = true;
     syncBalanceBtn.textContent = 'Syncing Balance...';
     try {
-      const res = await sendToVantageTab(vTab.id, {
-        type: 'SYNC_BALANCE_NOW',
-        customStartedBalance: customStarted && !isNaN(customStarted) && customStarted > 0 ? customStarted : null,
-      });
-      if (res?.ok && res.accountSync) {
-        const sym = res.accountSync.currency === 'INR' ? '₹' : '$';
-        showMsg(
-          balanceMsg,
-          `✅ Current: ${sym}${res.accountSync.currentBalance.toFixed(2)} | Started: ${sym}${res.accountSync.startedBalance.toFixed(2)}`
-        );
-        await refreshUI();
+      const scraped = await scrapeVantageAllFrames(vTab.id);
+      const acct = scraped?.account || {};
+      if (acct.currentBalance == null && acct.fundingNet == null && !(customStarted > 0)) {
+        const hint = acct.debugTopText ? ` Read: [${acct.debugTopText}]` : '';
+        showMsg(balanceMsg, 'Live Vantage Balance not visible on page.' + hint, true);
       } else {
-        const hint = res?.account?.debugTopText ? ` Top bar read: [${res.account.debugTopText}]` : '';
-        showMsg(balanceMsg, (res?.note || res?.error || 'Could not detect live Balance on page.') + hint, true);
+        const res = await chrome.runtime.sendMessage({
+          type: 'SYNC_ACCOUNT_BALANCE',
+          account: acct,
+          forceUpdateStarted: true,
+          customStartedBalance: customStarted && !isNaN(customStarted) && customStarted > 0 ? customStarted : null,
+        });
+        if (res?.ok && res.accountSync) {
+          const sym = res.accountSync.currency === 'INR' ? '₹' : '$';
+          showMsg(
+            balanceMsg,
+            `✅ Current: ${sym}${res.accountSync.currentBalance.toFixed(2)} | Started: ${sym}${res.accountSync.startedBalance.toFixed(2)}`
+          );
+          await refreshUI();
+        } else {
+          showMsg(balanceMsg, res?.error || 'Could not sync Balance to TradeFlow.', true);
+        }
       }
     } catch (err) {
       showMsg(
