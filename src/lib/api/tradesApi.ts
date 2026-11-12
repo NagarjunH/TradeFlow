@@ -5,7 +5,7 @@
 import { supabase } from '../supabase';
 import { db, type Trade } from '../../db/db';
 
-/** Extract custom HTF context, Session, Outcome, Ticket ID, and Broker embedded in notes */
+/** Extract custom HTF context, Session, Outcome, Ticket ID, Broker, and Execution metadata embedded in notes */
 function parseMetadataFromNotes(notes?: string | null): {
   cleanNotes?: string;
   htfContext?: string;
@@ -13,6 +13,10 @@ function parseMetadataFromNotes(notes?: string | null): {
   outcome?: string;
   brokerTicketId?: string;
   brokerSource?: string;
+  exitPrice?: number;
+  chargesSwap?: string;
+  openTimeRaw?: string;
+  closeTimeRaw?: string;
 } {
   if (!notes) return {};
   let clean = notes;
@@ -21,6 +25,10 @@ function parseMetadataFromNotes(notes?: string | null): {
   let outcome: string | undefined;
   let brokerTicketId: string | undefined;
   let brokerSource: string | undefined;
+  let exitPrice: number | undefined;
+  let chargesSwap: string | undefined;
+  let openTimeRaw: string | undefined;
+  let closeTimeRaw: string | undefined;
 
   const htfMatch = clean.match(/\n?\[HTF:\s*(.*?)\]/s);
   if (htfMatch) {
@@ -52,6 +60,33 @@ function parseMetadataFromNotes(notes?: string | null): {
     clean = clean.replace(/\n?\[BROKER:\s*(.*?)\]/s, '').trim();
   }
 
+  const exitMatch = clean.match(/\n?\[EXIT:\s*(.*?)\]/s);
+  if (exitMatch) {
+    const parsedExit = parseFloat(exitMatch[1].trim());
+    if (!isNaN(parsedExit) && isFinite(parsedExit)) {
+      exitPrice = parsedExit;
+    }
+    clean = clean.replace(/\n?\[EXIT:\s*(.*?)\]/s, '').trim();
+  }
+
+  const chargesMatch = clean.match(/\n?\[CHARGES:\s*(.*?)\]/s);
+  if (chargesMatch) {
+    chargesSwap = chargesMatch[1].trim();
+    clean = clean.replace(/\n?\[CHARGES:\s*(.*?)\]/s, '').trim();
+  }
+
+  const openMatch = clean.match(/\n?\[OPEN:\s*(.*?)\]/s);
+  if (openMatch) {
+    openTimeRaw = openMatch[1].trim();
+    clean = clean.replace(/\n?\[OPEN:\s*(.*?)\]/s, '').trim();
+  }
+
+  const closeMatch = clean.match(/\n?\[CLOSE:\s*(.*?)\]/s);
+  if (closeMatch) {
+    closeTimeRaw = closeMatch[1].trim();
+    clean = clean.replace(/\n?\[CLOSE:\s*(.*?)\]/s, '').trim();
+  }
+
   return {
     cleanNotes: clean.length > 0 ? clean : undefined,
     htfContext,
@@ -59,10 +94,14 @@ function parseMetadataFromNotes(notes?: string | null): {
     outcome,
     brokerTicketId,
     brokerSource,
+    exitPrice,
+    chargesSwap,
+    openTimeRaw,
+    closeTimeRaw,
   };
 }
 
-/** Embed custom HTF, Session, Outcome, Ticket, and Broker into notes string to avoid Supabase check constraints while preserving full text */
+/** Embed custom HTF, Session, Outcome, Ticket, Broker, and Execution metadata into notes string to avoid Supabase check constraints */
 function formatNotesWithMetadata(
   notes?: string | null,
   customHtf?: string | null,
@@ -70,13 +109,21 @@ function formatNotesWithMetadata(
   existingNotes?: string | null,
   customOutcome?: string | null,
   customTicketId?: string | null,
-  customBroker?: string | null
+  customBroker?: string | null,
+  customExitPrice?: number | null,
+  customChargesSwap?: string | null,
+  customOpenTime?: string | null,
+  customCloseTime?: string | null
 ): string | null {
   let htfToSave = customHtf;
   let sessionToSave = customSession;
   let outcomeToSave = customOutcome;
   let ticketToSave = customTicketId;
   let brokerToSave = customBroker;
+  let exitToSave = customExitPrice;
+  let chargesToSave = customChargesSwap;
+  let openToSave = customOpenTime;
+  let closeToSave = customCloseTime;
 
   if (existingNotes) {
     const existingParsed = parseMetadataFromNotes(existingNotes);
@@ -85,6 +132,10 @@ function formatNotesWithMetadata(
     if (!outcomeToSave && existingParsed.outcome) outcomeToSave = existingParsed.outcome;
     if (!ticketToSave && existingParsed.brokerTicketId) ticketToSave = existingParsed.brokerTicketId;
     if (!brokerToSave && existingParsed.brokerSource) brokerToSave = existingParsed.brokerSource;
+    if (exitToSave == null && existingParsed.exitPrice != null) exitToSave = existingParsed.exitPrice;
+    if (!chargesToSave && existingParsed.chargesSwap) chargesToSave = existingParsed.chargesSwap;
+    if (!openToSave && existingParsed.openTimeRaw) openToSave = existingParsed.openTimeRaw;
+    if (!closeToSave && existingParsed.closeTimeRaw) closeToSave = existingParsed.closeTimeRaw;
   }
 
   let clean = notes
@@ -94,6 +145,10 @@ function formatNotesWithMetadata(
         .replace(/\n?\[OUTCOME:\s*(.*?)\]/s, '')
         .replace(/\n?\[TICKET:\s*(.*?)\]/s, '')
         .replace(/\n?\[BROKER:\s*(.*?)\]/s, '')
+        .replace(/\n?\[EXIT:\s*(.*?)\]/s, '')
+        .replace(/\n?\[CHARGES:\s*(.*?)\]/s, '')
+        .replace(/\n?\[OPEN:\s*(.*?)\]/s, '')
+        .replace(/\n?\[CLOSE:\s*(.*?)\]/s, '')
         .trim()
     : '';
 
@@ -112,6 +167,18 @@ function formatNotesWithMetadata(
   }
   if (brokerToSave) {
     tags.push(`[BROKER: ${brokerToSave.trim()}]`);
+  }
+  if (exitToSave != null && isFinite(exitToSave)) {
+    tags.push(`[EXIT: ${exitToSave}]`);
+  }
+  if (chargesToSave) {
+    tags.push(`[CHARGES: ${chargesToSave.trim()}]`);
+  }
+  if (openToSave) {
+    tags.push(`[OPEN: ${openToSave.trim()}]`);
+  }
+  if (closeToSave) {
+    tags.push(`[CLOSE: ${closeToSave.trim()}]`);
   }
 
   if (tags.length > 0) {
@@ -161,6 +228,10 @@ function rowToTrade(row: any): Trade {
     outcome: parsedOutcome,
     brokerTicketId,
     brokerSource,
+    exitPrice,
+    chargesSwap,
+    openTimeRaw,
+    closeTimeRaw,
   } = parseMetadataFromNotes(row.notes);
 
   let tradeSuccessRate = parsedOutcome;
@@ -188,7 +259,7 @@ function rowToTrade(row: any): Trade {
 
   const riskReward = rMult !== 0 ? `1:${Math.abs(rMult).toFixed(rMult % 1 === 0 ? 0 : 1)}` : '1:1';
 
-  const htfContext = parsedHtf || (row.htf_context as string | undefined) || '1. Bearish on 1H, 4H 2. Bullish on 15m, 5m';
+  const htfContext = parsedHtf || (row.htf_context as string | undefined) || undefined;
 
   const rawExecution = (row.execution || '').toUpperCase();
   const rawQuality = (row.trade_quality || '').toUpperCase();
@@ -203,6 +274,7 @@ function rowToTrade(row: any): Trade {
     order: row.direction as 'BUY' | 'SELL',
     lotSize: Number(row.lot_size),
     entryPrice: row.entry_price != null ? Number(row.entry_price) : undefined,
+    exitPrice,
     slPrice: row.sl_price != null ? Number(row.sl_price) : undefined,
     tpPrice: row.tp_price != null ? Number(row.tp_price) : undefined,
     pnl: rawPnl,
@@ -224,6 +296,9 @@ function rowToTrade(row: any): Trade {
     notes: cleanNotes,
     brokerTicketId,
     brokerSource,
+    chargesSwap,
+    openTimeRaw,
+    closeTimeRaw,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     _uuid: row.id as string,
@@ -250,7 +325,11 @@ function tradeToRow(trade: Omit<Trade, 'id'>, userId: string) {
     null,
     trade.tradeSuccessRate,
     trade.brokerTicketId,
-    trade.brokerSource
+    trade.brokerSource,
+    trade.exitPrice,
+    trade.chargesSwap,
+    trade.openTimeRaw,
+    trade.closeTimeRaw
   );
   const dbHtf = mapHtfContextForDb(trade.htfContext);
 
@@ -446,27 +525,53 @@ export const tradesApi = {
       updates.session !== undefined ||
       updates.tradeSuccessRate !== undefined ||
       updates.brokerTicketId !== undefined ||
-      updates.brokerSource !== undefined
+      updates.brokerSource !== undefined ||
+      updates.exitPrice !== undefined ||
+      updates.chargesSwap !== undefined ||
+      updates.openTimeRaw !== undefined ||
+      updates.closeTimeRaw !== undefined
     ) {
       let existingTicket = updates.brokerTicketId;
       let existingBroker = updates.brokerSource;
+      let existingExitPrice = updates.exitPrice;
+      let existingCharges = updates.chargesSwap;
+      let existingOpen = updates.openTimeRaw;
+      let existingClose = updates.closeTimeRaw;
+      let existingBaseNotes = updates.exitReason ?? updates.notes;
+      let existingHtf = updates.htfContext;
+      let existingSess = updates.session;
+      let existingOutcome = updates.tradeSuccessRate;
+
       try {
         const localAll = await db.trades.toArray();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const existingLocal = localAll.find((t: any) => t._uuid === uuid || String(t.id) === uuid);
-        if (!existingTicket && existingLocal?.brokerTicketId) existingTicket = existingLocal.brokerTicketId;
-        if (!existingBroker && existingLocal?.brokerSource) existingBroker = existingLocal.brokerSource;
+        if (existingLocal) {
+          if (!existingTicket && existingLocal.brokerTicketId) existingTicket = existingLocal.brokerTicketId;
+          if (!existingBroker && existingLocal.brokerSource) existingBroker = existingLocal.brokerSource;
+          if (existingExitPrice == null && existingLocal.exitPrice != null) existingExitPrice = existingLocal.exitPrice;
+          if (!existingCharges && existingLocal.chargesSwap) existingCharges = existingLocal.chargesSwap;
+          if (!existingOpen && existingLocal.openTimeRaw) existingOpen = existingLocal.openTimeRaw;
+          if (!existingClose && existingLocal.closeTimeRaw) existingClose = existingLocal.closeTimeRaw;
+          if (existingBaseNotes === undefined) existingBaseNotes = existingLocal.exitReason ?? existingLocal.notes;
+          if (existingHtf === undefined) existingHtf = existingLocal.htfContext;
+          if (existingSess === undefined) existingSess = existingLocal.session;
+          if (existingOutcome === undefined) existingOutcome = existingLocal.tradeSuccessRate;
+        }
       } catch (_) {}
 
-      const baseN = updates.exitReason ?? updates.notes;
       partial.notes = formatNotesWithMetadata(
-        baseN,
-        updates.htfContext,
-        updates.session,
+        existingBaseNotes,
+        existingHtf,
+        existingSess,
         null,
-        updates.tradeSuccessRate,
+        existingOutcome,
         existingTicket,
-        existingBroker
+        existingBroker,
+        existingExitPrice,
+        existingCharges,
+        existingOpen,
+        existingClose
       );
     }
     if (updates.chartScreenshot !== undefined) {

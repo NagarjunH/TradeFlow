@@ -96,6 +96,16 @@
     return isNaN(n) ? 0 : n;
   }
 
+  function calculatePips(pair, order, entryPrice, exitPrice) {
+    if (!entryPrice || !exitPrice || !isFinite(entryPrice) || !isFinite(exitPrice)) return null;
+    const diff = order === 'BUY' ? exitPrice - entryPrice : entryPrice - exitPrice;
+    const sym = String(pair || '').replace('/', '').toUpperCase();
+    if (sym.includes('XAU') || sym.includes('XAG')) return Number((diff / 0.1).toFixed(1));
+    if (sym.includes('JPY')) return Number((diff / 0.01).toFixed(1));
+    if (/BTC|ETH|SOL|US30|NAS100|NDX|SPX|USTEC|GER|UK100/.test(sym)) return Number(diff.toFixed(1));
+    return Number((diff / 0.0001).toFixed(1));
+  }
+
   function buildTicketId(symbolRaw, order, lotSize, entryPrice, openTimeRaw, closeTimeRaw, netPnl) {
     const cleanOpen = openTimeRaw.trim().replace(/\s+/g, '_');
     const cleanClose = closeTimeRaw.trim().replace(/\s+/g, '_');
@@ -160,6 +170,7 @@
 
         const isWin = netPnl > 0.001;
         const isLoss = netPnl < -0.001;
+        const pips = calculatePips(pair, order, entryPrice, exitPrice);
 
         trades.push({
           brokerTicketId: ticketId,
@@ -172,6 +183,7 @@
           exitPrice,
           pnl,
           netPnl,
+          pips,
           chargesSwap,
           openTimeRaw,
           closeTimeRaw,
@@ -180,7 +192,7 @@
           session,
           tradeSuccessRate: isWin ? 'TARGET' : isLoss ? 'Stop Loss' : 'Breakeven',
           exitType: isWin ? 'TARGET' : isLoss ? 'STOP_LOSS' : 'BREAKEVEN',
-          notes: `Synced from Vantage Web-Trade (${closeTimeRaw} UTC+${brokerOffset})`,
+          notes: '',
         });
       }
     }
@@ -189,7 +201,7 @@
   }
 
   /** Subtle toast shown only when NEW trades are synced */
-  function showSyncToast(insertedCount) {
+  function showSyncToast(insertedCount, screenshotAttached = false) {
     if (!insertedCount || insertedCount <= 0) return;
     const id = 'tradeflow-sync-toast';
     const prev = document.getElementById(id);
@@ -197,7 +209,8 @@
 
     const toast = document.createElement('div');
     toast.id = id;
-    toast.textContent = `⚡ TradeFlow: Synced ${insertedCount} new Vantage trade${insertedCount > 1 ? 's' : ''}!`;
+    const snapText = screenshotAttached ? ' + 📸 Chart' : '';
+    toast.textContent = `⚡ TradeFlow: Synced ${insertedCount} new Vantage trade${insertedCount > 1 ? 's' : ''}${snapText}!`;
     Object.assign(toast.style, {
       position: 'fixed',
       bottom: '20px',
@@ -221,7 +234,7 @@
     }, 3800);
   }
 
-  async function runSync(force = false) {
+  async function runSync(force = false, captureScreenshot = false) {
     if (isSyncInFlight) return { ok: false, error: 'Sync already in progress' };
 
     const trades = scrapeVantagePositionHistory();
@@ -239,11 +252,12 @@
       const response = await chrome.runtime.sendMessage({
         type: 'SYNC_TRADES',
         trades,
+        captureScreenshot,
       });
       if (response?.ok) {
         lastSentFingerprint = fingerprint;
         if (response.insertedCount > 0) {
-          showSyncToast(response.insertedCount);
+          showSyncToast(response.insertedCount, Boolean(response.screenshotAttached));
         }
       }
       return response;
@@ -286,7 +300,7 @@
   // Listen to manual sync trigger from Popup
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'SCRAPE_AND_SYNC_NOW') {
-      runSync(true)
+      runSync(true, Boolean(msg.captureScreenshot))
         .then((res) => sendResponse(res))
         .catch((err) => sendResponse({ ok: false, error: err.message }));
       return true;

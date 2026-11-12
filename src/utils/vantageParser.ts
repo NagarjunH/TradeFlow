@@ -30,6 +30,39 @@ export function normalizePairSymbol(raw: string): string {
   return clean || 'XAU/USD';
 }
 
+/** Calculate signed pips/points captured from entry & exit prices */
+export function calculatePricePips(
+  pair: string,
+  order: 'BUY' | 'SELL',
+  entryPrice?: number,
+  exitPrice?: number
+): number | undefined {
+  if (
+    entryPrice == null ||
+    exitPrice == null ||
+    !isFinite(entryPrice) ||
+    !isFinite(exitPrice) ||
+    entryPrice <= 0 ||
+    exitPrice <= 0
+  ) {
+    return undefined;
+  }
+
+  const diff = order === 'BUY' ? exitPrice - entryPrice : entryPrice - exitPrice;
+  const sym = pair.replace('/', '').toUpperCase();
+
+  if (sym.includes('XAU') || sym.includes('XAG')) {
+    return Number((diff / 0.1).toFixed(1));
+  }
+  if (sym.includes('JPY')) {
+    return Number((diff / 0.01).toFixed(1));
+  }
+  if (/BTC|ETH|SOL|US30|NAS100|NDX|SPX|USTEC|GER|UK100/.test(sym)) {
+    return Number(diff.toFixed(1));
+  }
+  return Number((diff / 0.0001).toFixed(1));
+}
+
 /** Determine forex session from UTC hour */
 export function detectSessionFromUtcHour(utcHour: number): string {
   if (utcHour >= 12 && utcHour < 16) return 'London/NY Overlap';
@@ -306,6 +339,8 @@ export function parseVantageHistoryText(
 /** Convert a ParsedVantageTrade into TradeFlow insert payload */
 export function toTradeFlowPayload(parsed: ParsedVantageTrade): Omit<Trade, 'id' | 'tradeNumber'> {
   const now = new Date().toISOString();
+  const computedPips = calculatePricePips(parsed.pair, parsed.order, parsed.entryPrice, parsed.exitPrice);
+
   return {
     date: parsed.date,
     time: parsed.time,
@@ -313,21 +348,26 @@ export function toTradeFlowPayload(parsed: ParsedVantageTrade): Omit<Trade, 'id'
     order: parsed.order,
     lotSize: parsed.lotSize,
     entryPrice: parsed.entryPrice,
+    exitPrice: parsed.exitPrice,
+    chargesSwap: parsed.chargesSwap,
+    openTimeRaw: parsed.openTimeRaw,
+    closeTimeRaw: parsed.closeTimeRaw,
     pnl: parsed.netPnl,
     rMultiple: parsed.rMultiple,
     riskReward: parsed.rMultiple !== 0 ? `1:${Math.abs(parsed.rMultiple)}` : '1:1',
+    pips: computedPips,
     exitType: parsed.exitType,
     tradeSuccessRate: parsed.tradeSuccessRate,
     tradeQuality: 'CLEAN',
     emotion: 'FOCUSED',
     execution: 'CLEAN',
     violationReason: 'None',
-    setupType: 'Vantage Web-Trade',
-    htfContext: 'Neutral',
-    entryReason: `Entry: ${parsed.entryPrice} → Exit: ${parsed.exitPrice}`,
-    exitReason: `Synced from Vantage Web-Trade (${parsed.closeTimeRaw} UTC+2)`,
+    setupType: '',
+    htfContext: '',
+    entryReason: '',
+    exitReason: '',
     session: parsed.session,
-    notes: `Synced from Vantage Web-Trade (${parsed.closeTimeRaw} UTC+2)`,
+    notes: '',
     brokerTicketId: parsed.brokerTicketId,
     brokerSource: parsed.brokerSource,
     createdAt: now,

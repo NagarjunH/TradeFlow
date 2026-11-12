@@ -179,7 +179,7 @@
       <div class="card-title">Vantage Terminal Status</div>
       <div id="vantageStatusText" class="text-xs" style="margin-bottom:10px;">Checking Vantage Web-Trade tab...</div>
 
-      <div class="switch-wrap" style="margin-bottom:12px; padding-top:8px; border-top:1px solid #1e293b;">
+      <div class="switch-wrap" style="margin-bottom:10px; padding-top:8px; border-top:1px solid #1e293b;">
         <div>
           <div class="text-xs" style="font-weight:700;">Real-Time Auto-Sync</div>
           <div class="text-muted">Auto-imports closed trades from Position History</div>
@@ -187,7 +187,16 @@
         <input id="autoSyncToggle" type="checkbox" class="toggle" checked />
       </div>
 
-      <button id="syncNowBtn" class="btn btn-primary">🔄 Sync Position History Now</button>
+      <div class="switch-wrap" style="margin-bottom:12px; padding-top:8px; border-top:1px solid #1e293b;">
+        <div>
+          <div class="text-xs" style="font-weight:700;">Auto-Screenshot on Close</div>
+          <div class="text-muted">Captures active Vantage chart when trade closes</div>
+        </div>
+        <input id="autoScreenshotToggle" type="checkbox" class="toggle" checked />
+      </div>
+
+      <button id="syncNowBtn" class="btn btn-primary" style="margin-bottom:8px;">🔄 Sync Position History Now</button>
+      <button id="snapChartBtn" class="btn btn-secondary">📸 Snap Chart to Latest Trade</button>
       <div id="syncMsg" class="status-msg"></div>
     </div>
 

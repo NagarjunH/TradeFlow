@@ -387,7 +387,9 @@ export const VantageSyncModal: React.FC<VantageSyncModalProps> = ({
                   <p className="text-[#786F66] dark:text-[#94A3B8]">
                     Extension popup kholkar <b>⚡ Auto-Connect from Open TradeFlow Tab</b> par click karein.
                     Ab jab bhi aap <b>Vantage Web-Trade</b> par Position History kholenge ya trade close
-                    karenge, wo automatically TradeFlow me sync ho jayegi!
+                    karenge, wo automatically TradeFlow me sync ho jayegi — aur agar Vantage tab active
+                    hai toh chart screenshot bhi auto-attach ho jayega (ya popup me{' '}
+                    <b>📸 Snap Chart to Latest Trade</b> click karein)!
                   </p>
                 </div>
               </div>

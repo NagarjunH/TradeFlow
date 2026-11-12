@@ -295,6 +295,12 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         notes: exitReason.trim() || entryReason.trim() || undefined,
         session,
         chartScreenshot: chartScreenshot || undefined,
+        exitPrice: editTrade?.exitPrice,
+        chargesSwap: editTrade?.chargesSwap,
+        openTimeRaw: editTrade?.openTimeRaw,
+        closeTimeRaw: editTrade?.closeTimeRaw,
+        brokerTicketId: editTrade?.brokerTicketId,
+        brokerSource: editTrade?.brokerSource,
         createdAt: editTrade ? editTrade.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

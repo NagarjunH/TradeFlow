@@ -14,7 +14,9 @@ const userEmailLabel = document.getElementById('userEmailLabel');
 const signOutBtn = document.getElementById('signOutBtn');
 const vantageStatusText = document.getElementById('vantageStatusText');
 const autoSyncToggle = document.getElementById('autoSyncToggle');
+const autoScreenshotToggle = document.getElementById('autoScreenshotToggle');
 const syncNowBtn = document.getElementById('syncNowBtn');
+const snapChartBtn = document.getElementById('snapChartBtn');
 const syncMsg = document.getElementById('syncMsg');
 const lastSyncLabel = document.getElementById('lastSyncLabel');
 const totalSyncedLabel = document.getElementById('totalSyncedLabel');
@@ -65,6 +67,9 @@ async function refreshUI() {
 
     userEmailLabel.textContent = session.user.email || session.user.id;
     autoSyncToggle.checked = data.autoSync !== false;
+    if (autoScreenshotToggle) {
+      autoScreenshotToggle.checked = data.autoScreenshot !== false;
+    }
 
     if (data.lastSyncAt) {
       const dt = new Date(data.lastSyncAt);
@@ -80,8 +85,10 @@ async function refreshUI() {
       vantageStatusText.innerHTML =
         '<span style="color:#fbbf24;">⚠ Open <b>secure.vantagemarkets.com/web-trade</b> and click the <b>Position History</b> tab.</span>';
       syncNowBtn.disabled = true;
+      if (snapChartBtn) snapChartBtn.disabled = true;
     } else {
       syncNowBtn.disabled = false;
+      if (snapChartBtn) snapChartBtn.disabled = false;
       try {
         const preview = await chrome.tabs.sendMessage(vTab.id, { type: 'PREVIEW_VANTAGE_TRADES' });
         if (preview?.ok) {
@@ -159,6 +166,15 @@ autoSyncToggle.addEventListener('change', async () => {
   await chrome.runtime.sendMessage({ type: 'SET_AUTO_SYNC', enabled: autoSyncToggle.checked });
 });
 
+if (autoScreenshotToggle) {
+  autoScreenshotToggle.addEventListener('change', async () => {
+    await chrome.runtime.sendMessage({
+      type: 'SET_AUTO_SCREENSHOT',
+      enabled: autoScreenshotToggle.checked,
+    });
+  });
+}
+
 syncNowBtn.addEventListener('click', async () => {
   clearMsg(syncMsg);
   const vTab = await findVantageTab();
@@ -169,10 +185,17 @@ syncNowBtn.addEventListener('click', async () => {
   syncNowBtn.disabled = true;
   syncNowBtn.textContent = 'Syncing...';
   try {
-    const res = await chrome.tabs.sendMessage(vTab.id, { type: 'SCRAPE_AND_SYNC_NOW' });
+    const res = await chrome.tabs.sendMessage(vTab.id, {
+      type: 'SCRAPE_AND_SYNC_NOW',
+      captureScreenshot: autoScreenshotToggle ? autoScreenshotToggle.checked : true,
+    });
     if (res?.ok) {
       if (res.insertedCount > 0) {
-        showMsg(syncMsg, `✅ Synced ${res.insertedCount} new trade(s)! (${res.skippedCount || 0} duplicates skipped)`);
+        const snapNote = res.screenshotAttached ? ' + 📸 Chart saved!' : '';
+        showMsg(
+          syncMsg,
+          `✅ Synced ${res.insertedCount} new trade(s)${snapNote} (${res.skippedCount || 0} duplicates skipped)`
+        );
       } else if (res.totalSeen > 0) {
         showMsg(syncMsg, `All ${res.totalSeen} visible trade(s) are already synced in TradeFlow.`);
       } else {
@@ -189,5 +212,35 @@ syncNowBtn.addEventListener('click', async () => {
     syncNowBtn.textContent = '🔄 Sync Position History Now';
   }
 });
+
+if (snapChartBtn) {
+  snapChartBtn.addEventListener('click', async () => {
+    clearMsg(syncMsg);
+    const vTab = await findVantageTab();
+    if (!vTab) {
+      showMsg(syncMsg, 'Open Vantage Web-Trade tab first to capture its chart.', true);
+      return;
+    }
+    snapChartBtn.disabled = true;
+    snapChartBtn.textContent = 'Capturing Chart...';
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: 'CAPTURE_SCREENSHOT_TO_LATEST',
+        tabId: vTab.id,
+      });
+      if (res?.ok) {
+        showMsg(syncMsg, `📸 Chart attached to Trade #${res.tradeNumber} (${res.pair})!`);
+        await refreshUI();
+      } else {
+        showMsg(syncMsg, res?.error || 'Failed to capture chart screenshot.', true);
+      }
+    } catch (err) {
+      showMsg(syncMsg, err.message || 'Screenshot capture error', true);
+    } finally {
+      snapChartBtn.disabled = false;
+      snapChartBtn.textContent = '📸 Snap Chart to Latest Trade';
+    }
+  });
+}
 
 refreshUI();

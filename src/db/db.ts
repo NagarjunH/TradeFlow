@@ -36,6 +36,10 @@ export interface Trade {
   notes?: string;
   brokerTicketId?: string;
   brokerSource?: string;
+  exitPrice?: number;
+  chargesSwap?: string;
+  openTimeRaw?: string;
+  closeTimeRaw?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -9,9 +9,12 @@ const SUPABASE_ANON_KEY =
 
 // Default storage state
 chrome.runtime.onInstalled.addListener(async () => {
-  const existing = await chrome.storage.local.get(['autoSync']);
-  if (existing.autoSync === undefined) {
-    await chrome.storage.local.set({ autoSync: true });
+  const existing = await chrome.storage.local.get(['autoSync', 'autoScreenshot']);
+  const updates = {};
+  if (existing.autoSync === undefined) updates.autoSync = true;
+  if (existing.autoScreenshot === undefined) updates.autoScreenshot = true;
+  if (Object.keys(updates).length > 0) {
+    await chrome.storage.local.set(updates);
   }
   updateBadge();
 });
@@ -79,7 +82,7 @@ function mapSessionForDb(session) {
   return 'Asian';
 }
 
-/** Format notes with TradeFlow metadata tags so editing in app never drops ticket IDs */
+/** Format notes with TradeFlow metadata tags so editing in app never drops ticket IDs or execution prices */
 function buildNotesWithMeta(trade) {
   const tags = [];
   if (trade.session && !['London', 'New York', 'Asian', 'London/NY Overlap'].includes(trade.session)) {
@@ -96,8 +99,114 @@ function buildNotesWithMeta(trade) {
   if (trade.brokerSource) {
     tags.push(`[BROKER: ${trade.brokerSource}]`);
   }
-  const base = trade.notes || `Synced from Vantage Web-Trade (${trade.closeTimeRaw || ''})`;
-  return tags.length > 0 ? `${base}\n${tags.join('\n')}` : base;
+  if (trade.exitPrice != null && isFinite(Number(trade.exitPrice))) {
+    tags.push(`[EXIT: ${Number(trade.exitPrice)}]`);
+  }
+  if (trade.chargesSwap) {
+    tags.push(`[CHARGES: ${trade.chargesSwap}]`);
+  }
+  if (trade.openTimeRaw) {
+    tags.push(`[OPEN: ${trade.openTimeRaw}]`);
+  }
+  if (trade.closeTimeRaw) {
+    tags.push(`[CLOSE: ${trade.closeTimeRaw}]`);
+  }
+  const base = (trade.notes || '').trim();
+  if (tags.length > 0) {
+    return base ? `${base}\n${tags.join('\n')}` : tags.join('\n');
+  }
+  return base || null;
+}
+
+/** Notify any open TradeFlow app tabs to refresh immediately */
+function notifyTradeFlowTabs(insertedCount = 1) {
+  chrome.tabs.query({}, (tabs) => {
+    for (const tab of tabs) {
+      if (
+        tab.id &&
+        tab.url &&
+        (tab.url.includes('localhost') ||
+          tab.url.includes('vercel.app') ||
+          tab.url.includes('netlify.app') ||
+          tab.url.includes('github.io'))
+      ) {
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'TRADEFLOW_SYNC_COMPLETED',
+          insertedCount,
+        }).catch(() => {});
+      }
+    }
+  });
+}
+
+/** Capture visible screenshot of the Vantage Web-Trade tab */
+async function captureTabScreenshot(tabId, forceActivate = false) {
+  if (!tabId) return null;
+  try {
+    let tab = await chrome.tabs.get(tabId);
+    if (!tab) return null;
+
+    if (!tab.active) {
+      if (!forceActivate) return null;
+      await chrome.tabs.update(tabId, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 250));
+      tab = await chrome.tabs.get(tabId);
+    }
+
+    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+      format: 'jpeg',
+      quality: 75,
+    });
+    return dataUrl || null;
+  } catch (err) {
+    console.warn('[TradeFlow Bridge] Screenshot capture skipped:', err?.message || err);
+    return null;
+  }
+}
+
+/** Upload captured JPEG screenshot to Supabase Storage (falls back to dataUrl if bucket unavailable) */
+async function uploadScreenshotToSupabase(session, fileKey, dataUrl) {
+  if (!dataUrl) return null;
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const safeKey = String(fileKey || `snap_${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const objectPath = `${session.user.id}/${safeKey}.jpg`;
+
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/chart-screenshots/${objectPath}`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+        'x-upsert': 'true',
+        'Content-Type': 'image/jpeg',
+      },
+      body: blob,
+    });
+
+    if (uploadRes.ok) {
+      const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/chart-screenshots/${objectPath}`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ expiresIn: 315360000 }),
+      });
+
+      if (signRes.ok) {
+        const signData = await signRes.json();
+        if (signData?.signedURL) {
+          const suffix = signData.signedURL.startsWith('/') ? signData.signedURL : `/${signData.signedURL}`;
+          return `${SUPABASE_URL}/storage/v1${suffix}`;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[TradeFlow Bridge] Storage upload fallback to inline JPEG:', err?.message || err);
+  }
+  return dataUrl;
 }
 
 /** Sign in directly with TradeFlow email + password */
@@ -129,9 +238,9 @@ async function handleSignIn(email, password) {
 }
 
 /** Deduplicate & insert scraped Vantage trades into Supabase */
-async function syncTradesToSupabase(incomingTrades) {
+async function syncTradesToSupabase(incomingTrades, senderTab = null, options = {}) {
   if (!Array.isArray(incomingTrades) || incomingTrades.length === 0) {
-    return { insertedCount: 0, skippedCount: 0, totalSeen: 0 };
+    return { insertedCount: 0, skippedCount: 0, totalSeen: 0, screenshotAttached: false };
   }
 
   const session = await ensureValidSession();
@@ -211,15 +320,15 @@ async function syncTradesToSupabase(incomingTrades) {
       tp_price: null,
       pnl: pnlVal,
       r_multiple: rVal,
-      pips: null,
+      pips: t.pips ?? null,
       exit_type: t.exitType || (pnlVal > 0.001 ? 'TARGET' : pnlVal < -0.001 ? 'STOP_LOSS' : 'BREAKEVEN'),
       trade_quality: 'CLEAN',
       emotion: 'FOCUSED',
       execution: 'CLEAN',
       violation_reason: null,
-      setup_type: 'Vantage Web-Trade',
-      htf_context: 'Neutral',
-      entry_reason: `Entry: ${t.entryPrice ?? '-'} → Exit: ${t.exitPrice ?? '-'}`,
+      setup_type: null,
+      htf_context: null,
+      entry_reason: null,
       session: mapSessionForDb(t.session),
       notes: buildNotesWithMeta(t),
       chart_url: null,
@@ -230,7 +339,33 @@ async function syncTradesToSupabase(incomingTrades) {
     existingSigs.add(sig);
   }
 
+  let screenshotAttached = false;
   if (toInsert.length > 0) {
+    const prefs = await chrome.storage.local.get(['autoScreenshot']);
+    const wantAutoSnap = prefs.autoScreenshot !== false;
+    const shouldCapture =
+      Boolean(options.captureScreenshot) ||
+      (wantAutoSnap && toInsert.length <= 2 && Boolean(senderTab?.id) && Boolean(senderTab?.active));
+
+    if (shouldCapture && senderTab?.id) {
+      const snapDataUrl = await captureTabScreenshot(senderTab.id, Boolean(options.captureScreenshot));
+      if (snapDataUrl) {
+        const latestRow = toInsert[toInsert.length - 1];
+        const uploadedUrl = await uploadScreenshotToSupabase(
+          session,
+          `vantage_${latestRow.trade_date}_${latestRow.trade_number}_${Date.now()}`,
+          snapDataUrl
+        );
+        if (uploadedUrl) {
+          // Attach captured chart screenshot to newly closed trade(s) in this batch
+          for (const row of toInsert) {
+            row.chart_url = uploadedUrl;
+          }
+          screenshotAttached = true;
+        }
+      }
+    }
+
     // Ensure profile exists before insert
     await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
       method: 'POST',
@@ -276,31 +411,97 @@ async function syncTradesToSupabase(incomingTrades) {
 
   // Notify TradeFlow tabs if open
   if (toInsert.length > 0) {
-    chrome.tabs.query({}, (tabs) => {
-      for (const tab of tabs) {
-        if (
-          tab.id &&
-          tab.url &&
-          (tab.url.includes('localhost') || tab.url.includes('vercel.app') || tab.url.includes('netlify.app'))
-        ) {
-          chrome.tabs.sendMessage(tab.id, {
-            type: 'TRADEFLOW_SYNC_COMPLETED',
-            insertedCount: toInsert.length,
-          }).catch(() => {});
-        }
-      }
-    });
+    notifyTradeFlowTabs(toInsert.length);
   }
 
   return {
     insertedCount: toInsert.length,
     skippedCount,
     totalSeen: incomingTrades.length,
+    screenshotAttached,
+  };
+}
+
+/** Capture active Vantage chart & attach screenshot to the trader's latest trade in Supabase */
+async function attachScreenshotToLatestTrade(targetTabId) {
+  const session = await ensureValidSession();
+  const userId = session.user.id;
+  const headers = {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json',
+  };
+
+  let vTabId = targetTabId;
+  if (!vTabId) {
+    const tabs = await chrome.tabs.query({});
+    const vTab = tabs.find(
+      (t) =>
+        t.url &&
+        (t.url.includes('vantagemarkets.com/web-trade') || t.url.includes('secure.vantagemarkets.com'))
+    );
+    vTabId = vTab?.id;
+  }
+  if (!vTabId) {
+    throw new Error('Vantage Web-Trade tab not found.');
+  }
+
+  const snapDataUrl = await captureTabScreenshot(vTabId, true);
+  if (!snapDataUrl) {
+    throw new Error('Unable to capture Vantage tab screenshot. Ensure the tab is open and visible.');
+  }
+
+  // Find latest trade for this user
+  const latestRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/trades?select=id,trade_number,pair,trade_date,trade_time&user_id=eq.${encodeURIComponent(userId)}&order=trade_date.desc,trade_time.desc,trade_number.desc&limit=1`,
+    { headers }
+  );
+  if (!latestRes.ok) {
+    throw new Error(`Could not find latest trade: ${latestRes.status}`);
+  }
+
+  const latestRows = await latestRes.json();
+  if (!Array.isArray(latestRows) || latestRows.length === 0) {
+    throw new Error('No trades found in TradeFlow yet. Sync or add a trade first.');
+  }
+
+  const latest = latestRows[0];
+  const uploadedUrl = await uploadScreenshotToSupabase(
+    session,
+    `vantage_trade_${latest.trade_number}_${Date.now()}`,
+    snapDataUrl
+  );
+
+  const patchRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/trades?id=eq.${encodeURIComponent(latest.id)}&user_id=eq.${encodeURIComponent(userId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        ...headers,
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        chart_url: uploadedUrl,
+        updated_at: new Date().toISOString(),
+      }),
+    }
+  );
+
+  if (!patchRes.ok) {
+    const errText = await patchRes.text();
+    throw new Error(`Failed to attach screenshot: ${patchRes.status} ${errText}`);
+  }
+
+  notifyTradeFlowTabs(1);
+  return {
+    tradeNumber: latest.trade_number,
+    pair: latest.pair,
+    chartUrl: uploadedUrl,
   };
 }
 
 // Listen to messages from Popup & Content Scripts
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'SIGN_IN') {
     handleSignIn(msg.email, msg.password)
       .then((session) => sendResponse({ ok: true, session }))
@@ -336,8 +537,24 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'SET_AUTO_SCREENSHOT') {
+    chrome.storage.local.set({ autoScreenshot: Boolean(msg.enabled) }).then(() => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (msg.type === 'SYNC_TRADES') {
-    syncTradesToSupabase(msg.trades || [])
+    syncTradesToSupabase(msg.trades || [], sender?.tab || null, {
+      captureScreenshot: Boolean(msg.captureScreenshot),
+    })
+      .then((res) => sendResponse({ ok: true, ...res }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
+  if (msg.type === 'CAPTURE_SCREENSHOT_TO_LATEST') {
+    attachScreenshotToLatestTrade(msg.tabId || null)
       .then((res) => sendResponse({ ok: true, ...res }))
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
@@ -345,7 +562,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.type === 'GET_STATE') {
     chrome.storage.local
-      .get(['session', 'autoSync', 'lastSyncAt', 'lastInsertedCount', 'lastSkippedCount', 'totalSynced', 'lastTradesPreview'])
+      .get([
+        'session',
+        'autoSync',
+        'autoScreenshot',
+        'lastSyncAt',
+        'lastInsertedCount',
+        'lastSkippedCount',
+        'totalSynced',
+        'lastTradesPreview',
+      ])
       .then((data) => sendResponse({ ok: true, data }));
     return true;
   }

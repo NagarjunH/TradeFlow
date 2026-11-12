@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "TradeFlow Vantage Bridge",
-  "version": "1.0.0",
-  "description": "Automatically sync closed trades from Vantage Web-Trade Terminal (secure.vantagemarkets.com) directly into your TradeFlow Trading Journal.",
+  "version": "1.1.0",
+  "description": "Automatically sync closed trades & chart screenshots from Vantage Web-Trade Terminal (secure.vantagemarkets.com) directly into your TradeFlow Trading Journal.",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "activeTab"
   ],
   "host_permissions": [
+    "<all_urls>",
     "https://secure.vantagemarkets.com/*",
     "https://*.vantagemarkets.com/*",
     "https://stmmeddkycvhelvxgone.supabase.co/*",
