@@ -8,6 +8,7 @@
   window.__tradeflowVantageLoaded = true;
 
   let lastSentFingerprint = '';
+  let lastBalanceKey = '';
   let syncTimer = null;
   let isSyncInFlight = false;
 
@@ -200,6 +201,177 @@
     return trades;
   }
 
+  /** Parse monetary amount like "$1,234.56 USD" or "912.26" */
+  function extractMoneyValue(text) {
+    if (!text) return null;
+    const m = String(text)
+      .replace(/\u00a0/g, ' ')
+      .match(/([\$₹€£])?\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\s*(USD|INR|EUR|GBP|AUD|CAD|SGD)?/i);
+    if (!m) return null;
+    const val = parseFloat(m[2].replace(/,/g, ''));
+    if (isNaN(val) || !isFinite(val)) return null;
+    let currency = null;
+    if (m[1] === '$' || (m[3] && m[3].toUpperCase() === 'USD')) currency = 'USD';
+    else if (m[1] === '₹' || (m[3] && m[3].toUpperCase() === 'INR')) currency = 'INR';
+    return { val, currency };
+  }
+
+  /** Scrape Deposit / Withdrawal rows when Funding History tab is open */
+  function scrapeFundingHistoryNet() {
+    const bodyText = document.body?.innerText || '';
+    // Only calculate funding net when deposit/withdrawal rows are visibly rendered
+    const rows = Array.from(
+      document.querySelectorAll('tbody tr, [role="row"], [class*="table-row"], [class*="TableRow"], [class*="row"]')
+    );
+
+    let totalDeposited = 0;
+    let totalWithdrawn = 0;
+    let rowCount = 0;
+
+    for (const el of rows) {
+      const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!txt || txt.length > 260) continue;
+      if (!/\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}/.test(txt)) continue;
+
+      const isDeposit = /\b(deposit|transfer\s*in|top\s*up|credit\s*in)\b/i.test(txt);
+      const isWithdraw = /\b(withdraw|withdrawal|transfer\s*out)\b/i.test(txt);
+      if (!isDeposit && !isWithdraw) continue;
+
+      const amtMatches = txt.match(/([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})/g);
+      if (!amtMatches || amtMatches.length === 0) continue;
+      const amt = Math.abs(parseFloat(amtMatches[0].replace(/,/g, '')));
+      if (!amt || isNaN(amt)) continue;
+
+      if (isDeposit) totalDeposited += amt;
+      else if (isWithdraw) totalWithdrawn += amt;
+      rowCount++;
+    }
+
+    // Fallback check when body indicates Funding History with explicit single row text
+    if (rowCount === 0 && /Funding History/i.test(bodyText)) {
+      return null;
+    }
+
+    if (rowCount === 0) return null;
+    return {
+      totalDeposited: Number(totalDeposited.toFixed(2)),
+      totalWithdrawn: Number(totalWithdrawn.toFixed(2)),
+      netFunded: Number((totalDeposited - totalWithdrawn).toFixed(2)),
+      rowCount,
+    };
+  }
+
+  /** Scrape live Current Balance, Equity, Currency, Position History Net PnL & Funding Net */
+  function scrapeVantageAccountBalance() {
+    let currentBalance = null;
+    let equity = null;
+    let currency = null;
+
+    // Strategy 1: Targeted DOM label scan near account / header bar
+    const candidates = Array.from(
+      document.querySelectorAll(
+        'header span, header div, header p, [class*="account"] span, [class*="Account"] span, [class*="account"] div, [class*="Account"] div, [class*="balance"] span, [class*="Balance"] span, [class*="asset"] span, [class*="Asset"] span, [class*="wallet"] span, [class*="Wallet"] span'
+      )
+    );
+
+    const inspectLabel = (el, labelRegex) => {
+      const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!txt || txt.length > 75) return null;
+      if (!labelRegex.test(txt)) return null;
+
+      // Inline "Balance: $1,234.56"
+      const afterLabel = txt.replace(labelRegex, '').trim();
+      if (afterLabel) {
+        const inlineMoney = extractMoneyValue(afterLabel);
+        if (inlineMoney && inlineMoney.val >= 0) return inlineMoney;
+      }
+
+      // Sibling / Parent-sibling value
+      const neighbors = [
+        el.nextElementSibling,
+        el.previousElementSibling,
+        el.parentElement?.nextElementSibling,
+        el.parentElement,
+      ];
+      for (const n of neighbors) {
+        if (!n) continue;
+        const nTxt = (n.innerText || n.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!nTxt || nTxt.length > 90) continue;
+        const cleaned = nTxt.replace(labelRegex, '').trim();
+        const m = extractMoneyValue(cleaned);
+        if (m && m.val >= 0) return m;
+      }
+      return null;
+    };
+
+    for (const el of candidates) {
+      if (currentBalance == null) {
+        const res = inspectLabel(el, /^(?:Account\s+)?Balance\s*:?/i);
+        if (res) {
+          currentBalance = res.val;
+          if (!currency && res.currency) currency = res.currency;
+        }
+      }
+      if (equity == null) {
+        const res = inspectLabel(el, /^(?:Account\s+)?Equity\s*:?/i);
+        if (res) {
+          equity = res.val;
+          if (!currency && res.currency) currency = res.currency;
+        }
+      }
+      if (currentBalance != null && equity != null) break;
+    }
+
+    // Strategy 2: Header / top-of-page text scan fallback
+    const bodyText = document.body?.innerText || '';
+    const headerSlice = bodyText.slice(0, 4500);
+
+    if (currentBalance == null) {
+      const balMatch = headerSlice.match(
+        /(?:^|\s)(?:Account\s+)?Balance\s*[:\s]+([\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD))?)/i
+      );
+      if (balMatch) {
+        const m = extractMoneyValue(balMatch[1]);
+        if (m && m.val >= 0) {
+          currentBalance = m.val;
+          if (!currency && m.currency) currency = m.currency;
+        }
+      }
+    }
+
+    if (equity == null) {
+      const eqMatch = headerSlice.match(
+        /(?:^|\s)(?:Account\s+)?Equity\s*[:\s]+([\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD))?)/i
+      );
+      if (eqMatch) {
+        const m = extractMoneyValue(eqMatch[1]);
+        if (m && m.val >= 0) {
+          equity = m.val;
+        }
+      }
+    }
+
+    // Position History summary bar: "Closed PnL: -87.74  Net PnL: -87.74"
+    let visibleNetPnl = null;
+    const netPnlMatch = bodyText.match(/Net\s*PnL\s*:\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})/i);
+    if (netPnlMatch) {
+      const parsed = parseFloat(netPnlMatch[1].replace(/,/g, ''));
+      if (!isNaN(parsed) && isFinite(parsed)) visibleNetPnl = parsed;
+    }
+
+    const funding = scrapeFundingHistoryNet();
+
+    return {
+      currentBalance,
+      equity,
+      currency,
+      visibleNetPnl,
+      fundingNet: funding?.netFunded ?? null,
+      fundingRowCount: funding?.rowCount ?? 0,
+      scrapedAt: new Date().toISOString(),
+    };
+  }
+
   /** Subtle toast shown only when NEW trades are synced */
   function showSyncToast(insertedCount, screenshotAttached = false) {
     if (!insertedCount || insertedCount <= 0) return;
@@ -234,17 +406,42 @@
     }, 3800);
   }
 
+  async function syncBalanceOnly(force = false, options = {}) {
+    const account = scrapeVantageAccountBalance();
+    if (account.currentBalance == null && account.fundingNet == null) {
+      return { ok: false, note: 'Live Vantage Balance not visible on page yet.', account };
+    }
+    const balKey = `${account.currentBalance ?? 'none'}|${account.fundingNet ?? 'none'}`;
+    if (!force && balKey === lastBalanceKey) {
+      return { ok: true, skipped: true, account };
+    }
+    const res = await chrome.runtime.sendMessage({
+      type: 'SYNC_ACCOUNT_BALANCE',
+      account,
+      ...options,
+    });
+    if (res?.ok) {
+      lastBalanceKey = balKey;
+    }
+    return { ...res, account };
+  }
+
   async function runSync(force = false, captureScreenshot = false) {
     if (isSyncInFlight) return { ok: false, error: 'Sync already in progress' };
 
     const trades = scrapeVantagePositionHistory();
+    const account = scrapeVantageAccountBalance();
     if (trades.length === 0) {
-      return { ok: true, insertedCount: 0, skippedCount: 0, totalSeen: 0, note: 'No Position History rows visible yet.' };
+      if (account.currentBalance != null || account.fundingNet != null) {
+        await syncBalanceOnly(force).catch(() => {});
+      }
+      return { ok: true, insertedCount: 0, skippedCount: 0, totalSeen: 0, account, note: 'No Position History rows visible yet.' };
     }
 
     const fingerprint = trades.map((t) => t.brokerTicketId).join('|');
     if (!force && fingerprint === lastSentFingerprint) {
-      return { ok: true, insertedCount: 0, skippedCount: trades.length, totalSeen: trades.length };
+      await syncBalanceOnly(false).catch(() => {});
+      return { ok: true, insertedCount: 0, skippedCount: trades.length, totalSeen: trades.length, account };
     }
 
     isSyncInFlight = true;
@@ -252,15 +449,17 @@
       const response = await chrome.runtime.sendMessage({
         type: 'SYNC_TRADES',
         trades,
+        account,
         captureScreenshot,
       });
       if (response?.ok) {
         lastSentFingerprint = fingerprint;
+        lastBalanceKey = `${account.currentBalance ?? 'none'}|${account.fundingNet ?? 'none'}`;
         if (response.insertedCount > 0) {
           showSyncToast(response.insertedCount, Boolean(response.screenshotAttached));
         }
       }
-      return response;
+      return { ...response, account };
     } finally {
       isSyncInFlight = false;
     }
@@ -297,7 +496,7 @@
     } catch (_) {}
   }, 15000);
 
-  // Listen to manual sync trigger from Popup
+  // Listen to manual triggers from Popup
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'SCRAPE_AND_SYNC_NOW') {
       runSync(true, Boolean(msg.captureScreenshot))
@@ -306,9 +505,20 @@
       return true;
     }
 
+    if (msg.type === 'SYNC_BALANCE_NOW') {
+      syncBalanceOnly(true, {
+        forceUpdateStarted: true,
+        customStartedBalance: msg.customStartedBalance ?? null,
+      })
+        .then((res) => sendResponse(res))
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+
     if (msg.type === 'PREVIEW_VANTAGE_TRADES') {
       const trades = scrapeVantagePositionHistory();
-      sendResponse({ ok: true, count: trades.length, trades: trades.slice(0, 5) });
+      const account = scrapeVantageAccountBalance();
+      sendResponse({ ok: true, count: trades.length, trades: trades.slice(0, 5), account });
       return true;
     }
   });

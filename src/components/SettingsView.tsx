@@ -203,12 +203,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div>
             <label className="block font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1.5">
-              Initial Capital
+              Started Balance (Initial Capital)
             </label>
             <input
               type="number"
+              step="0.01"
               value={formData.initialCapital}
               onChange={(e) => setFormData({ ...formData, initialCapital: parseFloat(e.target.value) || 0 })}
+              className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-[#1F1A16] dark:text-[#F0F4F8] font-mono focus:border-[#10B981] outline-none transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1.5">
+              Current Balance (Live / Vantage)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.currentBalance}
+              onChange={(e) => setFormData({ ...formData, currentBalance: parseFloat(e.target.value) || 0 })}
               className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-[#1F1A16] dark:text-[#F0F4F8] font-mono focus:border-[#10B981] outline-none transition-colors"
             />
           </div>

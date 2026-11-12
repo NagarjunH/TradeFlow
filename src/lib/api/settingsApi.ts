@@ -54,15 +54,19 @@ export const settingsApi = {
   },
 
   async save(userId: string, settings: AppSettings): Promise<void> {
+    try {
+      await db.settings.put(settings);
+    } catch (_) {}
+
     const [profileErr, settingsErr] = await Promise.all([
       supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: userId,
           base_currency: settings.currency,
           initial_capital: settings.initialCapital,
           current_balance: settings.currentBalance,
-        } as never)
-        .eq('id', userId)
+        } as never, { onConflict: 'id' })
         .then(({ error }) => error),
       supabase
         .from('user_settings')

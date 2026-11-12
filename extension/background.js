@@ -9,10 +9,11 @@ const SUPABASE_ANON_KEY =
 
 // Default storage state
 chrome.runtime.onInstalled.addListener(async () => {
-  const existing = await chrome.storage.local.get(['autoSync', 'autoScreenshot']);
+  const existing = await chrome.storage.local.get(['autoSync', 'autoScreenshot', 'autoBalanceSync']);
   const updates = {};
   if (existing.autoSync === undefined) updates.autoSync = true;
   if (existing.autoScreenshot === undefined) updates.autoScreenshot = true;
+  if (existing.autoBalanceSync === undefined) updates.autoBalanceSync = true;
   if (Object.keys(updates).length > 0) {
     await chrome.storage.local.set(updates);
   }
@@ -398,7 +399,7 @@ async function syncTradesToSupabase(incomingTrades, senderTab = null, options = 
   }
 
   // Record sync telemetry
-  const prev = await chrome.storage.local.get(['totalSynced']);
+  const prev = await chrome.storage.local.get(['totalSynced', 'autoBalanceSync']);
   const totalSynced = (prev.totalSynced || 0) + toInsert.length;
 
   await chrome.storage.local.set({
@@ -408,6 +409,17 @@ async function syncTradesToSupabase(incomingTrades, senderTab = null, options = 
     totalSynced,
     lastTradesPreview: incomingTrades.slice(0, 5),
   });
+
+  // Auto-sync live Vantage balance & started capital alongside trades
+  let accountSync = null;
+  if (prev.autoBalanceSync !== false && options.account && (options.account.currentBalance != null || options.account.fundingNet != null)) {
+    accountSync = await syncAccountBalanceToSupabase(options.account, {
+      silentNotify: toInsert.length > 0, // already notifying below if new trades inserted
+    }).catch((e) => {
+      console.warn('[TradeFlow Bridge] Account balance sync warning:', e?.message || e);
+      return null;
+    });
+  }
 
   // Notify TradeFlow tabs if open
   if (toInsert.length > 0) {
@@ -419,7 +431,147 @@ async function syncTradesToSupabase(incomingTrades, senderTab = null, options = 
     skippedCount,
     totalSeen: incomingTrades.length,
     screenshotAttached,
+    accountSync,
   };
+}
+
+/** Sync live Vantage Current Balance & Started Balance (initial_capital) to Supabase profiles */
+async function syncAccountBalanceToSupabase(accountInfo, options = {}) {
+  const session = await ensureValidSession();
+  const userId = session.user.id;
+  const headers = {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json',
+  };
+
+  // Ensure profile exists
+  await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      Prefer: 'resolution=ignore-duplicates',
+    },
+    body: JSON.stringify({
+      id: userId,
+      name: session.user?.user_metadata?.name || 'TradeFlow Trader',
+      base_currency: accountInfo?.currency === 'INR' ? 'INR' : 'USD',
+      initial_capital: 1000,
+      current_balance: 1000,
+    }),
+  }).catch(() => {});
+
+  // Read existing profile & all user trades PnL
+  const [profRes, tradesRes, stored] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/profiles?select=initial_capital,current_balance,base_currency&id=eq.${encodeURIComponent(userId)}`, { headers }),
+    fetch(`${SUPABASE_URL}/rest/v1/trades?select=pnl&user_id=eq.${encodeURIComponent(userId)}`, { headers }),
+    chrome.storage.local.get(['startedBalanceOverride', 'detectedFundingNet', 'lastAccountSync']),
+  ]);
+
+  const profRows = profRes.ok ? await profRes.json() : [];
+  const profile = Array.isArray(profRows) && profRows.length > 0 ? profRows[0] : {};
+  const tradeRows = tradesRes.ok ? await tradesRes.json() : [];
+
+  const totalTradesPnl = Array.isArray(tradeRows)
+    ? tradeRows.reduce((sum, r) => sum + (Number(r.pnl) || 0), 0)
+    : 0;
+
+  const existingInitial = Number(profile.initial_capital) || 1000;
+  const existingCurrent = Number(profile.current_balance) || existingInitial;
+
+  const liveBalance =
+    accountInfo?.currentBalance != null && isFinite(Number(accountInfo.currentBalance))
+      ? Number(Number(accountInfo.currentBalance).toFixed(2))
+      : existingCurrent;
+
+  const netPnlOffset =
+    Array.isArray(tradeRows) && tradeRows.length > 0
+      ? totalTradesPnl
+      : accountInfo?.visibleNetPnl != null && isFinite(Number(accountInfo.visibleNetPnl))
+      ? Number(accountInfo.visibleNetPnl)
+      : 0;
+
+  const derivedStarted = Number((liveBalance - netPnlOffset).toFixed(2));
+
+  let resolvedStarted = existingInitial;
+  let startedSource = 'existing';
+
+  const customOverride =
+    options.customStartedBalance != null && Number(options.customStartedBalance) > 0
+      ? Number(Number(options.customStartedBalance).toFixed(2))
+      : null;
+
+  if (customOverride != null) {
+    resolvedStarted = customOverride;
+    startedSource = 'manual';
+    await chrome.storage.local.set({ startedBalanceOverride: customOverride });
+  } else if (accountInfo?.fundingNet != null && Number(accountInfo.fundingNet) > 0) {
+    resolvedStarted = Number(Number(accountInfo.fundingNet).toFixed(2));
+    startedSource = 'funding_history';
+    await chrome.storage.local.set({ detectedFundingNet: resolvedStarted });
+  } else if (stored.startedBalanceOverride && Number(stored.startedBalanceOverride) > 0) {
+    resolvedStarted = Number(stored.startedBalanceOverride);
+    startedSource = 'manual';
+  } else if (stored.detectedFundingNet && Number(stored.detectedFundingNet) > 0) {
+    resolvedStarted = Number(stored.detectedFundingNet);
+    startedSource = 'funding_history';
+  } else if (derivedStarted > 0) {
+    const isUntouchedDefault =
+      Math.abs(existingInitial - 1000) < 0.01 || Math.abs(existingInitial - 10000) < 0.01;
+    const prevAuto = stored.lastAccountSync?.startedSource === 'derived';
+    if (options.forceUpdateStarted || isUntouchedDefault || prevAuto) {
+      resolvedStarted = derivedStarted;
+      startedSource = 'derived';
+    }
+  }
+
+  const patchPayload = {
+    current_balance: liveBalance,
+    initial_capital: resolvedStarted,
+  };
+  if (accountInfo?.currency === 'USD' || accountInfo?.currency === 'INR') {
+    patchPayload.base_currency = accountInfo.currency;
+  }
+
+  const changed =
+    Math.abs(existingCurrent - liveBalance) > 0.009 ||
+    Math.abs(existingInitial - resolvedStarted) > 0.009;
+
+  if (changed || options.forceUpdateStarted) {
+    const patchRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          ...headers,
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify(patchPayload),
+      }
+    );
+    if (!patchRes.ok) {
+      const errText = await patchRes.text();
+      throw new Error(`Failed to update balance: ${patchRes.status} ${errText}`);
+    }
+  }
+
+  const accountSync = {
+    currentBalance: liveBalance,
+    equity: accountInfo?.equity ?? null,
+    startedBalance: resolvedStarted,
+    derivedStarted: derivedStarted > 0 ? derivedStarted : null,
+    startedSource,
+    currency: accountInfo?.currency || profile.base_currency || 'USD',
+    syncedAt: new Date().toISOString(),
+  };
+
+  await chrome.storage.local.set({ lastAccountSync: accountSync });
+
+  if ((changed || options.forceUpdateStarted) && !options.silentNotify) {
+    notifyTradeFlowTabs(1);
+  }
+
+  return accountSync;
 }
 
 /** Capture active Vantage chart & attach screenshot to the trader's latest trade in Supabase */
@@ -544,9 +696,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'SET_AUTO_BALANCE_SYNC') {
+    chrome.storage.local.set({ autoBalanceSync: Boolean(msg.enabled) }).then(() => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  if (msg.type === 'SYNC_ACCOUNT_BALANCE') {
+    syncAccountBalanceToSupabase(msg.account || {}, {
+      forceUpdateStarted: Boolean(msg.forceUpdateStarted),
+      customStartedBalance: msg.customStartedBalance ?? null,
+    })
+      .then((accountSync) => sendResponse({ ok: true, accountSync }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
+  if (msg.type === 'CLEAR_STARTED_OVERRIDE') {
+    chrome.storage.local.remove(['startedBalanceOverride']).then(() => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (msg.type === 'SYNC_TRADES') {
     syncTradesToSupabase(msg.trades || [], sender?.tab || null, {
       captureScreenshot: Boolean(msg.captureScreenshot),
+      account: msg.account || null,
     })
       .then((res) => sendResponse({ ok: true, ...res }))
       .catch((err) => sendResponse({ ok: false, error: err.message }));
@@ -566,6 +743,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         'session',
         'autoSync',
         'autoScreenshot',
+        'autoBalanceSync',
+        'startedBalanceOverride',
+        'detectedFundingNet',
+        'lastAccountSync',
         'lastSyncAt',
         'lastInsertedCount',
         'lastSkippedCount',

@@ -71,10 +71,10 @@ export interface DayStatus {
 }
 
 export function calculatePerformance(trades: Trade[], settings: AppSettings): PerformanceMetrics {
-  const initialCapital = settings.initialCapital || 1000;
+  const initialCapital = settings.initialCapital > 0 ? settings.initialCapital : 1000;
   const sorted = [...trades].sort((a, b) => new Date(`${a.date}T${a.time || '00:00'}`).getTime() - new Date(`${b.date}T${b.time || '00:00'}`).getTime());
 
-  let currentBalance = initialCapital;
+  let runningBalance = initialCapital;
   let winningTrades = 0;
   let losingTrades = 0;
   let breakEvenTrades = 0;
@@ -108,7 +108,7 @@ export function calculatePerformance(trades: Trade[], settings: AppSettings): Pe
     } else if (Math.abs(pnl) <= 0.001) {
       r = 0;
     }
-    currentBalance += pnl;
+    runningBalance += pnl;
     totalR += r;
 
     // Best & Worst
@@ -147,18 +147,24 @@ export function calculatePerformance(trades: Trade[], settings: AppSettings): Pe
     }
 
     // Drawdown
-    if (currentBalance > peakEquity) {
-      peakEquity = currentBalance;
+    if (runningBalance > peakEquity) {
+      peakEquity = runningBalance;
     }
-    const currentDd = peakEquity - currentBalance;
+    const currentDd = peakEquity - runningBalance;
     const currentDdPct = peakEquity > 0 ? (currentDd / peakEquity) * 100 : 0;
     if (currentDd > maxDrawdownUsd) maxDrawdownUsd = currentDd;
     if (currentDdPct > maxDrawdownPercent) maxDrawdownPercent = currentDdPct;
   }
 
   const totalTrades = sorted.length;
-  const netPnl = currentBalance - initialCapital;
-  const roiPercent = initialCapital > 0 ? (netPnl / initialCapital) * 100 : 0;
+  const tradesNetPnl = runningBalance - initialCapital;
+  const hasBrokerBalance =
+    settings.currentBalance != null &&
+    settings.currentBalance > 0 &&
+    (totalTrades === 0 || Math.abs(settings.currentBalance - initialCapital) > 0.009);
+  const currentBalance = hasBrokerBalance ? settings.currentBalance : runningBalance;
+  const netPnl = totalTrades > 0 ? tradesNetPnl : currentBalance - initialCapital;
+  const roiPercent = initialCapital > 0 ? ((currentBalance - initialCapital) / initialCapital) * 100 : 0;
   const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
   const lossRate = totalTrades > 0 ? (losingTrades / totalTrades) * 100 : 0;
 

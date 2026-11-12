@@ -131,7 +131,7 @@ function AppInner() {
       };
     }
 
-    const channel = supabase
+    const tradesChannel = supabase
       .channel(`tradeflow-trades-sync-${user.id}`)
       .on(
         'postgres_changes',
@@ -142,9 +142,21 @@ function AppInner() {
       )
       .subscribe();
 
+    const profilesChannel = supabase
+      .channel(`tradeflow-profiles-sync-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+        () => {
+          loadAllData();
+        }
+      )
+      .subscribe();
+
     return () => {
       window.removeEventListener('tradeflow:broker-synced', handleBrokerSync);
-      supabase.removeChannel(channel);
+      supabase.removeChannel(tradesChannel);
+      supabase.removeChannel(profilesChannel);
     };
   }, [loadAllData, user?.id]);
 

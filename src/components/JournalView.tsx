@@ -558,6 +558,9 @@ export const JournalView: React.FC<JournalViewProps> = ({
                   ⚡ {sourceCounts.vantage} Vantage Synced
                 </span>
               )}
+              <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#F2ECE0] dark:bg-[#1C2331] text-[#1F1A16] dark:text-[#CBD5E1] font-mono font-semibold border border-[#E7E0D6] dark:border-[#242D3D]">
+                Started: {currSymbol}{(settings?.initialCapital > 0 ? settings.initialCapital : 1000).toFixed(2)} → Current: {currSymbol}{(settings?.currentBalance > 0 && (dbMappedTrades.length === 0 || Math.abs(settings.currentBalance - (settings.initialCapital || 1000)) > 0.009) ? settings.currentBalance : (settings?.initialCapital > 0 ? settings.initialCapital : 1000) + dbMappedTrades.reduce((s, r) => s + r.pnlNum, 0)).toFixed(2)}
+              </span>
             </div>
             <p className="text-xs text-[#786F66] dark:text-[#94A3B8] font-medium tracking-tight mt-0.5">
               {dbMappedTrades.length} trade{dbMappedTrades.length === 1 ? '' : 's'} taken •{' '}

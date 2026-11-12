@@ -15,9 +15,17 @@ const signOutBtn = document.getElementById('signOutBtn');
 const vantageStatusText = document.getElementById('vantageStatusText');
 const autoSyncToggle = document.getElementById('autoSyncToggle');
 const autoScreenshotToggle = document.getElementById('autoScreenshotToggle');
+const autoBalanceSyncToggle = document.getElementById('autoBalanceSyncToggle');
 const syncNowBtn = document.getElementById('syncNowBtn');
 const snapChartBtn = document.getElementById('snapChartBtn');
 const syncMsg = document.getElementById('syncMsg');
+const liveBalanceLabel = document.getElementById('liveBalanceLabel');
+const liveEquityLabel = document.getElementById('liveEquityLabel');
+const startedSourceLabel = document.getElementById('startedSourceLabel');
+const startedBalanceInput = document.getElementById('startedBalanceInput');
+const resetStartedAutoBtn = document.getElementById('resetStartedAutoBtn');
+const syncBalanceBtn = document.getElementById('syncBalanceBtn');
+const balanceMsg = document.getElementById('balanceMsg');
 const lastSyncLabel = document.getElementById('lastSyncLabel');
 const totalSyncedLabel = document.getElementById('totalSyncedLabel');
 
@@ -70,6 +78,34 @@ async function refreshUI() {
     if (autoScreenshotToggle) {
       autoScreenshotToggle.checked = data.autoScreenshot !== false;
     }
+    if (autoBalanceSyncToggle) {
+      autoBalanceSyncToggle.checked = data.autoBalanceSync !== false;
+    }
+
+    const lastAcct = data.lastAccountSync;
+    const sym = lastAcct?.currency === 'INR' ? '₹' : '$';
+    if (liveBalanceLabel && lastAcct?.currentBalance != null) {
+      liveBalanceLabel.textContent = `${sym}${Number(lastAcct.currentBalance).toFixed(2)}`;
+    }
+    if (liveEquityLabel && lastAcct?.equity != null) {
+      liveEquityLabel.textContent = `${sym}${Number(lastAcct.equity).toFixed(2)}`;
+    }
+    if (startedBalanceInput) {
+      if (data.startedBalanceOverride > 0) {
+        startedBalanceInput.value = String(data.startedBalanceOverride);
+        if (startedSourceLabel) startedSourceLabel.textContent = 'Manual Override';
+      } else if (lastAcct?.startedBalance != null) {
+        startedBalanceInput.placeholder = `Auto: ${sym}${Number(lastAcct.startedBalance).toFixed(2)}`;
+        if (startedSourceLabel) {
+          startedSourceLabel.textContent =
+            lastAcct.startedSource === 'funding_history'
+              ? 'From Funding History'
+              : lastAcct.startedSource === 'derived'
+              ? 'Balance - Trades PnL'
+              : 'Synced';
+        }
+      }
+    }
 
     if (data.lastSyncAt) {
       const dt = new Date(data.lastSyncAt);
@@ -86,12 +122,22 @@ async function refreshUI() {
         '<span style="color:#fbbf24;">⚠ Open <b>secure.vantagemarkets.com/web-trade</b> and click the <b>Position History</b> tab.</span>';
       syncNowBtn.disabled = true;
       if (snapChartBtn) snapChartBtn.disabled = true;
+      if (syncBalanceBtn) syncBalanceBtn.disabled = true;
     } else {
       syncNowBtn.disabled = false;
       if (snapChartBtn) snapChartBtn.disabled = false;
+      if (syncBalanceBtn) syncBalanceBtn.disabled = false;
       try {
         const preview = await chrome.tabs.sendMessage(vTab.id, { type: 'PREVIEW_VANTAGE_TRADES' });
         if (preview?.ok) {
+          if (preview.account?.currentBalance != null && liveBalanceLabel) {
+            const pSym = preview.account.currency === 'INR' ? '₹' : '$';
+            liveBalanceLabel.textContent = `${pSym}${Number(preview.account.currentBalance).toFixed(2)}`;
+          }
+          if (preview.account?.equity != null && liveEquityLabel) {
+            const pSym = preview.account.currency === 'INR' ? '₹' : '$';
+            liveEquityLabel.textContent = `${pSym}${Number(preview.account.equity).toFixed(2)}`;
+          }
           if (preview.count > 0) {
             vantageStatusText.innerHTML = `<span style="color:#34d399;">🟢 Detected <b>${preview.count}</b> closed trade(s) in Vantage Position History.</span>`;
           } else {
@@ -172,6 +218,60 @@ if (autoScreenshotToggle) {
       type: 'SET_AUTO_SCREENSHOT',
       enabled: autoScreenshotToggle.checked,
     });
+  });
+}
+
+if (autoBalanceSyncToggle) {
+  autoBalanceSyncToggle.addEventListener('change', async () => {
+    await chrome.runtime.sendMessage({
+      type: 'SET_AUTO_BALANCE_SYNC',
+      enabled: autoBalanceSyncToggle.checked,
+    });
+  });
+}
+
+if (resetStartedAutoBtn) {
+  resetStartedAutoBtn.addEventListener('click', async () => {
+    await chrome.runtime.sendMessage({ type: 'CLEAR_STARTED_OVERRIDE' });
+    if (startedBalanceInput) startedBalanceInput.value = '';
+    if (startedSourceLabel) startedSourceLabel.textContent = 'Auto';
+    showMsg(balanceMsg, 'Reset to auto-detect Started Balance on next sync.');
+  });
+}
+
+if (syncBalanceBtn) {
+  syncBalanceBtn.addEventListener('click', async () => {
+    clearMsg(balanceMsg);
+    const vTab = await findVantageTab();
+    if (!vTab) {
+      showMsg(balanceMsg, 'Vantage Web-Trade tab not found.', true);
+      return;
+    }
+    const rawStarted = startedBalanceInput?.value?.trim();
+    const customStarted = rawStarted ? parseFloat(rawStarted) : null;
+    syncBalanceBtn.disabled = true;
+    syncBalanceBtn.textContent = 'Syncing Balance...';
+    try {
+      const res = await chrome.tabs.sendMessage(vTab.id, {
+        type: 'SYNC_BALANCE_NOW',
+        customStartedBalance: customStarted && !isNaN(customStarted) && customStarted > 0 ? customStarted : null,
+      });
+      if (res?.ok && res.accountSync) {
+        const sym = res.accountSync.currency === 'INR' ? '₹' : '$';
+        showMsg(
+          balanceMsg,
+          `✅ Current: ${sym}${res.accountSync.currentBalance.toFixed(2)} | Started: ${sym}${res.accountSync.startedBalance.toFixed(2)}`
+        );
+        await refreshUI();
+      } else {
+        showMsg(balanceMsg, res?.note || res?.error || 'Could not detect live Balance on page.', true);
+      }
+    } catch (err) {
+      showMsg(balanceMsg, 'Could not read Vantage tab. Refresh the Vantage tab once and try again.', true);
+    } finally {
+      syncBalanceBtn.disabled = false;
+      syncBalanceBtn.textContent = '💰 Sync Balance & Capital Now';
+    }
   });
 }
 

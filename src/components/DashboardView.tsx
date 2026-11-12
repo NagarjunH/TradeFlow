@@ -84,7 +84,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const perf = calculatePerformance(trades, settings);
   const discipline = calculateDiscipline(trades);
   const currSymbol = settings.currency === 'USD' ? '$' : '₹';
-  const initialCapital = settings.initialCapital || 10000;
+  const initialCapital = settings.initialCapital > 0 ? settings.initialCapital : 1000;
 
   // Dynamic greeting based on current local time
   const greeting = useMemo(() => {
@@ -302,7 +302,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Equity Curve Header Stats & Badges
   const equityCurveStats = useMemo(() => {
-    const currentEquity = initialCapital + perf.netPnl;
+    const currentEquity = perf.currentBalance;
     const netReturn = perf.netPnl;
     const netReturnPct = initialCapital > 0 ? (netReturn / initialCapital) * 100 : 0;
     
@@ -846,6 +846,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>
                 {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)} ({perf.netPnl >= 0 ? '+' : ''}{perf.roiPercent.toFixed(1)}%)
               </span>
+            </div>
+            <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-1">
+              Started: {currSymbol}{initialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
         </div>
