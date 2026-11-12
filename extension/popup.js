@@ -62,6 +62,33 @@ async function findTradeFlowTab() {
   );
 }
 
+/** Send message to Vantage tab, auto-injecting vantage-content.js if tab wasn't refreshed after extension reload */
+async function sendToVantageTab(tabId, msg) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, msg);
+  } catch (_) {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      files: ['vantage-content.js'],
+    });
+    await new Promise((r) => setTimeout(r, 120));
+    return await chrome.tabs.sendMessage(tabId, msg);
+  }
+}
+
+async function sendToTradeFlowTab(tabId, msg) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, msg);
+  } catch (_) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['tradeflow-bridge.js'],
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    return await chrome.tabs.sendMessage(tabId, msg);
+  }
+}
+
 async function refreshUI() {
   const res = await chrome.runtime.sendMessage({ type: 'GET_STATE' });
   const data = res?.data || {};
@@ -128,7 +155,7 @@ async function refreshUI() {
       if (snapChartBtn) snapChartBtn.disabled = false;
       if (syncBalanceBtn) syncBalanceBtn.disabled = false;
       try {
-        const preview = await chrome.tabs.sendMessage(vTab.id, { type: 'PREVIEW_VANTAGE_TRADES' });
+        const preview = await sendToVantageTab(vTab.id, { type: 'PREVIEW_VANTAGE_TRADES' });
         if (preview?.ok) {
           const pSym = preview.account?.currency === 'INR' ? '₹' : '$';
           if (liveBalanceLabel) {
@@ -169,7 +196,7 @@ autoConnectBtn.addEventListener('click', async () => {
     return;
   }
   try {
-    const res = await chrome.tabs.sendMessage(tfTab.id, { type: 'GRAB_SESSION_NOW' });
+    const res = await sendToTradeFlowTab(tfTab.id, { type: 'GRAB_SESSION_NOW' });
     if (res?.ok) {
       showMsg(authMsg, 'Connected to TradeFlow!');
       await refreshUI();
@@ -255,7 +282,7 @@ if (syncBalanceBtn) {
     syncBalanceBtn.disabled = true;
     syncBalanceBtn.textContent = 'Syncing Balance...';
     try {
-      const res = await chrome.tabs.sendMessage(vTab.id, {
+      const res = await sendToVantageTab(vTab.id, {
         type: 'SYNC_BALANCE_NOW',
         customStartedBalance: customStarted && !isNaN(customStarted) && customStarted > 0 ? customStarted : null,
       });
@@ -270,7 +297,11 @@ if (syncBalanceBtn) {
         showMsg(balanceMsg, res?.note || res?.error || 'Could not detect live Balance on page.', true);
       }
     } catch (err) {
-      showMsg(balanceMsg, 'Could not read Vantage tab. Refresh the Vantage tab once and try again.', true);
+      showMsg(
+        balanceMsg,
+        `Could not read Vantage tab: ${err?.message || 'Refresh the Vantage tab once and try again.'}`,
+        true
+      );
     } finally {
       syncBalanceBtn.disabled = false;
       syncBalanceBtn.textContent = '💰 Sync Balance & Capital Now';
@@ -288,7 +319,7 @@ syncNowBtn.addEventListener('click', async () => {
   syncNowBtn.disabled = true;
   syncNowBtn.textContent = 'Syncing...';
   try {
-    const res = await chrome.tabs.sendMessage(vTab.id, {
+    const res = await sendToVantageTab(vTab.id, {
       type: 'SCRAPE_AND_SYNC_NOW',
       captureScreenshot: autoScreenshotToggle ? autoScreenshotToggle.checked : true,
     });
@@ -309,7 +340,11 @@ syncNowBtn.addEventListener('click', async () => {
       showMsg(syncMsg, res?.error || 'Sync failed.', true);
     }
   } catch (err) {
-    showMsg(syncMsg, 'Could not read Vantage tab. Refresh the Vantage tab once and try again.', true);
+    showMsg(
+      syncMsg,
+      `Could not read Vantage tab: ${err?.message || 'Refresh the Vantage tab once and try again.'}`,
+      true
+    );
   } finally {
     syncNowBtn.disabled = false;
     syncNowBtn.textContent = '🔄 Sync Position History Now';

@@ -70,6 +70,36 @@ export interface DayStatus {
   status: 'ACTIVE' | 'WARNING' | 'LOCKED' | 'NO_TRADE' | 'CLOSED';
 }
 
+const BROKER_BALANCE_SYNCED_KEY = 'tradeflow_broker_balance_synced';
+
+/**
+ * Returns true only when settings.currentBalance holds a genuine broker-synced
+ * (or user-updated) balance rather than the untouched database signup default (1000 / 10000).
+ */
+export function hasVerifiedBrokerBalance(
+  settings: AppSettings,
+  totalTrades: number,
+  initialCapital: number
+): boolean {
+  const bal = settings?.currentBalance;
+  if (bal == null || !isFinite(bal) || bal < 0) return false;
+
+  const isUntouchedSignupDefault =
+    Math.abs(bal - 1000) < 0.01 || Math.abs(bal - 10000) < 0.01;
+  let explicitBrokerSync = false;
+  try {
+    explicitBrokerSync =
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem(BROKER_BALANCE_SYNCED_KEY) === '1';
+  } catch (_) {}
+
+  if (isUntouchedSignupDefault && !explicitBrokerSync) {
+    return false;
+  }
+
+  return totalTrades === 0 || Math.abs(bal - initialCapital) > 0.009 || explicitBrokerSync;
+}
+
 export function calculatePerformance(trades: Trade[], settings: AppSettings): PerformanceMetrics {
   const initialCapital = settings.initialCapital > 0 ? settings.initialCapital : 1000;
   const sorted = [...trades].sort((a, b) => new Date(`${a.date}T${a.time || '00:00'}`).getTime() - new Date(`${b.date}T${b.time || '00:00'}`).getTime());
@@ -158,11 +188,7 @@ export function calculatePerformance(trades: Trade[], settings: AppSettings): Pe
 
   const totalTrades = sorted.length;
   const tradesNetPnl = runningBalance - initialCapital;
-  const hasBrokerBalance =
-    settings.currentBalance != null &&
-    isFinite(settings.currentBalance) &&
-    settings.currentBalance >= 0 &&
-    (totalTrades === 0 || Math.abs(settings.currentBalance - initialCapital) > 0.009);
+  const hasBrokerBalance = hasVerifiedBrokerBalance(settings, totalTrades, initialCapital);
   const currentBalance = hasBrokerBalance ? settings.currentBalance : runningBalance;
   const netPnl = totalTrades > 0 ? tradesNetPnl : currentBalance - initialCapital;
   const roiPercent = initialCapital > 0 ? ((currentBalance - initialCapital) / initialCapital) * 100 : 0;

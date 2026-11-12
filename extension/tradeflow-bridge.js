@@ -46,9 +46,14 @@
     }
 
     if (msg.type === 'TRADEFLOW_SYNC_COMPLETED') {
+      if (msg.balanceSynced) {
+        try {
+          localStorage.setItem('tradeflow_broker_balance_synced', '1');
+        } catch (_) {}
+      }
       window.dispatchEvent(
         new CustomEvent('tradeflow:broker-synced', {
-          detail: { insertedCount: msg.insertedCount || 0 },
+          detail: { insertedCount: msg.insertedCount || 0, balanceSynced: Boolean(msg.balanceSynced) },
         })
       );
       sendResponse({ ok: true });

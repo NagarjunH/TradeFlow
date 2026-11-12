@@ -7,6 +7,30 @@ const SUPABASE_URL = 'https://stmmeddkycvhelvxgone.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0bW1lZGRreWN2aGVsdnhnb25lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5MTkyMTIsImV4cCI6MjEwNTQ5NTIxMn0.E0A6jzjg-HXyY-tRw1zKvaVsuNR3JfAHIaSZY2D6tf8';
 
+async function reinjectExtensionScripts() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url) continue;
+      if (tab.url.includes('vantagemarkets.com')) {
+        chrome.scripting
+          .executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['vantage-content.js'] })
+          .catch(() => {});
+      } else if (
+        tab.url.includes('localhost:5173') ||
+        tab.url.includes('localhost:4173') ||
+        tab.url.includes('vercel.app') ||
+        tab.url.includes('netlify.app') ||
+        tab.url.includes('github.io')
+      ) {
+        chrome.scripting
+          .executeScript({ target: { tabId: tab.id }, files: ['tradeflow-bridge.js'] })
+          .catch(() => {});
+      }
+    }
+  } catch (_) {}
+}
+
 // Default storage state
 chrome.runtime.onInstalled.addListener(async () => {
   const existing = await chrome.storage.local.get(['autoSync', 'autoScreenshot', 'autoBalanceSync']);
@@ -18,6 +42,12 @@ chrome.runtime.onInstalled.addListener(async () => {
     await chrome.storage.local.set(updates);
   }
   updateBadge();
+  reinjectExtensionScripts();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  updateBadge();
+  reinjectExtensionScripts();
 });
 
 async function updateBadge() {
@@ -120,7 +150,7 @@ function buildNotesWithMeta(trade) {
 }
 
 /** Notify any open TradeFlow app tabs to refresh immediately */
-function notifyTradeFlowTabs(insertedCount = 1) {
+function notifyTradeFlowTabs(insertedCount = 1, balanceSynced = false) {
   chrome.tabs.query({}, (tabs) => {
     for (const tab of tabs) {
       if (
@@ -134,6 +164,7 @@ function notifyTradeFlowTabs(insertedCount = 1) {
         chrome.tabs.sendMessage(tab.id, {
           type: 'TRADEFLOW_SYNC_COMPLETED',
           insertedCount,
+          balanceSynced: Boolean(balanceSynced),
         }).catch(() => {});
       }
     }
@@ -422,8 +453,8 @@ async function syncTradesToSupabase(incomingTrades, senderTab = null, options = 
   }
 
   // Notify TradeFlow tabs if open
-  if (toInsert.length > 0) {
-    notifyTradeFlowTabs(toInsert.length);
+  if (toInsert.length > 0 || accountSync) {
+    notifyTradeFlowTabs(toInsert.length, Boolean(accountSync));
   }
 
   return {
@@ -574,7 +605,7 @@ async function syncAccountBalanceToSupabase(accountInfo, options = {}) {
   await chrome.storage.local.set({ lastAccountSync: accountSync });
 
   if ((changed || options.forceUpdateStarted) && !options.silentNotify) {
-    notifyTradeFlowTabs(1);
+    notifyTradeFlowTabs(1, true);
   }
 
   return accountSync;

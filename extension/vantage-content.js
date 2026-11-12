@@ -4,7 +4,11 @@
 // ============================================================================
 
 (function () {
-  if (window.__tradeflowVantageLoaded) return;
+  if (typeof window.__tradeflowVantageCleanup === 'function') {
+    try {
+      window.__tradeflowVantageCleanup();
+    } catch (_) {}
+  }
   window.__tradeflowVantageLoaded = true;
 
   let lastSentFingerprint = '';
@@ -513,7 +517,7 @@
   }
 
   // Periodic background poll while Vantage Web-Trade tab is open
-  setInterval(async () => {
+  const pollTimer = setInterval(async () => {
     try {
       const state = await chrome.storage.local.get(['autoSync', 'session']);
       if (state.autoSync !== false && state.session?.access_token) {
@@ -525,7 +529,7 @@
   // Listen to manual triggers from Popup (multi-frame safe for iframe-hosted terminals)
   const isChildFrame = window.top !== window.self;
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  const onRuntimeMessage = (msg, _sender, sendResponse) => {
     if (msg.type === 'SCRAPE_AND_SYNC_NOW') {
       const hasContent =
         scrapeVantagePositionHistory().length > 0 ||
@@ -586,5 +590,16 @@
       }
       return true;
     }
-  });
+  };
+
+  chrome.runtime.onMessage.addListener(onRuntimeMessage);
+
+  window.__tradeflowVantageCleanup = () => {
+    clearTimeout(syncTimer);
+    clearInterval(pollTimer);
+    observer.disconnect();
+    try {
+      chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+    } catch (_) {}
+  };
 })();
