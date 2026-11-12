@@ -777,7 +777,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
           <div className="sm:text-right">
             <div className="text-2xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8]">
-              {currSymbol}{(timeframe === 'ALL' && marketFilter === 'All' && settings?.currentBalance > 0 && Math.abs(settings.currentBalance - initialCapital) > 0.009 ? settings.currentBalance : initialCapital + netPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {currSymbol}{(timeframe === 'ALL' && marketFilter === 'All' && settings?.currentBalance != null && settings.currentBalance >= 0 && (trades.length === 0 || Math.abs(settings.currentBalance - initialCapital) > 0.009) ? settings.currentBalance : initialCapital + netPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className={`text-xs font-mono font-bold mt-0.5 ${netPnl >= 0 ? 'text-[#15803D] dark:text-[#34D399]' : 'text-[#DC2626] dark:text-[#F87171]'}`}>
               {netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(netPnl).toFixed(2)} net return • Started {currSymbol}{initialCapital.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

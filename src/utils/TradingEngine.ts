@@ -160,7 +160,8 @@ export function calculatePerformance(trades: Trade[], settings: AppSettings): Pe
   const tradesNetPnl = runningBalance - initialCapital;
   const hasBrokerBalance =
     settings.currentBalance != null &&
-    settings.currentBalance > 0 &&
+    isFinite(settings.currentBalance) &&
+    settings.currentBalance >= 0 &&
     (totalTrades === 0 || Math.abs(settings.currentBalance - initialCapital) > 0.009);
   const currentBalance = hasBrokerBalance ? settings.currentBalance : runningBalance;
   const netPnl = totalTrades > 0 ? tradesNetPnl : currentBalance - initialCapital;

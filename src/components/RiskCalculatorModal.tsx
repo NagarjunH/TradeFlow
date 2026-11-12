@@ -17,7 +17,7 @@ export const RiskCalculatorModal: React.FC<RiskCalculatorModalProps> = ({
   currency,
   onApply,
 }) => {
-  const [balance, setBalance] = useState<number>(currentBalance || 1000);
+  const [balance, setBalance] = useState<number>(currentBalance ?? 1000);
   const [riskPercent, setRiskPercent] = useState<number>(1.0);
   const [entryPrice, setEntryPrice] = useState<number>(2650.0);
   const [slPrice, setSlPrice] = useState<number>(2647.0);

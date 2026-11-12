@@ -130,12 +130,15 @@ async function refreshUI() {
       try {
         const preview = await chrome.tabs.sendMessage(vTab.id, { type: 'PREVIEW_VANTAGE_TRADES' });
         if (preview?.ok) {
-          if (preview.account?.currentBalance != null && liveBalanceLabel) {
-            const pSym = preview.account.currency === 'INR' ? '₹' : '$';
-            liveBalanceLabel.textContent = `${pSym}${Number(preview.account.currentBalance).toFixed(2)}`;
+          const pSym = preview.account?.currency === 'INR' ? '₹' : '$';
+          if (liveBalanceLabel) {
+            if (preview.account?.currentBalance != null) {
+              liveBalanceLabel.textContent = `${pSym}${Number(preview.account.currentBalance).toFixed(2)}`;
+            } else {
+              liveBalanceLabel.textContent = 'Not detected on page';
+            }
           }
-          if (preview.account?.equity != null && liveEquityLabel) {
-            const pSym = preview.account.currency === 'INR' ? '₹' : '$';
+          if (liveEquityLabel && preview.account?.equity != null) {
             liveEquityLabel.textContent = `${pSym}${Number(preview.account.equity).toFixed(2)}`;
           }
           if (preview.count > 0) {

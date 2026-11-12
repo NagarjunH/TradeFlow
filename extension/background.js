@@ -476,8 +476,14 @@ async function syncAccountBalanceToSupabase(accountInfo, options = {}) {
     ? tradeRows.reduce((sum, r) => sum + (Number(r.pnl) || 0), 0)
     : 0;
 
-  const existingInitial = Number(profile.initial_capital) || 1000;
-  const existingCurrent = Number(profile.current_balance) || existingInitial;
+  const existingInitial =
+    profile.initial_capital != null && isFinite(Number(profile.initial_capital)) && Number(profile.initial_capital) > 0
+      ? Number(profile.initial_capital)
+      : 1000;
+  const existingCurrent =
+    profile.current_balance != null && isFinite(Number(profile.current_balance))
+      ? Number(profile.current_balance)
+      : existingInitial;
 
   const liveBalance =
     accountInfo?.currentBalance != null && isFinite(Number(accountInfo.currentBalance))

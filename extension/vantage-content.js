@@ -201,18 +201,23 @@
     return trades;
   }
 
-  /** Parse monetary amount like "$1,234.56 USD" or "912.26" */
+  /** Parse monetary amount like "$1,234.56 USD", "USD 0.00", or "0.00" */
   function extractMoneyValue(text) {
     if (!text) return null;
-    const m = String(text)
+    const normalized = String(text)
       .replace(/\u00a0/g, ' ')
-      .match(/([\$₹€£])?\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\s*(USD|INR|EUR|GBP|AUD|CAD|SGD)?/i);
-    if (!m) return null;
-    const val = parseFloat(m[2].replace(/,/g, ''));
+      .replace(/\(\s*(USD|INR|EUR|GBP|AUD|CAD|SGD)\s*\)/gi, ' $1 ')
+      .trim();
+    const m = normalized.match(
+      /(USD|INR|EUR|GBP|AUD|CAD|SGD)?\s*([\$₹€£])?\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)\s*(USD|INR|EUR|GBP|AUD|CAD|SGD)?/i
+    );
+    if (!m || !m[3]) return null;
+    const val = parseFloat(m[3].replace(/,/g, ''));
     if (isNaN(val) || !isFinite(val)) return null;
+    const rawCurr = (m[1] || m[4] || '').toUpperCase();
     let currency = null;
-    if (m[1] === '$' || (m[3] && m[3].toUpperCase() === 'USD')) currency = 'USD';
-    else if (m[1] === '₹' || (m[3] && m[3].toUpperCase() === 'INR')) currency = 'INR';
+    if (m[2] === '$' || rawCurr === 'USD') currency = 'USD';
+    else if (m[2] === '₹' || rawCurr === 'INR') currency = 'INR';
     return { val, currency };
   }
 
@@ -253,10 +258,12 @@
     }
 
     if (rowCount === 0) return null;
+    const netFunded = Number((totalDeposited - totalWithdrawn).toFixed(2));
     return {
       totalDeposited: Number(totalDeposited.toFixed(2)),
       totalWithdrawn: Number(totalWithdrawn.toFixed(2)),
-      netFunded: Number((totalDeposited - totalWithdrawn).toFixed(2)),
+      // When account has been fully withdrawn, preserve totalDeposited as Started Capital
+      netFunded: netFunded > 0 ? netFunded : Number(totalDeposited.toFixed(2)),
       rowCount,
     };
   }
@@ -267,53 +274,58 @@
     let equity = null;
     let currency = null;
 
-    // Strategy 1: Targeted DOM label scan near account / header bar
+    // Strategy 1: Scan all compact label nodes across the terminal (header, top bar, or bottom account bar)
     const candidates = Array.from(
-      document.querySelectorAll(
-        'header span, header div, header p, [class*="account"] span, [class*="Account"] span, [class*="account"] div, [class*="Account"] div, [class*="balance"] span, [class*="Balance"] span, [class*="asset"] span, [class*="Asset"] span, [class*="wallet"] span, [class*="Wallet"] span'
-      )
+      document.querySelectorAll('span, div, p, td, th, dt, dd, label, strong, b')
     );
 
     const inspectLabel = (el, labelRegex) => {
       const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!txt || txt.length > 75) return null;
+      if (!txt || txt.length > 80) return null;
+      if (/\b(?:Balance\s+Sheet|Trial\s+Balance)\b/i.test(txt)) return null;
       if (!labelRegex.test(txt)) return null;
 
-      // Inline "Balance: $1,234.56"
+      // Inline "Balance: $0.00" or "Balance (USD) 0.00"
       const afterLabel = txt.replace(labelRegex, '').trim();
-      if (afterLabel) {
+      if (afterLabel && /\d/.test(afterLabel)) {
         const inlineMoney = extractMoneyValue(afterLabel);
         if (inlineMoney && inlineMoney.val >= 0) return inlineMoney;
       }
 
-      // Sibling / Parent-sibling value
+      // Check siblings, parent's siblings, and compact parent (common flex/grid label+value layouts)
       const neighbors = [
         el.nextElementSibling,
         el.previousElementSibling,
         el.parentElement?.nextElementSibling,
+        el.parentElement?.previousElementSibling,
         el.parentElement,
       ];
       for (const n of neighbors) {
         if (!n) continue;
         const nTxt = (n.innerText || n.textContent || '').replace(/\s+/g, ' ').trim();
-        if (!nTxt || nTxt.length > 90) continue;
+        if (!nTxt || nTxt.length > 70 || !/\d/.test(nTxt)) continue;
+        if (n === el.parentElement && /\b(equity|margin|leverage|credit|account\s*#)\b/i.test(nTxt)) continue;
         const cleaned = nTxt.replace(labelRegex, '').trim();
+        if (!cleaned || !/\d/.test(cleaned)) continue;
         const m = extractMoneyValue(cleaned);
         if (m && m.val >= 0) return m;
       }
       return null;
     };
 
+    const balanceLabelRx = /^(?:(?:Account|Available|Wallet|Cash|Total)\s+)?Balance(?:\s*\([A-Z]{3}\))?\s*:?/i;
+    const equityLabelRx = /^(?:(?:Account|Net)\s+)?Equity(?:\s*\([A-Z]{3}\))?\s*:?/i;
+
     for (const el of candidates) {
       if (currentBalance == null) {
-        const res = inspectLabel(el, /^(?:Account\s+)?Balance\s*:?/i);
+        const res = inspectLabel(el, balanceLabelRx);
         if (res) {
           currentBalance = res.val;
           if (!currency && res.currency) currency = res.currency;
         }
       }
       if (equity == null) {
-        const res = inspectLabel(el, /^(?:Account\s+)?Equity\s*:?/i);
+        const res = inspectLabel(el, equityLabelRx);
         if (res) {
           equity = res.val;
           if (!currency && res.currency) currency = res.currency;
@@ -322,13 +334,12 @@
       if (currentBalance != null && equity != null) break;
     }
 
-    // Strategy 2: Header / top-of-page text scan fallback
+    // Strategy 2: Full body text regex fallback (handles multi-line labels & bottom account bars)
     const bodyText = document.body?.innerText || '';
-    const headerSlice = bodyText.slice(0, 4500);
 
     if (currentBalance == null) {
-      const balMatch = headerSlice.match(
-        /(?:^|\s)(?:Account\s+)?Balance\s*[:\s]+([\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD))?)/i
+      const balMatch = bodyText.match(
+        /(?:^|\s)(?:(?:Account|Available|Wallet|Cash|Total)\s+)?Balance(?:\s*\([A-Z]{3}\))?\s*[:\s]+((?:USD|INR|EUR|GBP|AUD|CAD|SGD)?\s*[\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD|CAD|SGD))?)/i
       );
       if (balMatch) {
         const m = extractMoneyValue(balMatch[1]);
@@ -340,13 +351,14 @@
     }
 
     if (equity == null) {
-      const eqMatch = headerSlice.match(
-        /(?:^|\s)(?:Account\s+)?Equity\s*[:\s]+([\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD))?)/i
+      const eqMatch = bodyText.match(
+        /(?:^|\s)(?:(?:Account|Net)\s+)?Equity(?:\s*\([A-Z]{3}\))?\s*[:\s]+((?:USD|INR|EUR|GBP|AUD|CAD|SGD)?\s*[\$₹€£]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?:\s*(?:USD|INR|EUR|GBP|AUD|CAD|SGD))?)/i
       );
       if (eqMatch) {
         const m = extractMoneyValue(eqMatch[1]);
         if (m && m.val >= 0) {
           equity = m.val;
+          if (!currency && m.currency) currency = m.currency;
         }
       }
     }

@@ -249,7 +249,7 @@ export const EquityChart: React.FC<EquityChartProps> = ({
           <div>
             <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block font-sans">Current Balance</span>
             <span className="font-bold text-sm">
-              {currSymbol}{(perf?.currentBalance || 1000).toFixed(2)}
+              {currSymbol}{(perf?.currentBalance ?? 1000).toFixed(2)}
             </span>
           </div>
 
