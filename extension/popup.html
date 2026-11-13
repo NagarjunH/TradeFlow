@@ -209,30 +209,23 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Vantage Account Balance</div>
-      <div class="row-between" style="margin-bottom:8px;">
+      <div class="card-title">Vantage Live Balance</div>
+      <div class="row-between" style="margin-bottom:10px;">
         <div>
           <div class="text-muted">Current Balance (Live)</div>
-          <div id="liveBalanceLabel" class="text-xs" style="font-size:14px; font-weight:800; color:#34d399; font-family:monospace;">—</div>
+          <div id="liveBalanceLabel" class="text-xs" style="font-size:16px; font-weight:800; color:#34d399; font-family:monospace;">—</div>
         </div>
         <div style="text-align:right;">
           <div class="text-muted">Live Equity</div>
-          <div id="liveEquityLabel" class="text-xs" style="font-weight:700; font-family:monospace;">—</div>
+          <div id="liveEquityLabel" class="text-xs" style="font-size:14px; font-weight:700; font-family:monospace;">—</div>
         </div>
       </div>
 
-      <div style="margin-bottom:8px;">
-        <div class="row-between" style="margin-bottom:4px;">
-          <span class="text-muted">Started Balance (Initial Capital)</span>
-          <span id="startedSourceLabel" class="text-muted" style="color:#fbbf24;">Auto</span>
-        </div>
-        <div style="display:flex; gap:6px;">
-          <input id="startedBalanceInput" type="number" step="0.01" class="input" style="margin-bottom:0; flex:1;" placeholder="Auto (Balance - Net PnL)" />
-          <button id="resetStartedAutoBtn" type="button" class="btn btn-secondary" style="width:auto; padding:6px 9px; font-size:10px;" title="Clear manual override & auto-detect">Auto</button>
-        </div>
+      <div style="font-size:10px; color:#94a3b8; line-height:1.4; margin-bottom:10px; background:#0b1120; padding:6px 10px; border-radius:8px; border:1px solid #1e293b;">
+        ℹ <b>Started Balance</b> is updated manually by you in TradeFlow. The extension only syncs your live <b>Current Balance</b>.
       </div>
 
-      <button id="syncBalanceBtn" class="btn btn-secondary">💰 Sync Balance &amp; Capital Now</button>
+      <button id="syncBalanceBtn" class="btn btn-secondary">💰 Sync Live Balance Now</button>
       <div id="balanceMsg" class="status-msg"></div>
     </div>
 

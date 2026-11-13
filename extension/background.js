@@ -493,89 +493,34 @@ async function syncAccountBalanceToSupabase(accountInfo, options = {}) {
     }),
   }).catch(() => {});
 
-  // Read existing profile & all user trades PnL
-  const [profRes, tradesRes, stored] = await Promise.all([
+  // Read existing profile current_balance
+  const [profRes] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/profiles?select=initial_capital,current_balance,base_currency&id=eq.${encodeURIComponent(userId)}`, { headers }),
-    fetch(`${SUPABASE_URL}/rest/v1/trades?select=pnl&user_id=eq.${encodeURIComponent(userId)}`, { headers }),
-    chrome.storage.local.get(['startedBalanceOverride', 'detectedFundingNet', 'lastAccountSync']),
   ]);
 
   const profRows = profRes.ok ? await profRes.json() : [];
   const profile = Array.isArray(profRows) && profRows.length > 0 ? profRows[0] : {};
-  const tradeRows = tradesRes.ok ? await tradesRes.json() : [];
 
-  const totalTradesPnl = Array.isArray(tradeRows)
-    ? tradeRows.reduce((sum, r) => sum + (Number(r.pnl) || 0), 0)
-    : 0;
-
-  const existingInitial =
-    profile.initial_capital != null && isFinite(Number(profile.initial_capital)) && Number(profile.initial_capital) > 0
-      ? Number(profile.initial_capital)
-      : 1000;
   const existingCurrent =
     profile.current_balance != null && isFinite(Number(profile.current_balance))
       ? Number(profile.current_balance)
-      : existingInitial;
+      : 1000;
 
   const liveBalance =
     accountInfo?.currentBalance != null && isFinite(Number(accountInfo.currentBalance))
       ? Number(Number(accountInfo.currentBalance).toFixed(2))
       : existingCurrent;
 
-  const netPnlOffset =
-    Array.isArray(tradeRows) && tradeRows.length > 0
-      ? totalTradesPnl
-      : accountInfo?.visibleNetPnl != null && isFinite(Number(accountInfo.visibleNetPnl))
-      ? Number(accountInfo.visibleNetPnl)
-      : 0;
-
-  const derivedStarted = Number((liveBalance - netPnlOffset).toFixed(2));
-
-  let resolvedStarted = existingInitial;
-  let startedSource = 'existing';
-
-  const customOverride =
-    options.customStartedBalance != null && Number(options.customStartedBalance) > 0
-      ? Number(Number(options.customStartedBalance).toFixed(2))
-      : null;
-
-  if (customOverride != null) {
-    resolvedStarted = customOverride;
-    startedSource = 'manual';
-    await chrome.storage.local.set({ startedBalanceOverride: customOverride });
-  } else if (accountInfo?.fundingNet != null && Number(accountInfo.fundingNet) > 0) {
-    resolvedStarted = Number(Number(accountInfo.fundingNet).toFixed(2));
-    startedSource = 'funding_history';
-    await chrome.storage.local.set({ detectedFundingNet: resolvedStarted });
-  } else if (stored.startedBalanceOverride && Number(stored.startedBalanceOverride) > 0) {
-    resolvedStarted = Number(stored.startedBalanceOverride);
-    startedSource = 'manual';
-  } else if (stored.detectedFundingNet && Number(stored.detectedFundingNet) > 0) {
-    resolvedStarted = Number(stored.detectedFundingNet);
-    startedSource = 'funding_history';
-  } else if (derivedStarted > 0) {
-    const isUntouchedDefault =
-      Math.abs(existingInitial - 1000) < 0.01 || Math.abs(existingInitial - 10000) < 0.01;
-    const prevAuto = stored.lastAccountSync?.startedSource === 'derived';
-    if (options.forceUpdateStarted || isUntouchedDefault || prevAuto) {
-      resolvedStarted = derivedStarted;
-      startedSource = 'derived';
-    }
-  }
-
   const patchPayload = {
     current_balance: liveBalance,
-    initial_capital: resolvedStarted,
   };
   if (accountInfo?.currency === 'USD' || accountInfo?.currency === 'INR') {
     patchPayload.base_currency = accountInfo.currency;
   }
 
-  const changed =
-    Math.abs(existingCurrent - liveBalance) > 0.009 ||
-    Math.abs(existingInitial - resolvedStarted) > 0.009;
+  const changed = Math.abs(existingCurrent - liveBalance) > 0.009;
 
-  if (changed || options.forceUpdateStarted) {
+  if (changed || options.forceUpdate || options.forceUpdateStarted) {
     const patchRes = await fetch(
       `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`,
       {
@@ -596,16 +541,14 @@ async function syncAccountBalanceToSupabase(accountInfo, options = {}) {
   const accountSync = {
     currentBalance: liveBalance,
     equity: accountInfo?.equity ?? null,
-    startedBalance: resolvedStarted,
-    derivedStarted: derivedStarted > 0 ? derivedStarted : null,
-    startedSource,
+    startedBalance: profile.initial_capital ?? null,
     currency: accountInfo?.currency || profile.base_currency || 'USD',
     syncedAt: new Date().toISOString(),
   };
 
   await chrome.storage.local.set({ lastAccountSync: accountSync });
 
-  if ((changed || options.forceUpdateStarted) && !options.silentNotify) {
+  if ((changed || options.forceUpdate || options.forceUpdateStarted) && !options.silentNotify) {
     notifyTradeFlowTabs(1, true);
   }
 

@@ -40,12 +40,15 @@ function clearMsg(el) {
 }
 
 async function findVantageTab() {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (activeTab?.url && activeTab.url.includes('vantagemarkets.com')) {
+    return activeTab;
+  }
   const tabs = await chrome.tabs.query({});
-  return tabs.find(
-    (t) =>
-      t.url &&
-      (t.url.includes('vantagemarkets.com/web-trade') ||
-        t.url.includes('secure.vantagemarkets.com'))
+  return (
+    tabs.find((t) => t.url && t.url.includes('vantagemarkets.com/web-trade')) ||
+    tabs.find((t) => t.url && t.url.includes('secure.vantagemarkets.com')) ||
+    tabs.find((t) => t.url && t.url.includes('vantagemarkets.com'))
   );
 }
 
@@ -118,12 +121,18 @@ async function scrapeVantageAllFrames(tabId) {
   }
 
   // Fallback when chrome.scripting API is unavailable: use content-script messaging directly
-  const preview = await chrome.tabs.sendMessage(tabId, { type: 'PREVIEW_VANTAGE_TRADES' });
-  return {
-    count: preview?.count || 0,
-    trades: preview?.trades || [],
-    account: preview?.account || { currentBalance: null, equity: null, fundingNet: null },
-  };
+  try {
+    const preview = await chrome.tabs.sendMessage(tabId, { type: 'PREVIEW_VANTAGE_TRADES' });
+    return {
+      count: preview?.count || 0,
+      trades: preview?.trades || [],
+      account: preview?.account || { currentBalance: null, equity: null, fundingNet: null },
+    };
+  } catch (err) {
+    throw new Error(
+      'Extension permissions updated — click Reload (↻) on TradeFlow Vantage Bridge in chrome://extensions, then refresh this Vantage tab.'
+    );
+  }
 }
 
 /** Send message to Vantage tab, auto-injecting vantage-content.js when chrome.scripting is available */
@@ -132,13 +141,22 @@ async function sendToVantageTab(tabId, msg) {
     return await chrome.tabs.sendMessage(tabId, msg);
   } catch (err) {
     if (!chrome.scripting?.executeScript) {
-      throw err;
+      throw new Error(
+        'Extension permissions updated — click Reload (↻) on TradeFlow Vantage Bridge in chrome://extensions, then refresh this Vantage tab.'
+      );
     }
-    await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      files: ['vantage-content.js'],
-    });
-    await new Promise((r) => setTimeout(r, 120));
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        files: ['vantage-content.js'],
+      });
+    } catch (_) {
+      await chrome.scripting.executeScript({
+        target: { tabId, allFrames: false },
+        files: ['vantage-content.js'],
+      });
+    }
+    await new Promise((r) => setTimeout(r, 150));
     return await chrome.tabs.sendMessage(tabId, msg);
   }
 }
@@ -187,22 +205,6 @@ async function refreshUI() {
     if (liveEquityLabel && lastAcct?.equity != null) {
       liveEquityLabel.textContent = `${sym}${Number(lastAcct.equity).toFixed(2)}`;
     }
-    if (startedBalanceInput) {
-      if (data.startedBalanceOverride > 0) {
-        startedBalanceInput.value = String(data.startedBalanceOverride);
-        if (startedSourceLabel) startedSourceLabel.textContent = 'Manual Override';
-      } else if (lastAcct?.startedBalance != null) {
-        startedBalanceInput.placeholder = `Auto: ${sym}${Number(lastAcct.startedBalance).toFixed(2)}`;
-        if (startedSourceLabel) {
-          startedSourceLabel.textContent =
-            lastAcct.startedSource === 'funding_history'
-              ? 'From Funding History'
-              : lastAcct.startedSource === 'derived'
-              ? 'Balance - Trades PnL'
-              : 'Synced';
-        }
-      }
-    }
 
     if (data.lastSyncAt) {
       const dt = new Date(data.lastSyncAt);
@@ -240,14 +242,46 @@ async function refreshUI() {
           }
           if (preview.count > 0) {
             vantageStatusText.innerHTML = `<span style="color:#34d399;">🟢 Detected <b>${preview.count}</b> closed trade(s) in Vantage Position History.</span>`;
+          } else if (vTab.url && !vTab.url.includes('/web-trade')) {
+            if (preview.account?.currentBalance != null) {
+              vantageStatusText.innerHTML = `<span style="color:#34d399;">🟢 Balance detected (<b>${pSym}${Number(preview.account.currentBalance).toFixed(2)}</b>). Open <b>Web-Trade → Position History</b> to sync closed trades.</span>`;
+            } else {
+              vantageStatusText.innerHTML =
+                '<span style="color:#94a3b8;">ℹ On Vantage Portal. Open <b>Web-Trade → Position History</b> for trades, or sync balance below.</span>';
+            }
           } else {
             vantageStatusText.innerHTML =
               '<span style="color:#94a3b8;">ℹ Vantage Terminal open. Click <b>Position History</b> tab to view closed orders.</span>';
           }
         }
       } catch (err) {
-        vantageStatusText.innerHTML =
-          `<span style="color:#fbbf24;">↻ Refresh the Vantage Web-Trade tab once (${err?.message || 'waiting'}).</span>`;
+        const msg = err?.message || 'waiting';
+        if (msg.includes('chrome://extensions')) {
+          vantageStatusText.innerHTML =
+            `<div style="color:#fbbf24; margin-bottom:6px;">⚠️ ${msg}</div>` +
+            `<div style="display:flex; gap:6px;">` +
+            `<button id="reloadExtNowBtn" type="button" class="btn btn-primary" style="padding:6px 8px; font-size:11px; flex:1;">🔄 Reload Extension Now</button>` +
+            `<button id="openExtPageBtn" type="button" class="btn btn-secondary" style="padding:6px 8px; font-size:11px; width:auto;">⚙️ Extensions</button>` +
+            `</div>`;
+          const reloadBtn = document.getElementById('reloadExtNowBtn');
+          if (reloadBtn) {
+            reloadBtn.addEventListener('click', async () => {
+              try {
+                await chrome.tabs.reload(vTab.id);
+              } catch (_) {}
+              chrome.runtime.reload();
+            });
+          }
+          const openBtn = document.getElementById('openExtPageBtn');
+          if (openBtn) {
+            openBtn.addEventListener('click', () => {
+              chrome.tabs.create({ url: 'chrome://extensions' });
+            });
+          }
+        } else {
+          vantageStatusText.innerHTML =
+            `<span style="color:#fbbf24;">↻ Refresh the Vantage Web-Trade tab once (${msg}).</span>`;
+        }
       }
     }
   } else {
@@ -347,28 +381,25 @@ if (syncBalanceBtn) {
       showMsg(balanceMsg, 'Vantage Web-Trade tab not found.', true);
       return;
     }
-    const rawStarted = startedBalanceInput?.value?.trim();
-    const customStarted = rawStarted ? parseFloat(rawStarted) : null;
     syncBalanceBtn.disabled = true;
-    syncBalanceBtn.textContent = 'Syncing Balance...';
+    syncBalanceBtn.textContent = 'Syncing Live Balance...';
     try {
       const scraped = await scrapeVantageAllFrames(vTab.id);
       const acct = scraped?.account || {};
-      if (acct.currentBalance == null && acct.fundingNet == null && !(customStarted > 0)) {
+      if (acct.currentBalance == null) {
         const hint = acct.debugTopText ? ` Read: [${acct.debugTopText}]` : '';
         showMsg(balanceMsg, 'Live Vantage Balance not visible on page.' + hint, true);
       } else {
         const res = await chrome.runtime.sendMessage({
           type: 'SYNC_ACCOUNT_BALANCE',
           account: acct,
-          forceUpdateStarted: true,
-          customStartedBalance: customStarted && !isNaN(customStarted) && customStarted > 0 ? customStarted : null,
+          forceUpdate: true,
         });
         if (res?.ok && res.accountSync) {
           const sym = res.accountSync.currency === 'INR' ? '₹' : '$';
           showMsg(
             balanceMsg,
-            `✅ Current: ${sym}${res.accountSync.currentBalance.toFixed(2)} | Started: ${sym}${res.accountSync.startedBalance.toFixed(2)}`
+            `✅ Current Balance: ${sym}${Number(res.accountSync.currentBalance).toFixed(2)}`
           );
           await refreshUI();
         } else {
@@ -383,7 +414,7 @@ if (syncBalanceBtn) {
       );
     } finally {
       syncBalanceBtn.disabled = false;
-      syncBalanceBtn.textContent = '💰 Sync Balance & Capital Now';
+      syncBalanceBtn.textContent = '💰 Sync Live Balance Now';
     }
   });
 }

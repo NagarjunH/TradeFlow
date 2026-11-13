@@ -14,11 +14,15 @@ import {
   Award,
   Brain,
   Activity,
-  ChevronDown
+  ChevronDown,
+  Landmark,
+  Pencil,
+  X
 } from 'lucide-react';
 import { defaultSettings, type Trade, type DayRecord, type AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
 import { calculatePerformance, calculateDiscipline, generateEquityCurve } from '../utils/TradingEngine';
+import { settingsApi } from '../lib/api/settingsApi';
 
 interface DashboardViewProps {
   trades?: Trade[];
@@ -27,6 +31,8 @@ interface DashboardViewProps {
   onSelectDate?: (dateStr: string) => void;
   onTabChange?: (tab: TabType) => void;
   onOpenQuickTrade?: () => void;
+  userId?: string;
+  onSettingsUpdated?: () => void;
 }
 
 // Catmull-Rom to Cubic Bezier smooth path generator
@@ -59,7 +65,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectDate,
   onTabChange,
   onOpenQuickTrade: _onOpenQuickTrade,
+  userId,
+  onSettingsUpdated,
 }) => {
+  const [isEditStartedOpen, setIsEditStartedOpen] = useState(false);
+  const [startedInput, setStartedInput] = useState<string>('');
+  const [isSavingStarted, setIsSavingStarted] = useState(false);
+
   const [performerTab, setPerformerTab] = useState<'By R-Multiple' | 'By P&L'>('By P&L');
   const [equityTab, setEquityTab] = useState<'$ P&L' | 'R-Multiple' | '% Return' | 'Drawdown'>('$ P&L');
   const [timeframe, setTimeframe] = useState<'7D' | '30D' | '90D' | '6M' | '1Y' | 'ALL'>('30D');
@@ -822,14 +834,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Top 6 KPI Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-3.5">
+      {/* 2. Top 7 KPI Metric Cards (Current & Started Balance in Separate Cards) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-3.5">
         
-        {/* Card 1: CURRENT EQUITY */}
+        {/* Card 1: CURRENT BALANCE */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-              CURRENT EQUITY
+              CURRENT BALANCE
             </span>
             <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
               <Wallet className="w-4 h-4" />
@@ -848,7 +860,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </span>
             </div>
             <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-1">
-              Started: {currSymbol}{initialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              Live Equity / Broker
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: STARTED BALANCE (Manual Capital) */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between group">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+              STARTED BALANCE
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setStartedInput(String(initialCapital));
+                setIsEditStartedOpen(true);
+              }}
+              className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] hover:bg-[#DB9F35] hover:text-white flex items-center justify-center shadow-2xs transition-all cursor-pointer"
+              title="Click to manually update Started Balance"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="mt-2.5">
+            <div className="text-2xl sm:text-[26px] font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight">
+              {currSymbol}{initialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="flex items-center justify-between mt-1 text-[10px] font-mono">
+              <span className="text-[#786F66] dark:text-[#94A3B8]">Manual Capital</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setStartedInput(String(initialCapital));
+                  setIsEditStartedOpen(true);
+                }}
+                className="font-bold text-[#DB9F35] hover:underline cursor-pointer"
+              >
+                Edit
+              </button>
             </div>
           </div>
         </div>
@@ -2459,6 +2509,97 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           Last updated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
       </footer>
+
+      {/* Quick Edit Started Balance Modal */}
+      {isEditStartedOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in"
+          onClick={() => setIsEditStartedOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-[#E7E0D6] dark:border-[#242D3D]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
+                  <Landmark className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">Update Started Balance</h3>
+                  <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Manual starting capital</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditStartedOpen(false)}
+                className="text-[#786F66] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] p-1 rounded-lg hover:bg-[#FAF7F2] dark:hover:bg-[#1A2230] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const num = parseFloat(startedInput);
+                if (isNaN(num) || num <= 0) return;
+                setIsSavingStarted(true);
+                try {
+                  if (userId) {
+                    await settingsApi.save(userId, { ...settings, initialCapital: num });
+                  }
+                  onSettingsUpdated?.();
+                  setIsEditStartedOpen(false);
+                } catch (err) {
+                  console.error('Failed to update started balance:', err);
+                } finally {
+                  setIsSavingStarted(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase block">
+                  Started Balance ({currSymbol})
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 font-mono text-sm text-[#786F66]">{currSymbol}</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={startedInput}
+                    onChange={(e) => setStartedInput(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 bg-[#FAF7F2] dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-base font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none"
+                    placeholder="e.g. 100.00"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+                  This is your manual baseline deposit / starting capital.
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsEditStartedOpen(false)}
+                  className="flex-1 py-2 rounded-xl border border-[#E7E0D6] dark:border-[#242D3D] text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] hover:bg-[#FAF7F2] dark:hover:bg-[#1A2230] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingStarted}
+                  className="flex-1 py-2 rounded-xl bg-[#DB9F35] hover:bg-[#C28B2B] text-white text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingStarted ? 'Saving...' : 'Save Balance'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -277,6 +277,8 @@ function AppInner() {
                 setEditTrade(null);
                 setIsQuickTradeOpen(true);
               }}
+              userId={user?.id}
+              onSettingsUpdated={loadAllData}
             />
           )}
 
