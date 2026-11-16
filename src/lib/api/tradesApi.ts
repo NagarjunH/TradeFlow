@@ -657,4 +657,43 @@ export const tradesApi = {
 
     return { inserted, skipped };
   },
+
+  /** Replace all trades with a fresh, clean set of trades (chronological #1..N, completely chart-free) */
+  async replaceAllTrades(
+    incoming: Omit<Trade, 'id' | 'tradeNumber'>[],
+    userId: string
+  ): Promise<{ inserted: Trade[] }> {
+    // 1. Clear existing trades from Supabase
+    if (userId) {
+      try {
+        await supabase.from('trades').delete().eq('user_id', userId);
+      } catch (err) {
+        console.warn('[tradesApi] Cloud delete all warning:', err);
+      }
+    }
+
+    // 2. Clear local Dexie
+    try {
+      await db.trades.clear();
+    } catch (_) {}
+
+    // 3. Chronologically sort incoming trades (oldest close time first)
+    const chronological = [...incoming].sort((a, b) =>
+      `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)
+    );
+
+    // 4. Insert each with proper chronological tradeNumber 1..N
+    const inserted: Trade[] = [];
+    for (let i = 0; i < chronological.length; i++) {
+      const item = chronological[i];
+      const fullTrade: Omit<Trade, 'id'> = {
+        ...item,
+        tradeNumber: i + 1,
+      };
+      const saved = await this.create(fullTrade, userId);
+      inserted.push(saved);
+    }
+
+    return { inserted };
+  },
 };

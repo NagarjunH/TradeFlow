@@ -10,10 +10,12 @@ import {
   ClipboardPaste,
   ShieldCheck,
   RefreshCw,
+  FileText,
 } from 'lucide-react';
 import type { Trade, AppSettings } from '../db/db';
 import { tradesApi } from '../lib/api/tradesApi';
 import { parseVantageHistoryText, toTradeFlowPayload } from '../utils/vantageParser';
+import { OFFICIAL_VANTAGE_CSV } from '../utils/vantageStatementData';
 
 interface VantageSyncModalProps {
   isOpen: boolean;
@@ -35,6 +37,7 @@ export const VantageSyncModal: React.FC<VantageSyncModalProps> = ({
   const [activeTab, setActiveTab] = useState<'extension' | 'paste'>('paste');
   const [rawText, setRawText] = useState<string>('');
   const [convertUtcToLocal, setConvertUtcToLocal] = useState<boolean>(true);
+  const [replaceMode, setReplaceMode] = useState<boolean>(true);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [importResult, setImportResult] = useState<{
     type: 'success' | 'error';
@@ -100,16 +103,22 @@ export const VantageSyncModal: React.FC<VantageSyncModalProps> = ({
 
     try {
       const payloads = parsedPreview.map(toTradeFlowPayload);
-      const res = await tradesApi.importBrokerTrades(payloads, userId);
-      setImportResult({
-        type: 'success',
-        message: `Successfully imported ${res.inserted.length} new trade(s)!${
-          res.skipped > 0 ? ` (${res.skipped} duplicate(s) safely skipped)` : ''
-        }`,
-      });
-      if (res.inserted.length > 0) {
-        onSyncComplete();
+      if (replaceMode) {
+        const res = await tradesApi.replaceAllTrades(payloads, userId);
+        setImportResult({
+          type: 'success',
+          message: `Successfully re-added all ${res.inserted.length} clean trades (re-numbered #1 to #${res.inserted.length}, exact entry/exit, recalculated pips & 0 charts)!`,
+        });
+      } else {
+        const res = await tradesApi.importBrokerTrades(payloads, userId);
+        setImportResult({
+          type: 'success',
+          message: `Successfully imported ${res.inserted.length} new trade(s)!${
+            res.skipped > 0 ? ` (${res.skipped} duplicate(s) safely skipped)` : ''
+          }`,
+        });
       }
+      onSyncComplete();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to import Vantage trades.';
       setImportResult({ type: 'error', message: msg });
@@ -203,26 +212,53 @@ export const VantageSyncModal: React.FC<VantageSyncModalProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="flex items-center gap-2 text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={convertUtcToLocal}
-                    onChange={(e) => setConvertUtcToLocal(e.target.checked)}
-                    className="rounded accent-[#10B981]"
-                  />
-                  Convert Vantage Time (UTC+2) to Local Time (IST)
-                </label>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={convertUtcToLocal}
+                      onChange={(e) => setConvertUtcToLocal(e.target.checked)}
+                      className="rounded accent-[#10B981]"
+                    />
+                    Convert Vantage Time (UTC+2) to Local Time (IST)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-[#DB9F35] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={replaceMode}
+                      onChange={(e) => setReplaceMode(e.target.checked)}
+                      className="rounded accent-[#DB9F35]"
+                    />
+                    Clean Replace: Wipe old partial trades &amp; re-number #1..N (No charts)
+                  </label>
+                </div>
 
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F2ECE0] dark:bg-[#1C2331] hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] border border-[#DFD5C6] dark:border-[#2E384D] cursor-pointer transition-colors">
-                  <Upload className="w-3.5 h-3.5 text-[#10B981]" />
-                  <span>Upload CSV / TXT</span>
-                  <input
-                    type="file"
-                    accept=".csv,.txt,.tsv"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRawText(OFFICIAL_VANTAGE_CSV);
+                      setReplaceMode(true);
+                      setImportResult(null);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] hover:bg-[#F2ECE0] dark:hover:bg-[#252E40] text-xs font-bold text-[#9B671B] dark:text-[#F3D784] border border-[#E7E0D6] dark:border-[#242D3D] cursor-pointer transition-colors"
+                    title="Load all 109 trades directly from the official Vantage statement"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#DB9F35]" />
+                    <span>📄 Load Official Statement (109 Trades)</span>
+                  </button>
+
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F2ECE0] dark:bg-[#1C2331] hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] border border-[#DFD5C6] dark:border-[#2E384D] cursor-pointer transition-colors">
+                    <Upload className="w-3.5 h-3.5 text-[#10B981]" />
+                    <span>Upload CSV / TXT</span>
+                    <input
+                      type="file"
+                      accept=".csv,.txt,.tsv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
 
               <textarea
@@ -413,19 +449,24 @@ export const VantageSyncModal: React.FC<VantageSyncModalProps> = ({
             {activeTab === 'paste' && (
               <button
                 type="button"
-                disabled={newTradesCount === 0 || isImporting}
+                disabled={(replaceMode ? parsedPreview.length === 0 : newTradesCount === 0) || isImporting}
                 onClick={handleImport}
                 className="px-5 py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed text-[#052E16] text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
               >
                 {isImporting ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Importing...
+                    <span>Processing Trades...</span>
+                  </>
+                ) : replaceMode ? (
+                  <>
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Re-Add All {parsedPreview.length} Clean Trades</span>
                   </>
                 ) : (
                   <>
                     <Zap className="w-3.5 h-3.5" />
-                    Import {newTradesCount} New Trade{newTradesCount !== 1 ? 's' : ''}
+                    <span>Import {newTradesCount} New Trade{newTradesCount !== 1 ? 's' : ''}</span>
                   </>
                 )}
               </button>

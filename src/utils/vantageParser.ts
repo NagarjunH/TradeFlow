@@ -185,7 +185,83 @@ export function parseVantageHistoryText(
 ): ParsedVantageTrade[] {
   if (!rawText || !rawText.trim()) return [];
 
-  // Normalize multi-line DOM copy-paste where a single row may wrap across lines
+  const results: ParsedVantageTrade[] = [];
+  const seenTickets = new Set<string>();
+
+  // Strategy 1: Check if input is official Vantage Closed Trades CSV report
+  if (rawText.includes('Order Number') || rawText.includes('Trading Instrument') || /^\d{8,11},/m.test(rawText)) {
+    const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (line.startsWith('Closed Trades') || line.startsWith('Order Number')) continue;
+      const parts = line.split(',').map((p) => p.trim());
+      if (parts.length < 10) continue;
+
+      const orderNum = parts[0];
+      if (!/^\d{7,12}$/.test(orderNum)) continue;
+
+      const symbolRaw = parts[2] || 'XAUUSD';
+      const orderTypeRaw = (parts[3] || 'Buy').toUpperCase();
+      const order: 'BUY' | 'SELL' = orderTypeRaw === 'SELL' ? 'SELL' : 'BUY';
+      const lotSize = parseFloat(parts[4]) || 0.01;
+      const entryPrice = parseFloat(parts[5]) || 0;
+      const openTimeRaw = parts[6] || '';
+      const exitPrice = parseFloat(parts[7]) || 0;
+      const closeTimeRaw = parts[8] || '';
+      const swapRaw = parts[12] || '0';
+      const netPnl = parseFloat(parts[13]) || 0;
+      const remarks = parts[15] || '';
+
+      const brokerTicketId = `vnt_${orderNum}`;
+      if (seenTickets.has(brokerTicketId)) continue;
+      seenTickets.add(brokerTicketId);
+
+      const parsedClose = parseVantageTimestamp(closeTimeRaw, convertBrokerToLocal, 2);
+      const session = detectSessionFromUtcHour(parsedClose.utcHour);
+      const pair = normalizePairSymbol(symbolRaw);
+
+      const isWin = netPnl > 0.001;
+      const isLoss = netPnl < -0.001;
+      const rMultiple = isWin ? 1.0 : isLoss ? -1.0 : 0;
+      const tradeSuccessRate = classifyTradeOutcome(netPnl);
+
+      let exitType: Trade['exitType'] =
+        tradeSuccessRate === 'TARGET' || tradeSuccessRate === 'SMALL WIN'
+          ? 'TARGET'
+          : tradeSuccessRate === 'BREAKEVEN'
+          ? 'BREAKEVEN'
+          : 'STOP_LOSS';
+      if (remarks.includes('[tp')) exitType = 'TARGET';
+      else if (remarks.includes('[sl')) exitType = 'STOP_LOSS';
+
+      results.push({
+        brokerTicketId,
+        brokerSource: 'Vantage Web-Trade',
+        symbolRaw,
+        pair,
+        order,
+        lotSize,
+        entryPrice,
+        exitPrice,
+        pnl: netPnl,
+        netPnl,
+        chargesSwap: swapRaw,
+        openTimeRaw,
+        closeTimeRaw,
+        date: parsedClose.date,
+        time: parsedClose.time,
+        session,
+        rMultiple,
+        tradeSuccessRate,
+        exitType,
+      });
+    }
+
+    if (results.length > 0) {
+      return results;
+    }
+  }
+
+  // Strategy 2: Normalize multi-line DOM copy-paste where a single row may wrap across lines
   // Strategy: flatten extra whitespace and split right before each "Buy/Sell SYMBOL" or match chunks globally
   const normalized = rawText
     .replace(/\r\n/g, '\n')
@@ -196,9 +272,6 @@ export function parseVantageHistoryText(
   // (Buy|Sell) (SYMBOL) (0.01/0.01 or 0.01) (Entry) (Avg) (PnL) (NetPnL) (Charges/Swap optional) (OpenTime) (CloseTime)
   const rowRegex =
     /\b(Buy|Sell|BUY|SELL)\s+([A-Za-z0-9./_-]{3,14})\s+(\d+(?:\.\d+)?)(?:\s*\/\s*\d+(?:\.\d+)?)?\s+([+-]?[\d,]+\.\d+)\s+([+-]?[\d,]+\.\d+)\s+([+-]?[\d,]+\.\d+)\s+([+-]?[\d,]+\.\d+)(?:\s+([+-]?[\d,.]+\/[+-]?[\d,.]+))?\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2})\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2})/g;
-
-  const results: ParsedVantageTrade[] = [];
-  const seenTickets = new Set<string>();
 
   let match: RegExpExecArray | null;
   while ((match = rowRegex.exec(normalized)) !== null) {
