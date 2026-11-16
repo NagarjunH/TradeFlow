@@ -36,6 +36,12 @@ export interface Trade {
   notes?: string;
   brokerTicketId?: string;
   brokerSource?: string;
+  brokerTradeId?: string;
+  plannedVolume?: number;
+  volume?: number;
+  executionStatus?: 'CLEAN' | 'VIOLATION';
+  errorCategory?: 'INCORRECT_LOT_SIZE' | 'OVER_RISK' | 'STOP_OUT' | 'FOMO' | 'REVENGE' | 'NONE';
+  brokerCloseReason?: 'SO' | 'SL' | 'TP' | 'NORMAL';
   exitPrice?: number;
   chargesSwap?: string;
   openTimeRaw?: string;

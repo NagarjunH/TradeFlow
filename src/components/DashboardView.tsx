@@ -17,12 +17,15 @@ import {
   ChevronDown,
   Landmark,
   Pencil,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
 import { defaultSettings, type Trade, type DayRecord, type AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
 import { calculatePerformance, calculateDiscipline, generateEquityCurve } from '../utils/TradingEngine';
 import { settingsApi } from '../lib/api/settingsApi';
+import { generateIntelligenceReport } from '../services/analyticsService';
+import { generateInsights } from '../services/insightsEngine';
 
 interface DashboardViewProps {
   trades?: Trade[];
@@ -97,6 +100,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const discipline = calculateDiscipline(trades);
   const currSymbol = settings.currency === 'USD' ? '$' : '₹';
   const initialCapital = settings.initialCapital > 0 ? settings.initialCapital : 1000;
+
+  // Performance Intelligence Diagnostics (Strategy Mode)
+  const intel = useMemo(() => {
+    return generateIntelligenceReport(trades, settings, 'STRATEGY');
+  }, [trades, settings]);
+
+  const topInsights = useMemo(() => {
+    return generateInsights(intel);
+  }, [intel]);
 
   // Dynamic greeting based on current local time
   const greeting = useMemo(() => {
@@ -834,7 +846,141 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Top 7 KPI Metric Cards (Current & Started Balance in Separate Cards) */}
+      {/* 2. Trading Performance Intelligence Health Strip (4 Concise Diagnostic Cards) */}
+      <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs space-y-3 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E7E0D6]/60 dark:border-[#242D3D] pb-2">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-[#DB9F35] uppercase tracking-wider block">
+                Trading Performance Intelligence
+              </span>
+              <h2 className="text-xs sm:text-sm font-black text-[#1F1A16] dark:text-[#F0F4F8]">
+                Diagnostic Health &amp; Strategy Edge
+              </h2>
+            </div>
+          </div>
+          
+          <button
+            type="button"
+            onClick={() => onTabChange?.('analytics')}
+            className="flex items-center gap-1.5 text-xs font-bold text-[#DB9F35] hover:text-[#C28C2E] hover:underline self-start sm:self-auto cursor-pointer"
+          >
+            <span>Open Analytics Intelligence (5 Tabs)</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Card 1: Trading Health */}
+          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+                Trading Health
+              </span>
+              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399]">
+                {intel.core.netPnl >= 0 ? 'Strategy Edge +' : 'Review Needed'}
+              </span>
+            </div>
+            <div className="mt-2 space-y-1">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs text-[#786F66] dark:text-[#94A3B8]">Strategy Expectancy</span>
+                <span className="text-sm font-black font-mono text-[#15803D] dark:text-[#34D399]">
+                  {intel.core.expectancy >= 0 ? '+' : '-'}{currSymbol}{Math.abs(intel.core.expectancy).toFixed(2)}/trade
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-[#786F66] dark:text-[#94A3B8]">Profit Factor</span>
+                <span className="font-bold font-mono text-[#1F1A16] dark:text-[#F0F4F8]">
+                  {intel.core.profitFactor.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-[#786F66] dark:text-[#94A3B8]">Discipline Score</span>
+                <span className="font-bold font-mono text-[#15803D] dark:text-[#34D399]">
+                  {intel.execution.disciplineScore.toFixed(0)}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Biggest Weakness */}
+          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+                Biggest Weakness
+              </span>
+              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]">
+                Short (SELL) Drag
+              </span>
+            </div>
+            <div className="mt-2 space-y-1">
+              <div className="text-xs font-bold text-[#DC2626] dark:text-[#F87171] truncate">
+                SELL Win Rate: {intel.direction.sell.winRate.toFixed(1)}%
+              </div>
+              <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8] leading-tight">
+                BUY side is {intel.direction.winRateDiff > 0 ? `+${intel.direction.winRateDiff}% stronger` : 'stronger'} ({intel.direction.buy.winRate.toFixed(1)}% WR).
+              </p>
+              <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8] italic">
+                {intel.time.worstHour ? `Vulnerable hour: ${intel.time.worstHour.hourLabel} Window` : 'Review short entries'}
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Critical Mistakes */}
+          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+                Critical Mistakes
+              </span>
+              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]">
+                {intel.execution.lotSizeViolations.length} Violations
+              </span>
+            </div>
+            <div className="mt-2 space-y-1">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs text-[#786F66] dark:text-[#94A3B8]">Cost of Mistakes</span>
+                <span className="text-sm font-black font-mono text-[#DC2626] dark:text-[#F87171]">
+                  -{currSymbol}{Math.abs(intel.execution.costOfMistakes).toFixed(2)}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8] leading-tight">
+                {intel.execution.lotSizeViolations.length > 0
+                  ? '0.09 lot size blunder on Nov 10 wiped out 108 trades of profit.'
+                  : 'Zero lot size or discipline anomalies detected.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Card 4: Next Focus */}
+          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+                Next Focus (10–30 Trades)
+              </span>
+              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35]">
+                Target
+              </span>
+            </div>
+            <div className="mt-2 space-y-1">
+              <p className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] leading-tight line-clamp-2">
+                {topInsights[0]?.suggestedAction || 'Enforce 0.01 lot ceiling & audit SELL trigger criteria.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => onTabChange?.('analytics')}
+                className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-1 mt-1 cursor-pointer"
+              >
+                Deep-dive in Analytics →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Top 7 KPI Metric Cards (Current & Started Balance in Separate Cards) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-3.5">
         
         {/* Card 1: CURRENT BALANCE */}
