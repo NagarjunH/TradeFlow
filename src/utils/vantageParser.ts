@@ -339,6 +339,8 @@ export function toTradeFlowPayload(parsed: ParsedVantageTrade): Omit<Trade, 'id'
   const now = new Date().toISOString();
   const computedPips = calculatePricePips(parsed.pair, parsed.order, parsed.entryPrice, parsed.exitPrice);
 
+  const isMistake = parsed.tradeSuccessRate === 'MISTAKE' || parsed.netPnl <= -50.0;
+
   return {
     date: parsed.date,
     time: parsed.time,
@@ -356,10 +358,10 @@ export function toTradeFlowPayload(parsed: ParsedVantageTrade): Omit<Trade, 'id'
     pips: computedPips,
     exitType: parsed.exitType,
     tradeSuccessRate: parsed.tradeSuccessRate,
-    tradeQuality: 'CLEAN',
+    tradeQuality: isMistake ? 'VIOLATION' : 'CLEAN',
     emotion: 'FOCUSED',
-    execution: 'CLEAN',
-    violationReason: 'None',
+    execution: isMistake ? 'VIOLATION' : 'CLEAN',
+    violationReason: isMistake ? 'Over-risk' : 'None',
     setupType: '',
     htfContext: '',
     entryReason: '',

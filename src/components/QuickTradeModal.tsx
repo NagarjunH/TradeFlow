@@ -540,13 +540,14 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
                 {[
                   { id: 'TARGET', label: 'TARGET', desc: 'Profit ≥ $5', activeClass: 'bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80] border-[#15803D]' },
                   { id: 'SMALL WIN', label: 'SMALL WIN', desc: '$0.01 – $4.99', activeClass: 'bg-[#E0F2FE] dark:bg-[#142B47] text-[#0284C7] dark:text-[#38BDF8] border-[#0284C7]' },
                   { id: 'BREAKEVEN', label: 'BREAKEVEN', desc: '-$0.50 to +$0.50', activeClass: 'bg-[#F3F4F6] dark:bg-[#1E2638] text-[#4B5563] dark:text-[#94A3B8] border-[#6B7280]' },
                   { id: 'SMALL LOSS', label: 'SMALL LOSS', desc: '-$0.51 to -$4.99', activeClass: 'bg-[#FEF3C7] dark:bg-[#3B2912] text-[#D97706] dark:text-[#FBBF24] border-[#D97706]' },
-                  { id: 'STOP LOSS', label: 'STOP LOSS', desc: 'Profit ≤ -$5', activeClass: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#DC2626] dark:text-[#F87171] border-[#DC2626]' },
+                  { id: 'STOP LOSS', label: 'STOP LOSS', desc: '-$5 to -$49.99', activeClass: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#DC2626] dark:text-[#F87171] border-[#DC2626]' },
+                  { id: 'MISTAKE', label: 'MISTAKE', desc: 'Loss > $50 (Not SL)', activeClass: 'bg-[#450A0A] text-[#FCA5A5] border-[#EF4444]' },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -556,6 +557,11 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
                       if (item.id === 'TARGET' || item.id === 'SMALL WIN') setExitType('TARGET');
                       else if (item.id === 'BREAKEVEN') setExitType('BREAKEVEN');
                       else setExitType('STOP_LOSS');
+
+                      if (item.id === 'MISTAKE') {
+                        setExecution('VIOLATION');
+                        setViolationReason('Over-risk');
+                      }
                     }}
                     className={`py-2 px-2 rounded-xl text-center border transition-all cursor-pointer ${
                       tradeSuccessRate === item.id

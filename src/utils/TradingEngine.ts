@@ -254,16 +254,19 @@ export function calculateDiscipline(trades: Trade[]): DisciplineMetrics {
     const em = (t.emotion || '').toUpperCase();
     const viol = t.violationReason;
 
+    const pnl = Number(t.pnl) || 0;
+    const isBigLossMistake = pnl <= -50.0 || t.tradeSuccessRate === 'MISTAKE';
+
     const isViolation = 
       exec === 'VIOLATION' || 
       qual === 'VIOLATION' || 
+      isBigLossMistake ||
       (Boolean(viol) && viol !== 'None') || 
       em === 'FOMO' || 
       em === 'REVENGE';
 
     const isClean = !isViolation && (exec === 'CLEAN' || qual === 'CLEAN' || (!exec && !qual));
 
-    const pnl = Number(t.pnl) || 0;
     let r = Number(t.rMultiple) || 0;
     if (pnl < -0.001 && r > 0) {
       r = -r;
@@ -284,7 +287,11 @@ export function calculateDiscipline(trades: Trade[]): DisciplineMetrics {
       violationNetPnl += pnl;
       if (pnl > 0.001) violationWins++;
 
-      const reason = t.violationReason && t.violationReason !== 'None' ? t.violationReason : (t.emotion === 'FOMO' ? 'FOMO' : 'Rule Violation');
+      const reason = isBigLossMistake && (!t.violationReason || t.violationReason === 'None')
+        ? 'Loss > $50 (Mistake)'
+        : t.violationReason && t.violationReason !== 'None'
+        ? t.violationReason
+        : (t.emotion === 'FOMO' ? 'FOMO' : 'Rule Violation');
       if (!violationBreakdown[reason]) {
         violationBreakdown[reason] = { count: 0, netPnl: 0, netR: 0 };
       }
@@ -460,21 +467,23 @@ export function calculateXauusdPositionSize(
   };
 }
 
-export type TradeOutcomeClassification = 'TARGET' | 'SMALL WIN' | 'BREAKEVEN' | 'SMALL LOSS' | 'STOP LOSS';
+export type TradeOutcomeClassification = 'TARGET' | 'SMALL WIN' | 'BREAKEVEN' | 'SMALL LOSS' | 'STOP LOSS' | 'MISTAKE';
 
 /**
  * Proposed Trade Outcome Classification based on net profit thresholds:
  * - TARGET: Profit >= $5 (Trade closed with net profit of $5 or more)
  * - SMALL WIN: $0.01 – $4.99 (specifically > $0.50 and < $5.00)
  * - BREAKEVEN: -$0.50 to +$0.50 (Trade closed with negligible financial gain or loss)
- * - STOP LOSS: Profit <= -$5 (Trade closed with a loss of $5 or more)
  * - SMALL LOSS: -$0.51 to -$4.99 (Loss smaller than defined loss threshold)
+ * - STOP LOSS: -$5.00 to -$49.99 (Normal defined Stop Loss)
+ * - MISTAKE: Loss > $50 (Profit <= -$50.00) (Capital protection breach: considered a Mistake, not an SL!)
  */
 export function classifyTradeOutcome(pnl: number): TradeOutcomeClassification {
   if (pnl >= 5.0) return 'TARGET';
   if (pnl > 0.50) return 'SMALL WIN';
   if (pnl >= -0.50) return 'BREAKEVEN';
   if (pnl > -5.0) return 'SMALL LOSS';
-  return 'STOP LOSS';
+  if (pnl > -50.0) return 'STOP LOSS';
+  return 'MISTAKE';
 }
 

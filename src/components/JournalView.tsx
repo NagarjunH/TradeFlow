@@ -74,8 +74,14 @@ export const getOutcomeBadge = (outcome: string) => {
     case 'STOP LOSS':
       return {
         label: 'STOP LOSS',
-        desc: 'Loss ≤ -$5',
+        desc: 'SL: -$5.00 to -$49.99',
         className: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#DC2626] dark:text-[#F87171] border border-[#DC2626]/25',
+      };
+    case 'MISTAKE':
+      return {
+        label: 'MISTAKE',
+        desc: 'Loss > $50 (Capital breach, not an SL)',
+        className: 'bg-[#450A0A] text-[#FCA5A5] border border-[#DC2626] font-black tracking-wider shadow-xs',
       };
     default:
       return {
@@ -219,7 +225,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
       existing === 'SMALL WIN' ||
       existing === 'BREAKEVEN' ||
       existing === 'SMALL LOSS' ||
-      existing === 'STOP LOSS'
+      existing === 'STOP LOSS' ||
+      existing === 'MISTAKE'
     ) {
       setReviewOutcome(existing);
     } else {
@@ -302,7 +309,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
       successRate === 'SMALL WIN' || 
       successRate === 'BREAKEVEN' || 
       successRate === 'SMALL LOSS' || 
-      successRate === 'STOP LOSS';
+      successRate === 'STOP LOSS' ||
+      successRate === 'MISTAKE';
 
     if (!isStandardClassification) {
       successRate = classifyTradeOutcome(rawPnl);
@@ -896,7 +904,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 <option value="SMALL WIN">SMALL WIN ($0.01 – $4.99)</option>
                 <option value="BREAKEVEN">BREAKEVEN (-$0.50 – +$0.50)</option>
                 <option value="SMALL LOSS">SMALL LOSS (-$0.51 – -$4.99)</option>
-                <option value="STOP LOSS">STOP LOSS (≤ -$5)</option>
+                <option value="STOP LOSS">STOP LOSS (-$5 to -$49.99)</option>
+                <option value="MISTAKE">MISTAKE (Loss &gt; $50)</option>
               </select>
               <Target className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
               <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
@@ -1604,7 +1613,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     { id: 'SMALL WIN', label: 'SMALL WIN', threshold: '$0.01 – $4.99', active: 'bg-[#E0F2FE] dark:bg-[#142B47] text-[#0284C7] dark:text-[#38BDF8] border-[#0284C7]' },
                     { id: 'BREAKEVEN', label: 'BREAKEVEN', threshold: '-$0.50 to +$0.50', active: 'bg-[#F3F4F6] dark:bg-[#1E2638] text-[#4B5563] dark:text-[#94A3B8] border-[#6B7280]' },
                     { id: 'SMALL LOSS', label: 'SMALL LOSS', threshold: '-$0.51 to -$4.99', active: 'bg-[#FEF3C7] dark:bg-[#3B2912] text-[#D97706] dark:text-[#FBBF24] border-[#D97706]' },
-                    { id: 'STOP LOSS', label: 'STOP LOSS', threshold: 'Profit ≤ -$5', active: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#DC2626] dark:text-[#F87171] border-[#DC2626]' },
+                    { id: 'STOP LOSS', label: 'STOP LOSS', threshold: '-$5.00 to -$49.99', active: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#DC2626] dark:text-[#F87171] border-[#DC2626]' },
+                    { id: 'MISTAKE', label: 'MISTAKE', threshold: 'Loss > $50 (Not SL)', active: 'bg-[#450A0A] text-[#FCA5A5] border-[#DC2626]' },
                   ].map((item) => (
                     <button
                       key={item.id}
@@ -1653,6 +1663,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                   setIsSavingNote(true);
                   try {
                     const cleanNotes = noteText.trim();
+                    const isMistake = reviewOutcome === 'MISTAKE';
                     const finalExitType =
                       reviewOutcome === 'TARGET' || reviewOutcome === 'SMALL WIN'
                         ? 'TARGET'
@@ -1663,6 +1674,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     await onUpdateTrade?.(uuid, {
                       tradeSuccessRate: reviewOutcome,
                       exitType: finalExitType,
+                      execution: isMistake ? 'VIOLATION' : noteModalTrade.execution,
+                      violationReason: isMistake ? 'Over-risk' : noteModalTrade.violationReason,
                       notes: cleanNotes || undefined,
                       exitReason: cleanNotes || undefined,
                     });
