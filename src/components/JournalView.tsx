@@ -11,13 +11,11 @@ import {
   BarChart2, 
   Users, 
   Award, 
-  Brain, 
   Target, 
   ArrowRight, 
   MoreVertical, 
   Activity,
   Layers,
-  Smile,
   Trash2,
   Edit3,
   MessageSquare,
@@ -28,9 +26,6 @@ import {
   Trophy,
   PieChart,
   Bookmark,
-  GitFork,
-  Link2,
-  LogIn,
   FileText,
   Zap,
   Search,
@@ -39,12 +34,57 @@ import {
   X,
   ArrowUpDown
 } from 'lucide-react';
-import type { Trade, AppSettings, EmotionType } from '../db/db';
+import type { Trade, AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
 import { calculatePricePips } from '../utils/vantageParser';
-import { hasVerifiedBrokerBalance } from '../utils/TradingEngine';
+import { 
+  hasVerifiedBrokerBalance, 
+  classifyTradeOutcome, 
+  type TradeOutcomeClassification 
+} from '../utils/TradingEngine';
 import { storageApi } from '../lib/api/storageApi';
 import { supabase } from '../lib/supabase';
+
+export const getOutcomeBadge = (outcome: string) => {
+  switch (outcome) {
+    case 'TARGET':
+      return {
+        label: 'TARGET',
+        desc: 'Profit ≥ $5',
+        className: 'bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80] border border-[#15803D]/25',
+      };
+    case 'SMALL WIN':
+      return {
+        label: 'SMALL WIN',
+        desc: '$0.01 – $4.99',
+        className: 'bg-[#E0F2FE] dark:bg-[#142B47] text-[#0284C7] dark:text-[#38BDF8] border border-[#0284C7]/25',
+      };
+    case 'BREAKEVEN':
+      return {
+        label: 'BREAKEVEN',
+        desc: '-$0.50 to +$0.50',
+        className: 'bg-[#F3F4F6] dark:bg-[#1E2638] text-[#4B5563] dark:text-[#94A3B8] border border-[#6B7280]/25',
+      };
+    case 'SMALL LOSS':
+      return {
+        label: 'SMALL LOSS',
+        desc: '-$0.51 to -$4.99',
+        className: 'bg-[#FEF3C7] dark:bg-[#3B2912] text-[#D97706] dark:text-[#FBBF24] border border-[#D97706]/25',
+      };
+    case 'STOP LOSS':
+      return {
+        label: 'STOP LOSS',
+        desc: 'Loss ≤ -$5',
+        className: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#DC2626] dark:text-[#F87171] border border-[#DC2626]/25',
+      };
+    default:
+      return {
+        label: outcome,
+        desc: '',
+        className: 'bg-[#F3F4F6] dark:bg-[#1F2937] text-[#374151] dark:text-[#D1D5DB] border border-[#9CA3AF]/25',
+      };
+  }
+};
 
 export interface TradeRow {
   id: number | string;
@@ -70,12 +110,12 @@ export interface TradeRow {
   pnlNum: number;
   riskReward: string; // "1:1"
   pips: number; // signed pips captured
-  emotion: string; // "FOCUSED", "CALM", etc.
-  tradeSuccessRate: string; // "Exit Before Target", "TARGET", etc.
-  exitReason: string;
-  setupType: string;
-  htfContext: string;
-  entryReason: string;
+  emotion?: string;
+  tradeSuccessRate: string; // "TARGET", "SMALL WIN", "BREAKEVEN", etc.
+  exitReason?: string;
+  setupType?: string;
+  htfContext?: string;
+  entryReason?: string;
   chart?: string;
   needsReview: boolean;
   rawTrade?: Trade;
@@ -116,9 +156,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [filterDateRange, setFilterDateRange] = useState<string>('ALL');
   const [filterSession, setFilterSession] = useState<string>('ALL');
   const [filterPair, setFilterPair] = useState<string>('ALL');
-  const [filterEmotion, setFilterEmotion] = useState<string>('ALL');
   const [filterSuccessRate, setFilterSuccessRate] = useState<string>('ALL');
-  const [filterSetup, setFilterSetup] = useState<string>('ALL');
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
@@ -130,14 +168,10 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [tradeToDelete, setTradeToDelete] = useState<Trade | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
-  // Quick Review & Reason Editor Modal
+  // Quick Review & Outcome Editor Modal
   const [noteModalTrade, setNoteModalTrade] = useState<Trade | null>(null);
   const [noteText, setNoteText] = useState<string>('');
-  const [exitReasonText, setExitReasonText] = useState<string>('');
-  const [setupTypeText, setSetupTypeText] = useState<string>('');
-  const [htfContextText, setHtfContextText] = useState<string>('');
-  const [reviewEmotion, setReviewEmotion] = useState<EmotionType>('FOCUSED');
-  const [reviewOutcome, setReviewOutcome] = useState<string>('TARGET');
+  const [reviewOutcome, setReviewOutcome] = useState<TradeOutcomeClassification>('TARGET');
   const [isSavingNote, setIsSavingNote] = useState<boolean>(false);
 
   // Quick Screenshot Paste / Upload Modal
@@ -177,21 +211,20 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
   const openQuickReviewModal = (trade: Trade) => {
     setNoteModalTrade(trade);
-    setExitReasonText(trade.exitReason || trade.notes || '');
-    setNoteText(trade.entryReason || '');
-    setSetupTypeText(trade.setupType || '');
-    setHtfContextText(trade.htfContext || '');
-    setReviewEmotion((trade.emotion || 'FOCUSED') as EmotionType);
-    setReviewOutcome(
-      trade.tradeSuccessRate ||
-        (trade.exitType === 'TARGET'
-          ? 'TARGET'
-          : trade.exitType === 'STOP_LOSS'
-          ? 'Stop Loss'
-          : trade.exitType === 'BREAKEVEN'
-          ? 'Breakeven'
-          : 'MANUAL EXIT')
-    );
+    setNoteText(trade.notes || trade.entryReason || trade.exitReason || '');
+    const rawPnl = Number(trade.pnl) || 0;
+    const existing = trade.tradeSuccessRate as TradeOutcomeClassification | undefined;
+    if (
+      existing === 'TARGET' ||
+      existing === 'SMALL WIN' ||
+      existing === 'BREAKEVEN' ||
+      existing === 'SMALL LOSS' ||
+      existing === 'STOP LOSS'
+    ) {
+      setReviewOutcome(existing);
+    } else {
+      setReviewOutcome(classifyTradeOutcome(rawPnl));
+    }
   };
 
   const compressScreenshotFile = (file: File | Blob) => {
@@ -263,24 +296,23 @@ export const JournalView: React.FC<JournalViewProps> = ({
     const computedPips = calculatePricePips(pairNorm, orderSide, t.entryPrice, t.exitPrice);
     const pipsVal = t.pips != null ? Number(t.pips) : computedPips ?? 0;
 
-    let successRate = t.tradeSuccessRate;
-    if (!successRate) {
-      if (t.exitType === 'TARGET') successRate = 'TARGET';
-      else if (t.exitType === 'STOP_LOSS') successRate = 'Stop Loss';
-      else if (t.exitType === 'BREAKEVEN') successRate = 'Breakeven';
-      else successRate = 'MANUAL EXIT';
+    let successRate: string = t.tradeSuccessRate || '';
+    const isStandardClassification = 
+      successRate === 'TARGET' || 
+      successRate === 'SMALL WIN' || 
+      successRate === 'BREAKEVEN' || 
+      successRate === 'SMALL LOSS' || 
+      successRate === 'STOP LOSS';
+
+    if (!isStandardClassification) {
+      successRate = classifyTradeOutcome(rawPnl);
     }
 
     let sess = t.session || 'Tokyo';
     if (sess === 'Asian') sess = 'Tokyo';
 
     const pnlFormatted = rawPnl >= 0 ? `${currSymbol}${rawPnl.toFixed(2)}` : `-${currSymbol}${Math.abs(rawPnl).toFixed(2)}`;
-    const setupClean = (t.setupType || '').trim();
-    const htfClean = (t.htfContext || '').trim();
-    const entryReasonClean = (t.entryReason || '').trim();
-    const exitReasonClean = (t.exitReason || t.notes || '').trim();
-    const hasReviewNotes = Boolean(entryReasonClean || exitReasonClean);
-    const needsReview = !setupClean || !hasReviewNotes || !t.chartScreenshot;
+    const needsReview = !t.chartScreenshot;
 
     return {
       id: (t as Trade & { _uuid?: string })._uuid || t.id || idx + 1,
@@ -306,12 +338,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
       pnlNum: rawPnl,
       riskReward: rDisplay,
       pips: pipsVal,
-      emotion: (t.emotion || 'FOCUSED').toUpperCase(),
       tradeSuccessRate: successRate,
-      exitReason: exitReasonClean,
-      setupType: setupClean,
-      htfContext: htfClean,
-      entryReason: entryReasonClean,
       chart: t.chartScreenshot || '',
       needsReview,
       rawTrade: { ...t, rMultiple: rMult },
@@ -373,13 +400,11 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
     if (filterSession !== 'ALL' && t.session.toLowerCase() !== filterSession.toLowerCase()) return false;
     if (filterPair !== 'ALL' && t.pair.replace('/', '') !== filterPair.replace('/', '')) return false;
-    if (filterEmotion !== 'ALL' && t.emotion.toLowerCase() !== filterEmotion.toLowerCase()) return false;
-    if (filterSuccessRate !== 'ALL' && t.tradeSuccessRate.toLowerCase() !== filterSuccessRate.toLowerCase()) return false;
-    if (filterSetup !== 'ALL' && !t.setupType.toLowerCase().includes(filterSetup.toLowerCase())) return false;
+    if (filterSuccessRate !== 'ALL' && t.tradeSuccessRate !== filterSuccessRate) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      const hay = `${t.pair} ${t.order} ${t.setupType} ${t.htfContext} ${t.entryReason} ${t.exitReason} ${t.brokerTicketId || ''} ${t.session}`.toLowerCase();
+      const hay = `${t.pair} ${t.order} ${t.tradeSuccessRate} ${t.brokerTicketId || ''} ${t.session} ${t.pnl}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
 
@@ -409,15 +434,9 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const totalPipsSum = Number(sortedList.reduce((sum, t) => sum + t.pips, 0).toFixed(1));
   const totalLotsSum = sortedList.reduce((sum, t) => sum + t.lotNum, 0);
 
-  // Real primary emotion across active trades
-  const primaryEmotion = React.useMemo(() => {
-    if (sortedList.length === 0) return 'NONE';
-    const counts: Record<string, number> = {};
-    for (const r of sortedList) {
-      const em = r.emotion || 'FOCUSED';
-      counts[em] = (counts[em] || 0) + 1;
-    }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'FOCUSED';
+  // Real Target hits across active trades
+  const targetHitsCount = React.useMemo(() => {
+    return sortedList.filter((t) => t.tradeSuccessRate === 'TARGET').length;
   }, [sortedList]);
 
   const hasActiveFilters =
@@ -426,9 +445,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     filterDateRange !== 'ALL' ||
     filterSession !== 'ALL' ||
     filterPair !== 'ALL' ||
-    filterEmotion !== 'ALL' ||
     filterSuccessRate !== 'ALL' ||
-    filterSetup !== 'ALL' ||
     Boolean(selectedDateFilter);
 
   // Dynamic KPI calculation from active trades
@@ -520,9 +537,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     (filterDateRange !== 'ALL' ? 1 : 0) +
     (filterSession !== 'ALL' ? 1 : 0) +
     (filterPair !== 'ALL' ? 1 : 0) +
-    (filterEmotion !== 'ALL' ? 1 : 0) +
     (filterSuccessRate !== 'ALL' ? 1 : 0) +
-    (filterSetup !== 'ALL' ? 1 : 0) +
     (selectedDateFilter ? 1 : 0);
 
   const handleResetFilters = () => {
@@ -531,9 +546,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
     setFilterDateRange('ALL');
     setFilterSession('ALL');
     setFilterPair('ALL');
-    setFilterEmotion('ALL');
     setFilterSuccessRate('ALL');
-    setFilterSetup('ALL');
     setCurrentPage(1);
     onClearDateFilter?.();
   };
@@ -868,30 +881,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
               <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
             </div>
 
-            {/* Emotion filter */}
-            <div className="relative">
-              <select
-                value={filterEmotion}
-                onChange={(e) => {
-                  setFilterEmotion(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
-              >
-                <option value="ALL">All Emotions</option>
-                <option value="FOCUSED">Focused</option>
-                <option value="CALM">Calm</option>
-                <option value="FOMO">FOMO</option>
-                <option value="REVENGE">Revenge</option>
-                <option value="GREED">Greed</option>
-                <option value="HESITANT">Hesitant</option>
-                <option value="BOREDOM">Boredom</option>
-              </select>
-              <Smile className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
-              <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
-            </div>
-
-            {/* Success Rate filter */}
+            {/* Outcome Filter */}
             <div className="relative">
               <select
                 value={filterSuccessRate}
@@ -899,16 +889,14 @@ export const JournalView: React.FC<JournalViewProps> = ({
                   setFilterSuccessRate(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-medium text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
+                className="appearance-none pl-7 pr-7 py-1.5 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer hover:bg-[#ECE4D5] dark:hover:bg-[#252E40] transition-colors"
               >
                 <option value="ALL">All Outcomes</option>
-                <option value="TARGET">TARGET</option>
-                <option value="Stop Loss">Stop Loss</option>
-                <option value="Breakeven">Breakeven</option>
-                <option value="MANUAL EXIT">MANUAL EXIT</option>
-                <option value="Scalping Trade">Scalping Trade</option>
-                <option value="Exit Before Target">Exit Before Target</option>
-                <option value="Exit Before SL">Exit Before SL</option>
+                <option value="TARGET">TARGET (≥ $5)</option>
+                <option value="SMALL WIN">SMALL WIN ($0.01 – $4.99)</option>
+                <option value="BREAKEVEN">BREAKEVEN (-$0.50 – +$0.50)</option>
+                <option value="SMALL LOSS">SMALL LOSS (-$0.51 – -$4.99)</option>
+                <option value="STOP LOSS">STOP LOSS (≤ -$5)</option>
               </select>
               <Target className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8] absolute left-2.5 top-2.5 pointer-events-none" />
               <ChevronDown className="w-3 h-3 text-[#786F66] dark:text-[#94A3B8] absolute right-2.5 top-2.5 pointer-events-none" />
@@ -1027,43 +1015,11 @@ export const JournalView: React.FC<JournalViewProps> = ({
                   </div>
                 </th>
 
-                {/* 11. Emotions */}
-                <th className="py-3 px-3 font-bold text-center">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <Smile className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8]" />
-                    <span>Emotion</span>
-                  </div>
-                </th>
-
-                {/* 12. Outcome */}
+                {/* 11. Trade Outcome Classification */}
                 <th className="py-3 px-3 font-bold text-center">
                   <div className="flex items-center justify-center gap-1.5">
                     <Target className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8]" />
                     <span>Outcome</span>
-                  </div>
-                </th>
-
-                {/* 13. Setup Type */}
-                <th className="py-3 px-3 font-bold">
-                  <div className="flex items-center gap-1.5">
-                    <GitFork className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8]" />
-                    <span>Setup</span>
-                  </div>
-                </th>
-
-                {/* 14. HTF Context */}
-                <th className="py-3 px-3 font-bold">
-                  <div className="flex items-center gap-1.5">
-                    <Link2 className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8]" />
-                    <span>HTF Context</span>
-                  </div>
-                </th>
-
-                {/* 15. Entry & Exit Review */}
-                <th className="py-3 px-3 font-bold">
-                  <div className="flex items-center gap-1.5">
-                    <LogIn className="w-3.5 h-3.5 text-[#786F66] dark:text-[#94A3B8]" />
-                    <span>Entry / Exit Reason</span>
                   </div>
                 </th>
 
@@ -1252,79 +1208,21 @@ export const JournalView: React.FC<JournalViewProps> = ({
                       </span>
                     </td>
 
-                    {/* 11. Emotions */}
+                    {/* 11. Outcome */}
                     <td className="py-2.5 px-3 text-center">
-                      <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase bg-[#E0EFFE] dark:bg-[#1A3152] text-[#1D4ED8] dark:text-[#93C5FD]">
-                        {t.emotion}
-                      </span>
-                    </td>
-
-                    {/* 12. Outcome */}
-                    <td className="py-2.5 px-3 text-center">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-semibold ${
-                          t.tradeSuccessRate === 'TARGET' || t.tradeSuccessRate === 'Target Hit'
-                            ? 'bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80]'
-                            : t.tradeSuccessRate === 'Stop Loss' || t.tradeSuccessRate === 'Stop Loss Hit'
-                            ? 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#B91C1C] dark:text-[#F87171]'
-                            : t.tradeSuccessRate === 'Exit Before SL'
-                            ? 'bg-[#FEF3C7] dark:bg-[#3E2E16] text-[#92400E] dark:text-[#FCD34D]'
-                            : t.tradeSuccessRate === 'Scalping Trade'
-                            ? 'bg-[#FCE7F3] dark:bg-[#3D1429] text-[#BE185D] dark:text-[#F472B6]'
-                            : t.tradeSuccessRate === 'MANUAL EXIT'
-                            ? 'bg-[#DBEAFE] dark:bg-[#172E54] text-[#1D4ED8] dark:text-[#93C5FD]'
-                            : t.tradeSuccessRate === 'Breakeven'
-                            ? 'bg-[#FEF3C7] dark:bg-[#3E2E16] text-[#92400E] dark:text-[#FCD34D]'
-                            : 'bg-[#F3F4F6] dark:bg-[#1F2937] text-[#374151] dark:text-[#D1D5DB]'
-                        }`}
-                      >
-                        {t.tradeSuccessRate}
-                      </span>
-                    </td>
-
-                    {/* 13. Setup Type */}
-                    <td
-                      className="py-2.5 px-3 text-[11px] font-medium cursor-pointer hover:text-[#DB9F35]"
-                      onClick={() => t.rawTrade && openQuickReviewModal(t.rawTrade)}
-                      title="Click to tag setup & review trade"
-                    >
-                      {t.setupType ? (
-                        <span className="text-[#1F1A16] dark:text-[#F0F4F8]">{t.setupType}</span>
-                      ) : (
-                        <span className="inline-block px-2 py-0.5 rounded bg-[#FAF2E6] dark:bg-[#1C2331] text-[#9B671B] dark:text-[#F3D784] text-[10px] font-semibold border border-dashed border-[#DB9F35]/40">
-                          + Tag Setup
-                        </span>
-                      )}
-                    </td>
-
-                    {/* 14. HTF Context */}
-                    <td
-                      className="py-2.5 px-3 max-w-[180px] truncate text-[11px] text-[#4B5563] dark:text-[#D1D5DB] cursor-pointer hover:text-[#DB9F35]"
-                      title={t.htfContext || 'Click to set HTF context'}
-                      onClick={() => t.rawTrade && openQuickReviewModal(t.rawTrade)}
-                    >
-                      {t.htfContext || <span className="text-[#9E958C]">—</span>}
-                    </td>
-
-                    {/* 15. Entry & Exit Reason */}
-                    <td
-                      className="py-2.5 px-3 max-w-[230px] truncate text-[11px] text-[#4B5563] dark:text-[#D1D5DB] cursor-pointer hover:text-[#DB9F35] transition-colors"
-                      title={
-                        [t.entryReason ? `Entry: ${t.entryReason}` : '', t.exitReason ? `Exit: ${t.exitReason}` : '']
-                          .filter(Boolean)
-                          .join(' | ') || 'Click to add entry & exit review'
-                      }
-                      onClick={() => t.rawTrade && openQuickReviewModal(t.rawTrade)}
-                    >
-                      {t.entryReason || t.exitReason ? (
-                        <span>
-                          {t.entryReason && t.exitReason
-                            ? `${t.entryReason} → ${t.exitReason}`
-                            : t.exitReason || t.entryReason}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-[#9E958C] italic">+ Add review</span>
-                      )}
+                      {(() => {
+                        const badge = getOutcomeBadge(t.tradeSuccessRate);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => t.rawTrade && openQuickReviewModal(t.rawTrade)}
+                            title={`${badge.desc || badge.label} • Click to adjust`}
+                            className={`inline-flex items-center justify-center px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide transition-all hover:scale-105 cursor-pointer shadow-2xs ${badge.className}`}
+                          >
+                            {badge.label}
+                          </button>
+                        );
+                      })()}
                     </td>
 
                     {/* 16. Chart Screenshot */}
@@ -1579,12 +1477,12 @@ export const JournalView: React.FC<JournalViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[#E0F2FE] dark:bg-[#1A2E46] text-[#0284C7] flex items-center justify-center shrink-0">
-              <Brain className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-lg bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80] flex items-center justify-center shrink-0">
+              <Target className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Primary Emotion</span>
-              <span className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] mt-0.5 block">{primaryEmotion}</span>
+              <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8] block leading-none">Target Hits (≥ $5)</span>
+              <span className="text-xs font-black text-[#15803D] dark:text-[#4ADE80] font-mono mt-0.5 block">{targetHitsCount}</span>
             </div>
           </div>
         </div>
@@ -1689,98 +1587,52 @@ export const JournalView: React.FC<JournalViewProps> = ({
               </button>
             </div>
 
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] mb-1">
-                    Setup Type
+            <div className="space-y-3.5">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider">
+                    Trade Outcome Classification
                   </label>
-                  <input
-                    type="text"
-                    value={setupTypeText}
-                    onChange={(e) => setSetupTypeText(e.target.value)}
-                    placeholder="e.g. Liquidity Sweep, MSS + FVG"
-                    className="w-full px-3 py-2 bg-white dark:bg-[#0B0E14] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors placeholder:text-[#9E958C]"
-                  />
+                  <span className="text-[10px] font-mono font-bold text-[#786F66] dark:text-[#94A3B8]">
+                    Net P&amp;L: {currSymbol}{Number(noteModalTrade.pnl || 0).toFixed(2)}
+                  </span>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] mb-1">
-                    Emotion
-                  </label>
-                  <select
-                    value={reviewEmotion}
-                    onChange={(e) => setReviewEmotion(e.target.value as EmotionType)}
-                    className="w-full px-3 py-2 bg-white dark:bg-[#0B0E14] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors"
-                  >
-                    <option value="FOCUSED">FOCUSED</option>
-                    <option value="CALM">CALM</option>
-                    <option value="FOMO">FOMO</option>
-                    <option value="REVENGE">REVENGE</option>
-                    <option value="GREED">GREED</option>
-                    <option value="HESITANT">HESITANT</option>
-                    <option value="BOREDOM">BOREDOM</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] mb-1">
-                    HTF Context
-                  </label>
-                  <input
-                    type="text"
-                    value={htfContextText}
-                    onChange={(e) => setHtfContextText(e.target.value)}
-                    placeholder="e.g. Bearish 4H, 15m Pullback"
-                    className="w-full px-3 py-2 bg-white dark:bg-[#0B0E14] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors placeholder:text-[#9E958C]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] mb-1">
-                    Trade Outcome
-                  </label>
-                  <select
-                    value={reviewOutcome}
-                    onChange={(e) => setReviewOutcome(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-[#0B0E14] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors"
-                  >
-                    <option value="TARGET">TARGET</option>
-                    <option value="Stop Loss">Stop Loss</option>
-                    <option value="Breakeven">Breakeven</option>
-                    <option value="MANUAL EXIT">MANUAL EXIT</option>
-                    <option value="Scalping Trade">Scalping Trade</option>
-                    <option value="Exit Before Target">Exit Before Target</option>
-                    <option value="Exit Before SL">Exit Before SL</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { id: 'TARGET', label: 'TARGET', threshold: 'Profit ≥ $5', active: 'bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80] border-[#15803D]' },
+                    { id: 'SMALL WIN', label: 'SMALL WIN', threshold: '$0.01 – $4.99', active: 'bg-[#E0F2FE] dark:bg-[#142B47] text-[#0284C7] dark:text-[#38BDF8] border-[#0284C7]' },
+                    { id: 'BREAKEVEN', label: 'BREAKEVEN', threshold: '-$0.50 to +$0.50', active: 'bg-[#F3F4F6] dark:bg-[#1E2638] text-[#4B5563] dark:text-[#94A3B8] border-[#6B7280]' },
+                    { id: 'SMALL LOSS', label: 'SMALL LOSS', threshold: '-$0.51 to -$4.99', active: 'bg-[#FEF3C7] dark:bg-[#3B2912] text-[#D97706] dark:text-[#FBBF24] border-[#D97706]' },
+                    { id: 'STOP LOSS', label: 'STOP LOSS', threshold: 'Profit ≤ -$5', active: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#DC2626] dark:text-[#F87171] border-[#DC2626]' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setReviewOutcome(item.id as TradeOutcomeClassification)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        reviewOutcome === item.id
+                          ? `${item.active} font-bold shadow-xs border-2`
+                          : 'bg-white dark:bg-[#0B0E14] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#242D3D] hover:border-[#DB9F35]'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{item.label}</div>
+                      <div className="text-[10px] opacity-80">{item.threshold}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] mb-1">
-                  Entry Reason
+                  Trade Notes / Observations (Optional)
                 </label>
                 <textarea
-                  rows={2}
+                  rows={3}
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="e.g. Entry on London session liquidity sweep + 5m MSS"
+                  placeholder="Add any trade reflection, execution notes, or market lessons..."
                   className="w-full px-3 py-2 bg-white dark:bg-[#0B0E14] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors resize-y placeholder:text-[#9E958C]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] mb-1">
-                  Exit Reason / Lesson
-                </label>
-                <input
-                  type="text"
-                  value={exitReasonText}
-                  onChange={(e) => setExitReasonText(e.target.value)}
-                  placeholder="e.g. Closed at HTF resistance / SL hit cleanly"
-                  className="w-full px-3 py-2 bg-white dark:bg-[#0B0E14] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors placeholder:text-[#9E958C]"
                 />
               </div>
             </div>
@@ -1800,21 +1652,19 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 onClick={async () => {
                   setIsSavingNote(true);
                   try {
-                    const exitTrim = exitReasonText.trim();
-                    const entryTrim = noteText.trim();
-                    const setupTrim = setupTypeText.trim();
-                    const htfTrim = htfContextText.trim();
-                    const isViolationEmotion = reviewEmotion === 'FOMO' || reviewEmotion === 'REVENGE';
+                    const cleanNotes = noteText.trim();
+                    const finalExitType =
+                      reviewOutcome === 'TARGET' || reviewOutcome === 'SMALL WIN'
+                        ? 'TARGET'
+                        : reviewOutcome === 'BREAKEVEN'
+                        ? 'BREAKEVEN'
+                        : 'STOP_LOSS';
                     const uuid = (noteModalTrade as Trade & { _uuid?: string })._uuid || String(noteModalTrade.id);
                     await onUpdateTrade?.(uuid, {
-                      setupType: setupTrim,
-                      htfContext: htfTrim,
-                      emotion: reviewEmotion,
-                      execution: isViolationEmotion ? 'VIOLATION' : noteModalTrade.execution,
                       tradeSuccessRate: reviewOutcome,
-                      exitReason: exitTrim,
-                      notes: exitTrim,
-                      entryReason: entryTrim,
+                      exitType: finalExitType,
+                      notes: cleanNotes || undefined,
+                      exitReason: cleanNotes || undefined,
                     });
                   } finally {
                     setIsSavingNote(false);

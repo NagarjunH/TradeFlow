@@ -1,4 +1,5 @@
 import type { Trade } from '../db/db';
+import { classifyTradeOutcome } from './TradingEngine';
 
 export interface ParsedVantageTrade {
   brokerTicketId: string;
@@ -232,16 +233,13 @@ export function parseVantageHistoryText(
     const isWin = netPnl > 0.001;
     const isLoss = netPnl < -0.001;
     const rMultiple = isWin ? 1.0 : isLoss ? -1.0 : 0;
-    const exitType: Trade['exitType'] = isWin
-      ? 'TARGET'
-      : isLoss
-      ? 'STOP_LOSS'
-      : 'BREAKEVEN';
-    const tradeSuccessRate = isWin
-      ? 'TARGET'
-      : isLoss
-      ? 'Stop Loss'
-      : 'Breakeven';
+    const tradeSuccessRate = classifyTradeOutcome(netPnl);
+    const exitType: Trade['exitType'] =
+      tradeSuccessRate === 'TARGET' || tradeSuccessRate === 'SMALL WIN'
+        ? 'TARGET'
+        : tradeSuccessRate === 'BREAKEVEN'
+        ? 'BREAKEVEN'
+        : 'STOP_LOSS';
 
     results.push({
       brokerTicketId,
@@ -327,7 +325,7 @@ export function parseVantageHistoryText(
         time: parsedClose.time,
         session,
         rMultiple: isWin ? 1.0 : isLoss ? -1.0 : 0,
-        tradeSuccessRate: isWin ? 'TARGET' : isLoss ? 'Stop Loss' : 'Breakeven',
+        tradeSuccessRate: classifyTradeOutcome(netPnl),
         exitType: isWin ? 'TARGET' : isLoss ? 'STOP_LOSS' : 'BREAKEVEN',
       });
     }

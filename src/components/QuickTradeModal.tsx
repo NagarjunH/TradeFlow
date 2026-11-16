@@ -15,14 +15,13 @@ import {
   type Trade, 
   type ExitType, 
   type TradeQuality, 
-  type EmotionType, 
   type ViolationType, 
   type AppSettings 
 } from '../db/db';
 import { tradesApi } from '../lib/api/tradesApi';
 import { auditApi } from '../lib/api/auditApi';
 import { RiskCalculatorModal } from './RiskCalculatorModal';
-import { getDayStatus } from '../utils/TradingEngine';
+import { getDayStatus, classifyTradeOutcome } from '../utils/TradingEngine';
 
 interface QuickTradeModalProps {
   isOpen: boolean;
@@ -68,11 +67,7 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
   const [exitReason, setExitReason] = useState<string>('');
   const [execution, setExecution] = useState<'CLEAN' | 'VIOLATION'>('CLEAN');
   const [violationReason, setViolationReason] = useState<ViolationType>('None');
-  const [emotion, setEmotion] = useState<EmotionType>('FOCUSED');
 
-  const [setupType, setSetupType] = useState<string>('');
-  const [htfContext, setHtfContext] = useState<string>('');
-  const [entryReason, setEntryReason] = useState<string>('');
   const [session, setSession] = useState<'Tokyo' | 'London' | 'New York' | 'London/NY Overlap' | string>('Tokyo');
 
   const [chartScreenshot, setChartScreenshot] = useState<string>('');
@@ -139,10 +134,6 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setExitReason(editTrade.exitReason || editTrade.notes || '');
       setExecution(editTrade.execution || 'CLEAN');
       setViolationReason(editTrade.violationReason || 'None');
-      setEmotion(editTrade.emotion || 'FOCUSED');
-      setSetupType(editTrade.setupType || '');
-      setHtfContext(editTrade.htfContext || '');
-      setEntryReason(editTrade.entryReason || '');
       setSession(editTrade.session === 'Asian' ? 'Tokyo' : (editTrade.session || 'Tokyo'));
       setChartScreenshot(editTrade.chartScreenshot || '');
     } else {
@@ -159,10 +150,6 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
       setExitReason('');
       setExecution('CLEAN');
       setViolationReason('None');
-      setEmotion('FOCUSED');
-      setSetupType('');
-      setHtfContext('');
-      setEntryReason('');
       setSession('Tokyo');
       setChartScreenshot('');
     }
@@ -228,19 +215,18 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         ? editTrade.tradeNumber 
         : (validNumbers.length > 0 ? Math.max(...validNumbers) + 1 : 1);
 
+      let finalOutcome = tradeSuccessRate || classifyTradeOutcome(numPnl);
       let finalExitType: ExitType = exitType;
-      if (tradeSuccessRate === 'TARGET' || tradeSuccessRate === 'Target Hit') finalExitType = 'TARGET';
-      else if (tradeSuccessRate === 'Stop Loss' || tradeSuccessRate === 'Stop Loss Hit') finalExitType = 'STOP_LOSS';
-      else if (tradeSuccessRate === 'Breakeven') finalExitType = 'BREAKEVEN';
-      else if (tradeSuccessRate) finalExitType = 'MANUAL_EXIT';
+      if (finalOutcome === 'TARGET' || finalOutcome === 'SMALL WIN') finalExitType = 'TARGET';
+      else if (finalOutcome === 'BREAKEVEN') finalExitType = 'BREAKEVEN';
+      else if (finalOutcome === 'STOP LOSS' || finalOutcome === 'SMALL LOSS') finalExitType = 'STOP_LOSS';
+      else finalExitType = 'MANUAL_EXIT';
 
       // Auto-align financial signs with trade outcome
-      if ((tradeSuccessRate === 'Stop Loss' || tradeSuccessRate === 'Stop Loss Hit' || finalExitType === 'STOP_LOSS') && numPnl > 0) {
+      if ((finalOutcome === 'STOP LOSS' || finalOutcome === 'SMALL LOSS') && numPnl > 0) {
         numPnl = -Math.abs(numPnl);
-      } else if ((tradeSuccessRate === 'TARGET' || tradeSuccessRate === 'Target Hit' || finalExitType === 'TARGET') && numPnl < 0) {
+      } else if ((finalOutcome === 'TARGET' || finalOutcome === 'SMALL WIN') && numPnl < 0) {
         numPnl = Math.abs(numPnl);
-      } else if (tradeSuccessRate === 'Breakeven' && Math.abs(numPnl) > 0.001) {
-        numPnl = 0;
       }
 
       // Parse Risk:Reward ratio
@@ -283,16 +269,13 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
         riskReward: formattedRr,
         pips: undefined,
         exitType: finalExitType,
-        tradeSuccessRate: tradeSuccessRate || undefined,
+        tradeSuccessRate: finalOutcome,
         exitReason: exitReason.trim() || undefined,
         tradeQuality,
-        emotion,
+        emotion: editTrade?.emotion || 'FOCUSED',
         execution,
         violationReason: execution === 'VIOLATION' ? violationReason : 'None',
-        setupType,
-        htfContext,
-        entryReason: entryReason.trim() || undefined,
-        notes: exitReason.trim() || entryReason.trim() || undefined,
+        notes: exitReason.trim() || undefined,
         session,
         chartScreenshot: chartScreenshot || undefined,
         exitPrice: editTrade?.exitPrice,
@@ -545,103 +528,45 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               </div>
             </div>
 
-            {/* Row 4: Trade Success Rate & Emotions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5">
-                  TRADE SUCCESS RATE (Outcome)
+            {/* Row 4: Trade Outcome Classification (Threshold-Based) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+                  Trade Outcome Classification
                 </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { 
-                      id: 'Scalping Trade', 
-                      label: 'Scalping Trade', 
-                      activeClass: 'bg-[#FCE7F3] dark:bg-[#3D1429] text-[#BE185D] dark:text-[#F472B6] border-[#F472B6] dark:border-[#831843] font-bold shadow-xs',
-                      inactiveHover: 'hover:text-[#BE185D] dark:hover:text-[#F472B6]'
-                    },
-                    { 
-                      id: 'Exit Before Target', 
-                      label: 'Exit Before Target', 
-                      activeClass: 'bg-[#F3F4F6] dark:bg-[#28303F] text-[#374151] dark:text-[#E5E7EB] border-[#9CA3AF] dark:border-[#4B5563] font-bold shadow-xs',
-                      inactiveHover: 'hover:text-[#374151] dark:hover:text-[#E5E7EB]'
-                    },
-                    { 
-                      id: 'Exit Before SL', 
-                      label: 'Exit Before SL', 
-                      activeClass: 'bg-[#FEF3C7] dark:bg-[#3E2E16] text-[#92400E] dark:text-[#FCD34D] border-[#F59E0B] dark:border-[#78350F] font-bold shadow-xs',
-                      inactiveHover: 'hover:text-[#92400E] dark:hover:text-[#FCD34D]'
-                    },
-                    { 
-                      id: 'Stop Loss', 
-                      label: 'Stop Loss', 
-                      activeClass: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#B91C1C] dark:text-[#F87171] border-[#EF4444] dark:border-[#7F1D1D] font-bold shadow-xs',
-                      inactiveHover: 'hover:text-[#B91C1C] dark:hover:text-[#F87171]'
-                    },
-                    { 
-                      id: 'TARGET', 
-                      label: 'TARGET', 
-                      activeClass: 'bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80] border-[#22C55E] dark:border-[#14532D] font-bold shadow-xs',
-                      inactiveHover: 'hover:text-[#15803D] dark:hover:text-[#4ADE80]'
-                    },
-                    { 
-                      id: 'MANUAL EXIT', 
-                      label: 'MANUAL EXIT', 
-                      activeClass: 'bg-[#DBEAFE] dark:bg-[#172E54] text-[#1D4ED8] dark:text-[#93C5FD] border-[#3B82F6] dark:border-[#1E3A8A] font-bold shadow-xs',
-                      inactiveHover: 'hover:text-[#1D4ED8] dark:hover:text-[#93C5FD]'
-                    },
-                  ].map((ex) => (
-                    <button
-                      key={ex.id}
-                      type="button"
-                      onClick={() => {
-                        setTradeSuccessRate(ex.id);
-                        if (ex.id === 'TARGET') setExitType('TARGET');
-                        else if (ex.id === 'Stop Loss') setExitType('STOP_LOSS');
-                        else setExitType('MANUAL_EXIT');
-                      }}
-                      className={`py-2 px-2 rounded-xl text-[11px] font-semibold border text-center transition-all cursor-pointer truncate ${
-                        tradeSuccessRate === ex.id
-                          ? ex.activeClass
-                          : `bg-[#FAF7F2] dark:bg-[#1A2230] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] ${ex.inactiveHover}`
-                      }`}
-                    >
-                      {ex.label}
-                    </button>
-                  ))}
-                </div>
+                {pnl && !isNaN(parseFloat(pnl)) && (
+                  <span className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8]">
+                    Auto: <strong className="text-[#DB9F35]">{classifyTradeOutcome(parseFloat(pnl))}</strong>
+                  </span>
+                )}
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1.5">
-                  Emotions
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {['FOCUSED', 'CALM', 'FOMO', 'REVENGE', 'GREED', 'HESITANT', 'BOREDOM'].map((em) => (
-                    <button
-                      key={em}
-                      type="button"
-                      onClick={() => {
-                        setEmotion(em as EmotionType);
-                        if (em === 'FOMO' || em === 'REVENGE') {
-                          setExecution('VIOLATION');
-                          setViolationReason(em === 'FOMO' ? 'FOMO' : 'Revenge');
-                        } else if (em === 'FOCUSED' || em === 'CALM') {
-                          setExecution('CLEAN');
-                          setViolationReason('None');
-                        }
-                      }}
-                      className={`py-1.5 px-1.5 rounded-xl text-[10px] font-semibold border text-center transition-colors uppercase ${
-                        emotion === em
-                          ? em === 'CALM' || em === 'FOCUSED'
-                            ? 'bg-[#E0EFFE] dark:bg-[#1A3152] text-[#1D4ED8] dark:text-[#93C5FD] border-[#B9D9FE]'
-                            : 'bg-[#FEECEB] dark:bg-[#3D1D1D] text-[#B91C1C] dark:text-[#F87171] border-[#FBC5C2]'
-                          : 'bg-[#FAF7F2] dark:bg-[#1A2230] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] hover:text-[#1F1A16]'
-                      }`}
-                    >
-                      {em}
-                    </button>
-                  ))}
-                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                {[
+                  { id: 'TARGET', label: 'TARGET', desc: 'Profit ≥ $5', activeClass: 'bg-[#DCFCE7] dark:bg-[#143823] text-[#15803D] dark:text-[#4ADE80] border-[#15803D]' },
+                  { id: 'SMALL WIN', label: 'SMALL WIN', desc: '$0.01 – $4.99', activeClass: 'bg-[#E0F2FE] dark:bg-[#142B47] text-[#0284C7] dark:text-[#38BDF8] border-[#0284C7]' },
+                  { id: 'BREAKEVEN', label: 'BREAKEVEN', desc: '-$0.50 to +$0.50', activeClass: 'bg-[#F3F4F6] dark:bg-[#1E2638] text-[#4B5563] dark:text-[#94A3B8] border-[#6B7280]' },
+                  { id: 'SMALL LOSS', label: 'SMALL LOSS', desc: '-$0.51 to -$4.99', activeClass: 'bg-[#FEF3C7] dark:bg-[#3B2912] text-[#D97706] dark:text-[#FBBF24] border-[#D97706]' },
+                  { id: 'STOP LOSS', label: 'STOP LOSS', desc: 'Profit ≤ -$5', activeClass: 'bg-[#FEE2E2] dark:bg-[#3D1D1D] text-[#DC2626] dark:text-[#F87171] border-[#DC2626]' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setTradeSuccessRate(item.id);
+                      if (item.id === 'TARGET' || item.id === 'SMALL WIN') setExitType('TARGET');
+                      else if (item.id === 'BREAKEVEN') setExitType('BREAKEVEN');
+                      else setExitType('STOP_LOSS');
+                    }}
+                    className={`py-2 px-2 rounded-xl text-center border transition-all cursor-pointer ${
+                      tradeSuccessRate === item.id
+                        ? `${item.activeClass} font-bold shadow-xs border-2`
+                        : 'bg-[#FAF7F2] dark:bg-[#1A2230] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#2E384D] hover:border-[#DB9F35]'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold leading-tight">{item.label}</div>
+                    <div className="text-[9px] opacity-75 mt-0.5">{item.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -707,93 +632,44 @@ export const QuickTradeModal: React.FC<QuickTradeModalProps> = ({
               )}
             </div>
 
-            {/* Row 5: Exit Reason */}
+            {/* Row 5: Session */}
+            <div>
+              <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
+                Trading Session
+              </label>
+              <select
+                value={session}
+                onChange={(e) => setSession(e.target.value)}
+                className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-2 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none font-semibold cursor-pointer"
+              >
+                <optgroup label="Major Sessions">
+                  <option value="Tokyo">Tokyo (Asian)</option>
+                  <option value="London">London (European)</option>
+                  <option value="New York">New York (US)</option>
+                  <option value="Sydney">Sydney (Pacific)</option>
+                </optgroup>
+                <optgroup label="Session Overlaps">
+                  <option value="London/NY Overlap">London / New York Overlap (High Volume)</option>
+                  <option value="Asian/London Overlap">Asian / London Overlap (Tokyo / London)</option>
+                  <option value="Sydney/Tokyo Overlap">Sydney / Tokyo Overlap (Pacific / Asian)</option>
+                  <option value="NY/Asian Overlap">New York / Asian Overlap</option>
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Row 6: Trade Notes / Execution Reflection */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider">
-                  Exit Reason
+                  Trade Notes (Optional)
                 </label>
-                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Why did you close or exit this trade?</span>
+                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Execution reflection or lesson</span>
               </div>
-              <input
-                type="text"
+              <textarea
+                rows={2}
                 value={exitReason}
                 onChange={(e) => setExitReason(e.target.value)}
-                placeholder="e.g. Strong Resistance was there and Candle closed weak, or Exit mindset, Should wait"
-                className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors placeholder:text-[#9E958C]"
-              />
-            </div>
-
-            {/* Row 6: Setup Type & Session */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
-                  Setup Type
-                </label>
-                <input
-                  type="text"
-                  value={setupType}
-                  onChange={(e) => setSetupType(e.target.value)}
-                  placeholder="Type your setup name (e.g. FVG Retest, MSS, Breakout...)"
-                  className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none placeholder:text-[#9E958C]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1">
-                  Session
-                </label>
-                <select
-                  value={session}
-                  onChange={(e) => setSession(e.target.value)}
-                  className="w-full bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl px-2.5 py-1.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none font-semibold cursor-pointer"
-                >
-                  <optgroup label="Major Sessions">
-                    <option value="Tokyo">Tokyo (Asian)</option>
-                    <option value="London">London (European)</option>
-                    <option value="New York">New York (US)</option>
-                    <option value="Sydney">Sydney (Pacific)</option>
-                  </optgroup>
-                  <optgroup label="Session Overlaps">
-                    <option value="London/NY Overlap">London / New York Overlap (High Volume)</option>
-                    <option value="Asian/London Overlap">Asian / London Overlap (Tokyo / London)</option>
-                    <option value="Sydney/Tokyo Overlap">Sydney / Tokyo Overlap (Pacific / Asian)</option>
-                    <option value="NY/Asian Overlap">New York / Asian Overlap</option>
-                  </optgroup>
-                </select>
-              </div>
-            </div>
-
-            {/* Row 7: HTF Context */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider">
-                  HTF Context
-                </label>
-                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Higher Timeframe narrative</span>
-              </div>
-              <textarea
-                rows={2}
-                value={htfContext}
-                onChange={(e) => setHtfContext(e.target.value)}
-                placeholder="1. Bearish on 1H, 4H 2. Bullish on 15m, 5m"
-                className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors resize-y placeholder:text-[#9E958C]"
-              />
-            </div>
-
-            {/* Row 8: Entry Reason */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] uppercase tracking-wider">
-                  Entry Reason
-                </label>
-                <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Why was the trigger pulled?</span>
-              </div>
-              <textarea
-                rows={2}
-                value={entryReason}
-                onChange={(e) => setEntryReason(e.target.value)}
-                placeholder="e.g. On Support and Pullback of HTF Support, or Entry on Liquidity Sweep"
+                placeholder="Add any notes on price reaction, trade observation, or lesson..."
                 className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1C2331] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#DB9F35] outline-none transition-colors resize-y placeholder:text-[#9E958C]"
               />
             </div>
