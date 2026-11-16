@@ -4,7 +4,6 @@ import {
   TrendingUp, 
   TrendingDown, 
   Percent, 
-  ShieldCheck, 
   BarChart2, 
   Trophy, 
   Lightbulb, 
@@ -19,7 +18,7 @@ import {
 } from 'lucide-react';
 import { defaultSettings, type Trade, type DayRecord, type AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
-import { calculatePerformance, calculateDiscipline, generateEquityCurve } from '../utils/TradingEngine';
+import { calculatePerformance, generateEquityCurve } from '../utils/TradingEngine';
 import { settingsApi } from '../lib/api/settingsApi';
 
 interface DashboardViewProps {
@@ -121,7 +120,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const currSymbol = settings.currency === 'USD' ? '$' : '₹';
   const initialCapital = settings.initialCapital > 0 ? settings.initialCapital : 1000;
   const perf = calculatePerformance(trades, settings);
-  const discipline = calculateDiscipline(trades);
 
   const dailyTradesLimit = (settings as any)?.dailyTradesLimit || 3;
   const riskDollarPerTrade = ((settings?.riskPerTradePercent || 1) / 100) * initialCapital;
@@ -941,41 +939,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Top 7 KPI Metric Cards (Current & Started Balance in Separate Cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-3.5">
+      {/* 3. Top 6 KPI Metric Cards (Symmetrical Grid with Uniform Height & Width) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         
         {/* Card 1: CURRENT BALANCE */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between min-h-[128px] sm:min-h-[136px]">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider truncate">
               CURRENT BALANCE
             </span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs shrink-0">
               <Wallet className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2.5">
+          <div className="my-2">
             <div className="text-xl sm:text-2xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight" title={`${currSymbol}${perf.currentBalance.toFixed(2)}`}>
               {currSymbol}{perf.currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className={`text-xs font-bold font-mono flex items-center gap-1 mt-1 ${
-              perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-            }`}>
-              <span>{perf.netPnl >= 0 ? '↑' : '↓'}</span>
-              <span>
-                {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)} ({perf.netPnl >= 0 ? '+' : ''}{(initialCapital > 0 ? (perf.netPnl / initialCapital) * 100 : 0).toFixed(1)}%)
-              </span>
-            </div>
-            <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-1">
-              Live Equity / Broker
-            </div>
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-[#E7E0D6]/60 dark:border-[#242D3D]/80">
+            <span className={`font-bold flex items-center gap-0.5 ${perf.netPnl >= 0 ? 'text-[#15803D] dark:text-[#10B981]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+              {perf.netPnl >= 0 ? '↑ +' : '↓ -'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)}
+            </span>
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+              Live Equity
+            </span>
           </div>
         </div>
 
         {/* Card 2: STARTED BALANCE (Manual Capital) */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between group">
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between min-h-[128px] sm:min-h-[136px] group">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider truncate">
               STARTED BALANCE
             </span>
             <button
@@ -984,143 +979,137 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 setStartedInput(String(initialCapital));
                 setIsEditStartedOpen(true);
               }}
-              className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] hover:bg-[#DB9F35] hover:text-white flex items-center justify-center shadow-2xs transition-all cursor-pointer"
+              className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] hover:bg-[#DB9F35] hover:text-white flex items-center justify-center shadow-2xs transition-all cursor-pointer shrink-0"
               title="Click to manually update Started Balance"
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="mt-2.5">
+          <div className="my-2">
             <div className="text-xl sm:text-2xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight" title={`${currSymbol}${initialCapital.toFixed(2)}`}>
               {currSymbol}{initialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="flex items-center justify-between mt-1 text-[10px] font-mono">
-              <span className="text-[#786F66] dark:text-[#94A3B8]">Manual Capital</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setStartedInput(String(initialCapital));
-                  setIsEditStartedOpen(true);
-                }}
-                className="font-bold text-[#DB9F35] hover:underline cursor-pointer"
-              >
-                Edit
-              </button>
-            </div>
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-[#E7E0D6]/60 dark:border-[#242D3D]/80">
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Base Capital</span>
+            <button
+              type="button"
+              onClick={() => {
+                setStartedInput(String(initialCapital));
+                setIsEditStartedOpen(true);
+              }}
+              className="font-bold text-[#DB9F35] hover:underline cursor-pointer text-[10px]"
+            >
+              Edit
+            </button>
           </div>
         </div>
 
-        {/* Card 2: NET P&L */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
+        {/* Card 3: NET P&L */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between min-h-[128px] sm:min-h-[136px]">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider truncate">
               NET P&amp;L
             </span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs shrink-0">
               <BarChart2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2.5">
+          <div className="my-2">
             <div className={`text-xl sm:text-2xl font-black font-mono tracking-tight truncate leading-tight ${
-              perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+              perf.netPnl >= 0 ? 'text-[#15803D] dark:text-[#10B981]' : 'text-[#DC2626] dark:text-[#EF4444]'
             }`} title={`${perf.netPnl >= 0 ? '+' : '-'}${currSymbol}${Math.abs(perf.netPnl).toFixed(2)}`}>
               {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)}
             </div>
-            <div className={`text-xs font-bold font-mono mt-1 ${
-              netR >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-            }`}>
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-[#E7E0D6]/60 dark:border-[#242D3D]/80">
+            <span className={`font-bold ${netR >= 0 ? 'text-[#15803D] dark:text-[#10B981]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
               {netR >= 0 ? '+' : ''}{netR.toFixed(1)}R
-            </div>
+            </span>
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+              {perf.netPnl >= 0 ? '+' : ''}{(initialCapital > 0 ? (perf.netPnl / initialCapital) * 100 : 0).toFixed(1)}% Return
+            </span>
           </div>
         </div>
 
-        {/* Card 3: WIN RATE */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
+        {/* Card 4: WIN RATE */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between min-h-[128px] sm:min-h-[136px]">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider truncate">
               WIN RATE
             </span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs shrink-0">
               <Percent className="w-4 h-4" />
             </div>
           </div>
-          <div className="flex items-center justify-between mt-2.5">
-            <div>
-              <div className="text-2xl sm:text-[26px] font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
-                {trades.length > 0 ? Math.round(perf.winRate) : 0}%
-              </div>
-              <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] font-medium mt-1.5">
-                {perf.winningTrades}W • {perf.losingTrades}L • {perf.breakEvenTrades}BE
-              </div>
+          <div className="my-2 flex items-center justify-between">
+            <div className="text-xl sm:text-2xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
+              {trades.length > 0 ? Math.round(perf.winRate) : 0}%
             </div>
-            <div className="relative w-9 h-9 shrink-0">
-              <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
-                <path className="text-[#E7E0D6] dark:text-[#242D3D]" stroke="currentColor" strokeWidth="4" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                <path className="text-[#10B981]" stroke="currentColor" strokeWidth="4" strokeDasharray={`${trades.length > 0 ? perf.winRate : 0}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <div className="relative w-7 h-7 shrink-0">
+              <svg className="w-7 h-7 -rotate-90" viewBox="0 0 36 36">
+                <path className="text-[#E7E0D6] dark:text-[#242D3D]" stroke="currentColor" strokeWidth="4.5" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path className="text-[#10B981]" stroke="currentColor" strokeWidth="4.5" strokeDasharray={`${trades.length > 0 ? perf.winRate : 0}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
               </svg>
             </div>
           </div>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-[#E7E0D6]/60 dark:border-[#242D3D]/80">
+            <span className="font-bold text-[#15803D] dark:text-[#10B981]">
+              {perf.winningTrades}W <span className="text-[#DC2626] dark:text-[#EF4444]">{perf.losingTrades}L</span>
+            </span>
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+              {perf.breakEvenTrades} BE
+            </span>
+          </div>
         </div>
 
-        {/* Card 4: EXPECTANCY */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between">
+        {/* Card 5: PROFIT FACTOR */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#DB9F35]/40 dark:hover:border-[#DB9F35]/30 transition-all duration-200 flex flex-col justify-between min-h-[128px] sm:min-h-[136px]">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-              EXPECTANCY
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider truncate">
+              PROFIT FACTOR
             </span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs shrink-0">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <div className={`text-2xl sm:text-[26px] font-black font-mono tracking-tight leading-tight ${
-              trades.length === 0 ? 'text-[#786F66] dark:text-[#94A3B8]' : perf.expectancyUsd >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-            }`}>
-              {trades.length > 0 ? `${perf.expectancyUsd >= 0 ? '+' : '-'}${currSymbol}${Math.abs(perf.expectancyUsd).toFixed(2)}` : `${currSymbol}0.00`}
+          <div className="my-2">
+            <div className="text-xl sm:text-2xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight">
+              {trades.length > 0 ? (perf.profitFactor > 99 ? '∞' : perf.profitFactor.toFixed(2)) : '0.00'}
             </div>
-            <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] font-medium mt-1 truncate">
-              PF {trades.length > 0 ? (perf.profitFactor > 99 ? '∞' : perf.profitFactor.toFixed(2)) : '0.00'} | {trades.length > 0 ? `${perf.expectancy >= 0 ? '+' : ''}${perf.expectancy.toFixed(2)}R` : '0.00R'}
-            </div>
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-[#E7E0D6]/60 dark:border-[#242D3D]/80">
+            <span className={`font-bold ${perf.expectancyUsd >= 0 ? 'text-[#15803D] dark:text-[#10B981]' : 'text-[#DC2626] dark:text-[#EF4444]'}`}>
+              {trades.length > 0 ? `${perf.expectancyUsd >= 0 ? '+' : '-'}${currSymbol}${Math.abs(perf.expectancyUsd).toFixed(1)}` : `${currSymbol}0.0`}
+            </span>
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+              {trades.length > 0 ? `${perf.expectancy >= 0 ? '+' : ''}${perf.expectancy.toFixed(1)}R` : '0.0R'} Exp
+            </span>
           </div>
         </div>
 
-        {/* Card 5: MAX DRAWDOWN */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#DC2626]/40 dark:hover:border-[#DC2626]/30 transition-all duration-200 flex flex-col justify-between">
+        {/* Card 6: MAX DRAWDOWN */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#DC2626]/40 dark:hover:border-[#DC2626]/30 transition-all duration-200 flex flex-col justify-between min-h-[128px] sm:min-h-[136px]">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider truncate">
               MAX DRAWDOWN
             </span>
-            <div className="w-8 h-8 rounded-xl bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center shadow-2xs shrink-0">
               <TrendingDown className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <div className="text-2xl sm:text-[26px] font-black font-mono text-[#DC2626] tracking-tight leading-tight">
+          <div className="my-2">
+            <div className="text-xl sm:text-2xl font-black font-mono text-[#DC2626] tracking-tight truncate leading-tight">
               -{currSymbol}{perf.maxDrawdownUsd.toFixed(2)}
             </div>
-            <div className="text-xs font-bold font-mono text-[#DC2626] mt-1">
-              {maxDrawdownR > 0 ? `-${maxDrawdownR.toFixed(1)}R` : '0.0R'} (-{perf.maxDrawdownPercent.toFixed(1)}%)
-            </div>
           </div>
-        </div>
-
-        {/* Card 6: DISCIPLINE SCORE */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-4.5 shadow-xs hover:shadow-md hover:border-[#10B981]/40 dark:hover:border-[#10B981]/30 transition-all duration-200 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-              DISCIPLINE SCORE
+          <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-[#E7E0D6]/60 dark:border-[#242D3D]/80">
+            <span className="font-bold text-[#DC2626]">
+              -{perf.maxDrawdownPercent.toFixed(1)}%
             </span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shadow-2xs">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <div className="text-2xl sm:text-[26px] font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-none">
-              {trades.length > 0 ? discipline.disciplineScore : 100}%
-            </div>
-            <div className="text-xs font-bold font-mono text-[#10B981] mt-1">
-              {trades.length > 0 ? `${discipline.cleanTradesCount}/${trades.length}` : '0/0'} Clean
-            </div>
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+              {maxDrawdownR > 0 ? `-${maxDrawdownR.toFixed(1)}R` : '0.0R'}
+            </span>
           </div>
         </div>
       </div>
