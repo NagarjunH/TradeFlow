@@ -250,6 +250,7 @@ function AppInner() {
           currentDate={systemDate}
           onDateChange={(newDate) => {
             setSystemDate(newDate);
+            setJournalDateFilter(newDate);
           }}
           dayStatus={dayStatus}
           isDayClosedToday={isDayClosedToday}
@@ -270,7 +271,11 @@ function AppInner() {
               trades={trades}
               days={days}
               settings={settings}
-              onSelectDate={handleSelectDateForJournal}
+              selectedDate={systemDate}
+              onSelectDate={(newDate) => {
+                setSystemDate(newDate);
+                setJournalDateFilter(newDate);
+              }}
               onTabChange={setCurrentTab}
               onOpenQuickTrade={() => {
                 setEditTrade(null);
@@ -294,7 +299,7 @@ function AppInner() {
                   setIsQuickTradeOpen(true);
                 }}
                 onViewImage={handleViewImage}
-                selectedDateFilter={journalDateFilter}
+                selectedDateFilter={journalDateFilter || systemDate}
                 onClearDateFilter={() => setJournalDateFilter(undefined)}
                 onTabChange={setCurrentTab}
                 onOpenVantageSync={() => setIsVantageSyncOpen(true)}
@@ -321,6 +326,7 @@ function AppInner() {
               <NotesView
                 trades={trades}
                 settings={settings}
+                selectedDate={systemDate}
                 onSelectDateForJournal={handleSelectDateForJournal}
                 onTabChange={setCurrentTab}
               />
@@ -331,6 +337,7 @@ function AppInner() {
                 <AnalyticsView
                   trades={trades}
                   settings={settings}
+                  selectedDate={systemDate}
                 />
                 <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs transition-colors">
                   <EquityChart

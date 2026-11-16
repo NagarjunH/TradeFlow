@@ -11,21 +11,16 @@ import {
   Target, 
   ArrowRight,
   Calendar,
-  Award,
-  Brain,
   Activity,
   ChevronDown,
   Landmark,
   Pencil,
-  X,
-  Sparkles
+  X
 } from 'lucide-react';
 import { defaultSettings, type Trade, type DayRecord, type AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
 import { calculatePerformance, calculateDiscipline, generateEquityCurve } from '../utils/TradingEngine';
 import { settingsApi } from '../lib/api/settingsApi';
-import { generateIntelligenceReport } from '../services/analyticsService';
-import { generateInsights } from '../services/insightsEngine';
 
 interface DashboardViewProps {
   trades?: Trade[];
@@ -36,6 +31,7 @@ interface DashboardViewProps {
   onOpenQuickTrade?: () => void;
   userId?: string;
   onSettingsUpdated?: () => void;
+  selectedDate?: string;
 }
 
 // Catmull-Rom to Cubic Bezier smooth path generator
@@ -70,15 +66,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenQuickTrade: _onOpenQuickTrade,
   userId,
   onSettingsUpdated,
+  selectedDate,
 }) => {
   const [isEditStartedOpen, setIsEditStartedOpen] = useState(false);
   const [startedInput, setStartedInput] = useState<string>('');
   const [isSavingStarted, setIsSavingStarted] = useState(false);
 
-  const [performerTab, setPerformerTab] = useState<'By R-Multiple' | 'By P&L'>('By P&L');
   const [equityTab, setEquityTab] = useState<'$ P&L' | 'R-Multiple' | '% Return' | 'Drawdown'>('$ P&L');
-  const [timeframe, setTimeframe] = useState<'7D' | '30D' | '90D' | '6M' | '1Y' | 'ALL'>('30D');
-  const [periodDropdown, setPeriodDropdown] = useState<'This Month' | 'Last 30 Days' | 'All Time'>('This Month');
+  const [timeframe, setTimeframe] = useState<'7D' | '30D' | '90D' | '6M' | '1Y' | 'ALL'>('ALL');
   const [quickStatsPeriod, setQuickStatsPeriod] = useState<'This Month' | 'All Time'>('This Month');
   const [hoveredPoint, setHoveredPoint] = useState<{ 
     date: string; 
@@ -95,20 +90,64 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [hoveredMonthly, setHoveredMonthly] = useState<{ key: string; label: string; pnl: number; count: number; winRate: number } | null>(null);
   const [hoveredDrawdown, setHoveredDrawdown] = useState<{ date: string; ddPct: number; ddUsd: number } | null>(null);
 
-  // Dynamic calculations from live data
-  const perf = calculatePerformance(trades, settings);
-  const discipline = calculateDiscipline(trades);
+  // Active Selected Date / Today's Logic
+  const activeDate = selectedDate || new Date().toISOString().split('T')[0];
+
+  const activeDateFormatted = useMemo(() => {
+    try {
+      const parts = activeDate.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        return d.toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+      }
+      return activeDate;
+    } catch {
+      return activeDate;
+    }
+  }, [activeDate]);
+
+  // Today's Trades (From Vantage or synced records)
+  const todayTrades = useMemo(() => {
+    return trades.filter((t) => t.date === activeDate);
+  }, [trades, activeDate]);
+
+  const todayPnl = useMemo(() => {
+    return todayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
+  }, [todayTrades]);
+
+  const todayWins = todayTrades.filter((t) => (Number(t.pnl) || 0) > 0.001).length;
+  const todayLosses = todayTrades.filter((t) => (Number(t.pnl) || 0) < -0.001).length;
+  const todayBE = todayTrades.filter((t) => Math.abs(Number(t.pnl) || 0) <= 0.001).length;
+  const todayCount = todayTrades.length;
+
   const currSymbol = settings.currency === 'USD' ? '$' : '₹';
   const initialCapital = settings.initialCapital > 0 ? settings.initialCapital : 1000;
+  const perf = calculatePerformance(trades, settings);
+  const discipline = calculateDiscipline(trades);
 
-  // Performance Intelligence Diagnostics (Strategy Mode)
-  const intel = useMemo(() => {
-    return generateIntelligenceReport(trades, settings, 'STRATEGY');
-  }, [trades, settings]);
+  const dailyTradesLimit = (settings as any)?.dailyTradesLimit || 3;
+  const riskDollarPerTrade = ((settings?.riskPerTradePercent || 1) / 100) * initialCapital;
+  const dailyLossLimit = Math.abs((settings as any)?.dailyLossLimit || ((settings?.dailyLossLimitR || 2) * (riskDollarPerTrade > 0 ? riskDollarPerTrade : 25)));
 
-  const topInsights = useMemo(() => {
-    return generateInsights(intel);
-  }, [intel]);
+  const isOverLossLimit = todayPnl < -dailyLossLimit;
+  const isOverTradeLimit = todayCount > dailyTradesLimit;
+  const isAtTradeLimit = todayCount === dailyTradesLimit;
+
+  let todayStatusText = 'Within Rules';
+  let todayStatusBadgeClass = 'bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399] border-[#B7ECC8] dark:border-[#1E432A]';
+
+  if (isOverLossLimit) {
+    todayStatusText = 'Daily Loss Limit Hit';
+    todayStatusBadgeClass = 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171] border-[#FBC5C2] dark:border-[#4B1E1E]';
+  } else if (isOverTradeLimit) {
+    todayStatusText = 'Trade Limit Exceeded';
+    todayStatusBadgeClass = 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171] border-[#FBC5C2] dark:border-[#4B1E1E]';
+  } else if (isAtTradeLimit) {
+    todayStatusText = 'Daily Limit Reached';
+    todayStatusBadgeClass = 'bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] border-[#E8DCC8] dark:border-[#2E384D]';
+  }
+
+  const tradeLimitPct = Math.min(100, Math.round((todayCount / dailyTradesLimit) * 100));
 
   // Dynamic greeting based on current local time
   const greeting = useMemo(() => {
@@ -461,67 +500,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .slice(0, 5);
   }, [trades]);
 
-  // Live Pair Stats for Top Performers
-  const pairStats = useMemo(() => {
-    const map = new Map<string, { totalR: number; totalPnl: number; wins: number; total: number }>();
-    trades.forEach((t) => {
-      const p = (t.pair || 'OTHER').replace('/', '').toUpperCase();
-      const cur = map.get(p) || { totalR: 0, totalPnl: 0, wins: 0, total: 0 };
-      cur.totalR += (t.rMultiple || 0);
-      cur.totalPnl += (t.pnl || 0);
-      if ((t.rMultiple || 0) > 0) cur.wins += 1;
-      cur.total += 1;
-      map.set(p, cur);
-    });
-
-    return Array.from(map.entries())
-      .map(([pair, stats]) => ({
-        pair,
-        avgR: stats.total > 0 ? stats.totalR / stats.total : 0,
-        totalR: stats.totalR,
-        totalPnl: stats.totalPnl,
-        winRate: stats.total > 0 ? Math.round((stats.wins / stats.total) * 100) : 0,
-        count: stats.total,
-      }))
-      .sort((a, b) => (performerTab === 'By R-Multiple' ? b.totalR - a.totalR : b.totalPnl - a.totalPnl));
-  }, [trades, performerTab]);
-
-  // Live Violations list
-  const violationsList = useMemo(() => {
-    const counts = new Map<string, { count: number; lossR: number }>();
-    trades.forEach((t) => {
-      if (t.execution === 'VIOLATION') {
-        const reason = t.violationReason && t.violationReason !== 'None' ? t.violationReason : (t.emotion === 'FOMO' ? 'FOMO' : 'Rule Violation');
-        const cur = counts.get(reason) || { count: 0, lossR: 0 };
-        cur.count += 1;
-        if ((t.rMultiple || 0) < 0) cur.lossR += Math.abs(t.rMultiple || 0);
-        counts.set(reason, cur);
-      }
-    });
-
-    return Array.from(counts.entries())
-      .map(([reason, s]) => ({ reason, count: s.count, lossR: s.lossR }))
-      .sort((a, b) => b.count - a.count);
-  }, [trades]);
-
   // Trading calendar mini grid for the current month
   const calendarDays = useMemo(() => {
     const firstDayOfWeek = new Date(currentYear, currentMonthIdx, 1).getDay(); // 0 = Sun, 1 = Mon...
     // Shift Sunday to 6 so Monday is 0
     const offset = (firstDayOfWeek + 6) % 7;
 
-    const daysList: { day?: number; dateStr?: string; r?: number; pnl?: number; hasTrade?: boolean }[] = [];
+    const daysList: { day?: number; dateStr?: string; r?: number; pnl?: number; hasTrade?: boolean; count?: number }[] = [];
     for (let i = 0; i < offset; i++) {
       daysList.push({});
     }
 
     const dayRMap = new Map<number, number>();
     const dayPnlMap = new Map<number, number>();
+    const dayCountMap = new Map<number, number>();
     trades.forEach(t => {
       if (t.date && t.date.startsWith(currentMonthStr)) {
         const d = parseInt(t.date.split('-')[2], 10);
         dayRMap.set(d, (dayRMap.get(d) || 0) + (t.rMultiple || 0));
         dayPnlMap.set(d, (dayPnlMap.get(d) || 0) + (t.pnl || 0));
+        dayCountMap.set(d, (dayCountMap.get(d) || 0) + 1);
       }
     });
 
@@ -530,7 +528,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const hasTrade = dayPnlMap.has(d);
       const r = dayRMap.get(d) || 0;
       const pnl = dayPnlMap.get(d) || 0;
-      daysList.push({ day: d, dateStr, r, pnl, hasTrade });
+      const count = dayCountMap.get(d) || 0;
+      daysList.push({ day: d, dateStr, r, pnl, hasTrade, count });
     }
 
     return daysList;
@@ -846,136 +845,139 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Trading Performance Intelligence Health Strip (4 Concise Diagnostic Cards) */}
-      <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs space-y-3 transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E7E0D6]/60 dark:border-[#242D3D] pb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5" />
+      {/* 2. Today's Trading Status Card (Dynamic on Daily Vantage Trade Basis) */}
+      <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E7E0D6]/60 dark:border-[#242D3D] pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#E8F8EE] dark:bg-[#132A1C] text-[#10B981] flex items-center justify-center border border-[#10B981]/20">
+              <Activity className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] font-bold text-[#DB9F35] uppercase tracking-wider block">
-                Trading Performance Intelligence
-              </span>
-              <h2 className="text-xs sm:text-sm font-black text-[#1F1A16] dark:text-[#F0F4F8]">
-                Diagnostic Health &amp; Strategy Edge
-              </h2>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                  Today's Trading Status
+                </h3>
+                <span className="text-[11px] font-mono text-[#786F66] dark:text-[#94A3B8]">
+                  ({activeDateFormatted})
+                </span>
+              </div>
+              <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                Daily Vantage execution limits &amp; rule adherence
+              </p>
             </div>
           </div>
-          
-          <button
-            type="button"
-            onClick={() => onTabChange?.('analytics')}
-            className="flex items-center gap-1.5 text-xs font-bold text-[#DB9F35] hover:text-[#C28C2E] hover:underline self-start sm:self-auto cursor-pointer"
-          >
-            <span>Open Analytics Intelligence (5 Tabs)</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${todayStatusBadgeClass}`}>
+              ● {todayStatusText}
+            </span>
+            <button
+              type="button"
+              onClick={() => onTabChange?.('journal')}
+              className="text-xs font-bold text-[#DB9F35] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>View in Journal</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Card 1: Trading Health */}
-          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-                Trading Health
-              </span>
-              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399]">
-                {intel.core.netPnl >= 0 ? 'Strategy Edge +' : 'Review Needed'}
-              </span>
+        {/* Progress Bar & Trades Taken Callout (As shown in reference image) */}
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <div className="text-2xl sm:text-3xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8]">
+              {todayCount} / {dailyTradesLimit} Trades
             </div>
-            <div className="mt-2 space-y-1">
-              <div className="flex items-baseline justify-between">
-                <span className="text-xs text-[#786F66] dark:text-[#94A3B8]">Strategy Expectancy</span>
-                <span className="text-sm font-black font-mono text-[#15803D] dark:text-[#34D399]">
-                  {intel.core.expectancy >= 0 ? '+' : '-'}{currSymbol}{Math.abs(intel.core.expectancy).toFixed(2)}/trade
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between text-xs">
-                <span className="text-[#786F66] dark:text-[#94A3B8]">Profit Factor</span>
-                <span className="font-bold font-mono text-[#1F1A16] dark:text-[#F0F4F8]">
-                  {intel.core.profitFactor.toFixed(2)}
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between text-xs">
-                <span className="text-[#786F66] dark:text-[#94A3B8]">Discipline Score</span>
-                <span className="font-bold font-mono text-[#15803D] dark:text-[#34D399]">
-                  {intel.execution.disciplineScore.toFixed(0)}%
-                </span>
-              </div>
-            </div>
+            <span className="text-xs font-mono font-bold text-[#786F66] dark:text-[#94A3B8]">
+              {tradeLimitPct}% of Daily Cap
+            </span>
           </div>
 
-          {/* Card 2: Biggest Weakness */}
-          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-                Biggest Weakness
-              </span>
-              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]">
-                Short (SELL) Drag
-              </span>
-            </div>
-            <div className="mt-2 space-y-1">
-              <div className="text-xs font-bold text-[#DC2626] dark:text-[#F87171] truncate">
-                SELL Win Rate: {intel.direction.sell.winRate.toFixed(1)}%
-              </div>
-              <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8] leading-tight">
-                BUY side is {intel.direction.winRateDiff > 0 ? `+${intel.direction.winRateDiff}% stronger` : 'stronger'} ({intel.direction.buy.winRate.toFixed(1)}% WR).
-              </p>
-              <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8] italic">
-                {intel.time.worstHour ? `Vulnerable hour: ${intel.time.worstHour.hourLabel} Window` : 'Review short entries'}
-              </p>
-            </div>
+          {/* Clean Progress Bar */}
+          <div className="w-full h-2.5 rounded-full bg-[#E7E0D6] dark:bg-[#242D3D] overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                isOverTradeLimit || isOverLossLimit
+                  ? 'bg-[#DC2626]'
+                  : isAtTradeLimit
+                  ? 'bg-[#DB9F35]'
+                  : 'bg-[#10B981]'
+              }`}
+              style={{ width: `${tradeLimitPct}%` }}
+            />
           </div>
 
-          {/* Card 3: Critical Mistakes */}
-          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-                Critical Mistakes
-              </span>
-              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]">
-                {intel.execution.lotSizeViolations.length} Violations
-              </span>
-            </div>
-            <div className="mt-2 space-y-1">
-              <div className="flex items-baseline justify-between">
-                <span className="text-xs text-[#786F66] dark:text-[#94A3B8]">Cost of Mistakes</span>
-                <span className="text-sm font-black font-mono text-[#DC2626] dark:text-[#F87171]">
-                  -{currSymbol}{Math.abs(intel.execution.costOfMistakes).toFixed(2)}
-                </span>
-              </div>
-              <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8] leading-tight">
-                {intel.execution.lotSizeViolations.length > 0
-                  ? '0.09 lot size blunder on Nov 10 wiped out 108 trades of profit.'
-                  : 'Zero lot size or discipline anomalies detected.'}
-              </p>
-            </div>
+          <p className="text-xs text-[#786F66] dark:text-[#94A3B8]">
+            {todayCount === 0
+              ? 'No trades executed yet for this date. Follow your A+ setup rules when entering.'
+              : todayCount < dailyTradesLimit
+              ? `${dailyTradesLimit - todayCount} trade${dailyTradesLimit - todayCount === 1 ? '' : 's'} remaining under your daily limit.`
+              : todayCount === dailyTradesLimit
+              ? 'Daily trade limit reached. Protect profits and preserve mental capital.'
+              : `Limit exceeded by ${todayCount - dailyTradesLimit} trade(s). Step away to prevent overtrading.`}
+          </p>
+        </div>
+
+        {/* 4 Overview Mini-Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+          {/* Today's P&L */}
+          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3">
+            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase block">
+              Today's P&L
+            </span>
+            <span className={`text-base sm:text-lg font-black font-mono block mt-0.5 ${
+              todayPnl > 0.001 ? 'text-[#10B981]' : todayPnl < -0.001 ? 'text-[#DC2626]' : 'text-[#786F66] dark:text-[#94A3B8]'
+            }`}>
+              {todayPnl > 0.001 ? '+' : ''}{currSymbol}{todayPnl.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+              {todayCount > 0 ? `${todayWins}W / ${todayLosses}L` : '0 Trades'}
+            </span>
           </div>
 
-          {/* Card 4: Next Focus */}
-          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider">
-                Next Focus (10–30 Trades)
-              </span>
-              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35]">
-                Target
-              </span>
+          {/* Trades Taken */}
+          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3">
+            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase block">
+              Trades Taken
+            </span>
+            <span className="text-base sm:text-lg font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] block mt-0.5">
+              {todayCount}
+            </span>
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+              Cap: max {dailyTradesLimit}/day
+            </span>
+          </div>
+
+          {/* Winning / Losing Trades */}
+          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3">
+            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase block">
+              Win / Loss Split
+            </span>
+            <div className="text-sm sm:text-base font-black font-mono flex items-center gap-1.5 mt-0.5">
+              <span className="text-[#10B981]">{todayWins}W</span>
+              <span className="text-[#786F66] dark:text-[#94A3B8] font-normal">/</span>
+              <span className="text-[#DC2626]">{todayLosses}L</span>
+              {todayBE > 0 && <span className="text-[#DB9F35] text-xs">({todayBE}BE)</span>}
             </div>
-            <div className="mt-2 space-y-1">
-              <p className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] leading-tight line-clamp-2">
-                {topInsights[0]?.suggestedAction || 'Enforce 0.01 lot ceiling & audit SELL trigger criteria.'}
-              </p>
-              <button
-                type="button"
-                onClick={() => onTabChange?.('analytics')}
-                className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-1 mt-1 cursor-pointer"
-              >
-                Deep-dive in Analytics →
-              </button>
-            </div>
+            <span className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+              Win Rate: {todayCount > 0 ? Math.round((todayWins / todayCount) * 100) : 0}%
+            </span>
+          </div>
+
+          {/* Daily Loss Limit */}
+          <div className="bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl p-3">
+            <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase block">
+              Daily Loss Limit
+            </span>
+            <span className={`text-base sm:text-lg font-black font-mono block mt-0.5 ${
+              isOverLossLimit ? 'text-[#DC2626]' : 'text-[#1F1A16] dark:text-[#F0F4F8]'
+            }`}>
+              {currSymbol}{Math.abs(Math.min(0, todayPnl)).toFixed(2)}
+              <span className="text-[11px] font-normal text-[#786F66] dark:text-[#94A3B8]"> / -{currSymbol}{dailyLossLimit}</span>
+            </span>
+            <span className={`text-[10px] font-semibold ${isOverLossLimit ? 'text-[#DC2626]' : 'text-[#10B981]'}`}>
+              {isOverLossLimit ? 'Exceeded Limit' : `${currSymbol}${(dailyLossLimit - Math.abs(Math.min(0, todayPnl))).toFixed(2)} Buffer`}
+            </span>
           </div>
         </div>
       </div>
@@ -1164,121 +1166,103 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Performance Suite (Equity Curve, Monthly Performance & Quick Stats - Matched to Reference) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        
-        {/* Left: Equity Curve (8 Columns) */}
-        <div className="lg:col-span-8 bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            {/* Header: Title on Left, 4 Stats on Right */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shrink-0">
-                  <Activity className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
-                    Equity Curve
-                  </h3>
-                  <p className="text-xs text-[#786F66] dark:text-[#94A3B8]">
-                    Cumulative account performance over time
-                  </p>
-                </div>
+      {/* 3. Equity Curve (Full Width, HD Responsive for Mobile & Desktop) */}
+      <div className="w-full bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col justify-between transition-colors">
+        <div>
+          {/* Header: Title on Left, 4 Stats on Right */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shrink-0">
+                <Activity className="w-5 h-5" />
               </div>
-
-              {/* 4 Top Stat Badges */}
-              <div className="flex items-center flex-wrap gap-4 sm:gap-6">
-                <div>
-                  <div className="text-lg sm:text-xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
-                    {currSymbol}{equityCurveStats.currentEquity.toFixed(2)}
-                  </div>
-                  <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
-                    Current Equity
-                  </div>
-                </div>
-
-                <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
-                  <div className={`text-lg sm:text-xl font-black font-mono leading-tight ${equityCurveStats.netReturn >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
-                    {equityCurveStats.netReturn >= 0 ? '+' : '-'}{currSymbol}{Math.abs(equityCurveStats.netReturn).toFixed(2)}
-                  </div>
-                  <div className={`text-[11px] font-bold font-mono mt-0.5 ${equityCurveStats.netReturn >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
-                    Net Return ({equityCurveStats.netReturnPct >= 0 ? '+' : ''}{equityCurveStats.netReturnPct.toFixed(1)}%)
-                  </div>
-                </div>
-
-                <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
-                  <div className={`text-lg sm:text-xl font-black font-mono leading-tight ${equityCurveStats.monthReturnPct >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
-                    {equityCurveStats.monthReturnPct >= 0 ? '+' : ''}{equityCurveStats.monthReturnPct.toFixed(2)}%
-                  </div>
-                  <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
-                    This Month
-                  </div>
-                </div>
-
-                <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
-                  <div className="text-lg sm:text-xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
-                    {trades.length}
-                  </div>
-                  <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
-                    Total Trades
-                  </div>
-                </div>
+              <div>
+                <h3 className="text-base font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                  Equity Curve
+                </h3>
+                <p className="text-xs text-[#786F66] dark:text-[#94A3B8]">
+                  Cumulative account performance trajectory across all closed positions
+                </p>
               </div>
             </div>
 
-            {/* Filter Controls Row: Timeframe Pills on Left, Metrics & Dropdown on Right */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 pb-2">
-              {/* Timeframe Pills: 7D, 30D, 90D, 6M, 1Y, ALL */}
-              <div className="flex items-center gap-1">
-                {(['7D', '30D', '90D', '6M', '1Y', 'ALL'] as const).map((tf) => (
-                  <button
-                    key={tf}
-                    type="button"
-                    onClick={() => setTimeframe(tf)}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      timeframe === tf
-                        ? 'bg-[#0D3B36] dark:bg-[#10B981] text-white dark:text-[#0B0F17] shadow-2xs'
-                        : 'border border-transparent text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
+            {/* 4 Top Stat Badges */}
+            <div className="flex items-center flex-wrap gap-4 sm:gap-6">
+              <div>
+                <div className="text-lg sm:text-xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
+                  {currSymbol}{equityCurveStats.currentEquity.toFixed(2)}
+                </div>
+                <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
+                  Current Equity
+                </div>
               </div>
 
-              {/* Right side: Metric Pills & Dropdown */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  {(['$ P&L', 'R-Multiple', '% Return', 'Drawdown'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setEquityTab(tab)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        equityTab === tab
-                          ? 'bg-[#0D3B36] dark:bg-[#10B981] text-white dark:text-[#0B0F17] shadow-2xs'
-                          : 'border border-transparent text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
+              <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
+                <div className={`text-lg sm:text-xl font-black font-mono leading-tight ${equityCurveStats.netReturn >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                  {equityCurveStats.netReturn >= 0 ? '+' : '-'}{currSymbol}{Math.abs(equityCurveStats.netReturn).toFixed(2)}
                 </div>
+                <div className={`text-[11px] font-bold font-mono mt-0.5 ${equityCurveStats.netReturn >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                  Net Return ({equityCurveStats.netReturnPct >= 0 ? '+' : ''}{equityCurveStats.netReturnPct.toFixed(1)}%)
+                </div>
+              </div>
 
-                <div className="relative">
-                  <select
-                    value={periodDropdown}
-                    onChange={(e) => setPeriodDropdown(e.target.value as any)}
-                    className="appearance-none pl-3 pr-7 py-1 bg-[#F2ECE0] dark:bg-[#1C2331] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] outline-none cursor-pointer"
-                  >
-                    <option value="This Month">This Month</option>
-                    <option value="Last 30 Days">Last 30 Days</option>
-                    <option value="All Time">All Time</option>
-                  </select>
-                  <ChevronDown className="w-3 h-3 text-[#786F66] absolute right-2.5 top-2.5 pointer-events-none" />
+              <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
+                <div className={`text-lg sm:text-xl font-black font-mono leading-tight ${equityCurveStats.monthReturnPct >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'}`}>
+                  {equityCurveStats.monthReturnPct >= 0 ? '+' : ''}{equityCurveStats.monthReturnPct.toFixed(2)}%
+                </div>
+                <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
+                  This Month
+                </div>
+              </div>
+
+              <div className="border-l border-[#E7E0D6] dark:border-[#242D3D] pl-4 sm:pl-6">
+                <div className="text-lg sm:text-xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] leading-tight">
+                  {trades.length}
+                </div>
+                <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-0.5">
+                  Total Trades
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Filter Controls Row: Timeframe Pills on Left, Metrics on Right (Dropdown Removed) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 pb-2">
+            {/* Timeframe Pills: 7D, 30D, 90D, 6M, 1Y, ALL */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+              {(['7D', '30D', '90D', '6M', '1Y', 'ALL'] as const).map((tf) => (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={() => setTimeframe(tf)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    timeframe === tf
+                      ? 'bg-[#0D3B36] dark:bg-[#10B981] text-white dark:text-[#0B0F17] shadow-2xs'
+                      : 'border border-transparent text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+
+            {/* Right side: Metric Pills (Clean Switcher without trailing dropdown) */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+              {(['$ P&L', 'R-Multiple', '% Return', 'Drawdown'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setEquityTab(tab)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    equityTab === tab
+                      ? 'bg-[#0D3B36] dark:bg-[#10B981] text-white dark:text-[#0B0F17] shadow-2xs'
+                      : 'border border-transparent text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
 
             {/* Interactive SVG Curve Area */}
             <div className="relative pt-3 pb-1 h-64 w-full">
@@ -1518,8 +1502,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Right: Monthly Performance & Quick Stats (4 Columns) */}
-        <div className="lg:col-span-4 flex flex-col justify-between gap-4">
+        {/* Monthly Performance & Quick Stats (2-Column Grid) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           
           {/* Top Card: Monthly Performance */}
           <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs transition-colors flex flex-col justify-between">
@@ -1750,7 +1734,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
         </div>
-      </div>
 
       {/* 4. Portfolio Performance & Breakdown (TradeOS Graphs) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -2204,30 +2187,200 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        
-        {/* Card 1: Monthly Cycle Progress */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-3.5 h-3.5 text-[#DB9F35]" />
-                <div>
-                  <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
-                    Monthly Cycle Progress
-                  </h4>
-                  <p className="text-[9px] text-[#786F66] dark:text-[#94A3B8]">
-                    {currentMonthName} {currentYear}
-                  </p>
+
+      {/* 5. Full-Width Trading Calendar (Interactive 31-Day Heatmap) */}
+      <div className="w-full bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-5 shadow-2xs transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center shrink-0">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                Monthly Trading Calendar — {currentMonthName} {currentYear}
+              </h3>
+              <p className="text-xs text-[#786F66] dark:text-[#94A3B8]">
+                Daily profit &amp; loss distribution across your Vantage trading sessions (Click any day to inspect)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('cycle')}
+              className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] hover:border-[#10B981] text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
+            >
+              <span>View 31-Day Cycle</span>
+              <ArrowRight className="w-3.5 h-3.5 text-[#10B981]" />
+            </button>
+          </div>
+        </div>
+
+        {/* 7-Column Day Names Header */}
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2 text-xs font-bold text-[#786F66] dark:text-[#94A3B8] text-center pt-3 pb-2 border-b border-[#E7E0D6]/40 dark:border-[#242D3D]">
+          <span>Mon</span>
+          <span>Tue</span>
+          <span>Wed</span>
+          <span>Thu</span>
+          <span>Fri</span>
+          <span className="text-[#9E958C]">Sat</span>
+          <span className="text-[#9E958C]">Sun</span>
+        </div>
+
+        {/* 7-Column Spacious Day Cells */}
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2 pt-2.5">
+          {calendarDays.map((c, i) => {
+            if (!c.day) {
+              return <div key={i} className="min-h-[52px] sm:min-h-[64px] rounded-xl bg-transparent" />;
+            }
+            const isWin = c.hasTrade && (c.pnl || 0) > 0.001;
+            const isLoss = c.hasTrade && (c.pnl || 0) < -0.001;
+            const isBE = c.hasTrade && Math.abs(c.pnl || 0) <= 0.001;
+            const isSelected = c.dateStr === activeDate;
+
+            return (
+              <div
+                key={i}
+                onClick={() => c.dateStr && onSelectDate?.(c.dateStr)}
+                title={
+                  c.hasTrade
+                    ? `${c.dateStr}: ${(c.pnl || 0) >= 0 ? '+' : '-'}${currSymbol}${Math.abs(c.pnl || 0).toFixed(2)} (${c.count} trades)`
+                    : `${c.dateStr}: No trades recorded`
+                }
+                className={`p-1.5 sm:p-2 rounded-xl border min-h-[52px] sm:min-h-[64px] flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] ${
+                  isSelected ? 'ring-2 ring-[#10B981] shadow-md' : ''
+                } ${
+                  isWin
+                    ? 'bg-[#E8F8EE] dark:bg-[#132A1C] border-[#B7ECC8] dark:border-[#1E432A] text-[#15803D] dark:text-[#34D399]'
+                    : isLoss
+                    ? 'bg-[#FEECEB] dark:bg-[#321B1B] border-[#FBC5C2] dark:border-[#4B1E1E] text-[#DC2626] dark:text-[#F87171]'
+                    : isBE
+                    ? 'bg-[#FAF2E6] dark:bg-[#1C2331] border-[#E8DCC8] dark:border-[#2E384D] text-[#DB9F35]'
+                    : 'bg-white/60 dark:bg-[#1A2230]/60 border-[#E7E0D6]/70 dark:border-[#242D3D] text-[#9E958C] dark:text-[#64748B] hover:border-[#10B981]/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs font-mono font-bold leading-none">{c.day}</span>
+                  {c.hasTrade && (
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-black/5 dark:bg-white/10 font-semibold">
+                      {c.count}t
+                    </span>
+                  )}
                 </div>
+
+                {c.hasTrade ? (
+                  <div className="pt-1">
+                    <span className="text-[11px] sm:text-xs font-black font-mono block leading-tight truncate">
+                      {(c.pnl || 0) >= 0 ? `+${currSymbol}${Math.abs(c.pnl || 0).toFixed(2)}` : `-${currSymbol}${Math.abs(c.pnl || 0).toFixed(2)}`}
+                    </span>
+                    <span className="text-[9px] font-mono block text-[#786F66] dark:text-[#94A3B8]">
+                      {(c.r || 0) >= 0 ? `+${(c.r || 0).toFixed(1)}R` : `${(c.r || 0).toFixed(1)}R`}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-[10px] text-[#CBD5E1] dark:text-[#334155] italic block">--</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 6. Recent Trades & Mistakes / Cycle Breakdown (2-Column Grid) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Left: Recent Trades Table */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col justify-between transition-colors">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-[#DB9F35]" />
+                <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                  Recent Executed Trades
+                </h4>
               </div>
               <button
                 type="button"
-                onClick={() => navigate('cycle')}
-                className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
+                onClick={() => navigate('journal')}
+                className="text-xs font-bold text-[#DB9F35] hover:underline flex items-center gap-1 cursor-pointer"
               >
-                <span>View Calendar</span>
-                <ArrowRight className="w-2.5 h-2.5" />
+                <span>View All Journal</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            {recentTradesList.length === 0 ? (
+              <div className="py-8 text-center text-xs text-[#786F66] dark:text-[#94A3B8]">
+                No trades recorded yet. Log your trades in the Journal or sync from Vantage.
+              </div>
+            ) : (
+              <div className="overflow-x-auto py-2 text-xs">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
+                      <th className="pb-2">Pair</th>
+                      <th className="pb-2">Type</th>
+                      <th className="pb-2 text-center">R</th>
+                      <th className="pb-2 text-right">P&L</th>
+                      <th className="pb-2 text-right">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E7E0D6]/40 dark:divide-[#242D3D]">
+                    {recentTradesList.map((t) => (
+                      <tr 
+                        key={t.id} 
+                        onClick={() => onSelectDate?.(t.date)}
+                        className="hover:bg-[#F2ECE0]/60 dark:hover:bg-[#1C2331]/60 transition-colors cursor-pointer"
+                      >
+                        <td className="py-2 font-bold font-mono text-[#1F1A16] dark:text-[#F0F4F8]">{t.pair}</td>
+                        <td className="py-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            t.order === 'BUY'
+                              ? 'bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399]'
+                              : 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]'
+                          }`}>
+                            {t.order}
+                          </span>
+                        </td>
+                        <td className={`py-2 text-center font-bold font-mono ${
+                          (t.rMultiple || 0) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+                        }`}>
+                          {(t.rMultiple || 0) >= 0 ? `+${t.rMultiple}R` : `${t.rMultiple}R`}
+                        </td>
+                        <td className={`py-2 text-right font-bold font-mono ${
+                          (t.pnl || 0) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
+                        }`}>
+                          {(t.pnl || 0) >= 0 ? `+${currSymbol}${(t.pnl || 0).toFixed(2)}` : `-${currSymbol}${Math.abs(t.pnl || 0).toFixed(2)}`}
+                        </td>
+                        <td className="py-2 text-right text-[11px] font-mono text-[#786F66] dark:text-[#94A3B8]">
+                          {t.time || '10:00'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Monthly Cycle & Mistakes / Insights */}
+        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col justify-between transition-colors">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-[#DB9F35]" />
+                <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                  Monthly Discipline &amp; Leaks
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('analytics')}
+                className="text-xs font-bold text-[#DB9F35] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Analytics</span>
+                <ArrowRight className="w-3 h-3" />
               </button>
             </div>
 
@@ -2243,12 +2396,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {cycleProgress.percent}%
                   </span>
                   <span className="text-[8px] text-[#786F66] dark:text-[#94A3B8] font-mono leading-none block mt-0.5">
-                    {cycleProgress.totalDaysPassed}/{cycleProgress.daysInMonth} Days
+                    {cycleProgress.totalDaysPassed}/{cycleProgress.daysInMonth}d
                   </span>
                 </div>
               </div>
 
-              <div className="space-y-1.5 flex-1 text-[11px]">
+              <div className="space-y-1 flex-1 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
                     <span className="w-2 h-2 rounded-full bg-[#10B981]" /> Profitable Days
@@ -2267,377 +2420,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </span>
                   <span className="font-bold text-[#786F66] dark:text-[#94A3B8] font-mono">{cycleProgress.beDays}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
-                    <span className="w-2 h-2 rounded-full bg-[#9E958C]" /> No Trade Days
-                  </span>
-                  <span className="font-bold text-[#786F66] dark:text-[#94A3B8] font-mono">{cycleProgress.noTradeDays}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Recent Trades Table */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <Activity className="w-3.5 h-3.5 text-[#DB9F35]" />
-                <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
-                  Recent Trades
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('journal')}
-                className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
-              >
-                <span>View All</span>
-                <ArrowRight className="w-2.5 h-2.5" />
-              </button>
-            </div>
-
-            {recentTradesList.length === 0 ? (
-              <div className="py-6 text-center text-[11px] text-[#786F66] dark:text-[#94A3B8]">
-                No trades recorded yet. Log your trades in the Journal.
-              </div>
-            ) : (
-              <div className="overflow-x-auto py-1 text-[11px]">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="text-[9px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-                      <th className="pb-1.5">Pair</th>
-                      <th className="pb-1.5">Type</th>
-                      <th className="pb-1.5 text-center">R</th>
-                      <th className="pb-1.5 text-right">P&L</th>
-                      <th className="pb-1.5 text-right">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E7E0D6]/40 dark:divide-[#242D3D]">
-                    {recentTradesList.map((t) => (
-                      <tr 
-                        key={t.id} 
-                        onClick={() => onSelectDate?.(t.date)}
-                        className="hover:bg-[#F2ECE0]/60 dark:hover:bg-[#1C2331]/60 transition-colors cursor-pointer"
-                      >
-                        <td className="py-1.5 font-bold font-mono text-[#1F1A16] dark:text-[#F0F4F8]">{t.pair}</td>
-                        <td className="py-1.5">
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                            t.order === 'BUY'
-                              ? 'bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399]'
-                              : 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]'
-                          }`}>
-                            {t.order}
-                          </span>
-                        </td>
-                        <td className={`py-1.5 text-center font-bold font-mono ${
-                          (t.rMultiple || 0) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-                        }`}>
-                          {(t.rMultiple || 0) >= 0 ? `+${t.rMultiple}R` : `${t.rMultiple}R`}
-                        </td>
-                        <td className={`py-1.5 text-right font-bold font-mono ${
-                          (t.pnl || 0) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-                        }`}>
-                          {(t.pnl || 0) >= 0 ? `+${currSymbol}${(t.pnl || 0).toFixed(2)}` : `-${currSymbol}${Math.abs(t.pnl || 0).toFixed(2)}`}
-                        </td>
-                        <td className="py-1.5 text-right text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8]">
-                          {t.time || '10:00'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Card 3: Trading Calendar Mini-Grid */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-3.5 h-3.5 text-[#DB9F35]" />
-                <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
-                  Trading Calendar
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('cycle')}
-                className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
-              >
-                <span>View Full</span>
-                <ArrowRight className="w-2.5 h-2.5" />
-              </button>
-            </div>
-
-            {/* Mini Calendar Week Header */}
-            <div className="grid grid-cols-7 gap-1 text-[9px] font-bold text-[#786F66] dark:text-[#94A3B8] text-center pt-2 pb-1 border-b border-[#E7E0D6]/40 dark:border-[#242D3D]">
-              <span>Mon</span>
-              <span>Tue</span>
-              <span>Wed</span>
-              <span>Thu</span>
-              <span>Fri</span>
-              <span>Sat</span>
-              <span>Sun</span>
-            </div>
-
-            {/* Mini Calendar Day Cells */}
-            <div className="grid grid-cols-7 gap-1 pt-2 text-[9px] font-mono text-center">
-              {calendarDays.map((c, i) => {
-                if (!c.day) {
-                  return <div key={i} className="min-h-[28px]" />;
-                }
-                const isWin = c.hasTrade && (c.pnl || 0) > 0.001;
-                const isLoss = c.hasTrade && (c.pnl || 0) < -0.001;
-                const isBE = c.hasTrade && Math.abs(c.pnl || 0) <= 0.001;
-
-                return (
-                  <div
-                    key={i}
-                    onClick={() => c.dateStr && onSelectDate?.(c.dateStr)}
-                    title={c.hasTrade ? `${c.dateStr}: ${(c.pnl || 0) >= 0 ? '+' : '-'}${currSymbol}${Math.abs(c.pnl || 0).toFixed(2)} (${(c.r || 0) >= 0 ? '+' : ''}${(c.r || 0).toFixed(1)}R)` : undefined}
-                    className={`p-1 rounded-md border min-h-[28px] flex flex-col justify-between cursor-pointer transition-all hover:scale-105 ${
-                      isWin
-                        ? 'bg-[#E8F8EE] dark:bg-[#132A1C] border-[#B7ECC8] dark:border-[#1E432A] text-[#15803D] dark:text-[#34D399]'
-                        : isLoss
-                        ? 'bg-[#FEECEB] dark:bg-[#321B1B] border-[#FBC5C2] dark:border-[#4B1E1E] text-[#DC2626] dark:text-[#F87171]'
-                        : isBE
-                        ? 'bg-[#FAF2E6] dark:bg-[#1C2331] border-[#E8DCC8] dark:border-[#2E384D] text-[#DB9F35]'
-                        : 'bg-transparent border-transparent text-[#9E958C] dark:text-[#64748B] hover:bg-[#F2ECE0] dark:hover:bg-[#1C2331]'
-                    }`}
-                  >
-                    <span className="text-[8px] font-bold block leading-none">{c.day}</span>
-                    {c.hasTrade && (
-                      <span className="text-[7px] font-bold block leading-none truncate">
-                        {(c.pnl || 0) >= 0 ? `+${currSymbol}${Math.abs(c.pnl || 0).toFixed(0)}` : `-${currSymbol}${Math.abs(c.pnl || 0).toFixed(0)}`}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Bottom Row: 3-Column Insights Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
-        
-        {/* Card 1: Top Performers */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <Award className="w-4 h-4 text-[#DB9F35]" />
-                <div>
-                  <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
-                    Top Performers
-                  </h4>
-                  <p className="text-[9px] text-[#786F66] dark:text-[#94A3B8]">
-                    Best performing pairs &amp; setups
-                  </p>
-                </div>
-              </div>
-
-              {/* Toggle: By R-Multiple / By P&L */}
-              <div className="flex items-center bg-[#F2ECE0] dark:bg-[#1C2331] p-0.5 rounded-lg border border-[#DFD5C6] dark:border-[#2E384D] text-[10px] font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setPerformerTab('By R-Multiple')}
-                  className={`px-2 py-0.5 rounded cursor-pointer transition-all ${
-                    performerTab === 'By R-Multiple'
-                      ? 'bg-[#DB9F35] text-[#1F1A16] font-bold shadow-2xs'
-                      : 'text-[#786F66] dark:text-[#94A3B8]'
-                  }`}
-                >
-                  By R-Multiple
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPerformerTab('By P&L')}
-                  className={`px-2 py-0.5 rounded cursor-pointer transition-all ${
-                    performerTab === 'By P&L'
-                      ? 'bg-[#DB9F35] text-[#1F1A16] font-bold shadow-2xs'
-                      : 'text-[#786F66] dark:text-[#94A3B8]'
-                  }`}
-                >
-                  By P&amp;L
-                </button>
               </div>
             </div>
 
-            {pairStats.length === 0 ? (
-              <div className="py-6 text-center text-[11px] text-[#786F66] dark:text-[#94A3B8]">
-                No trade pairs recorded yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto py-2 text-[11px]">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="text-[9px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-                      <th className="pb-1.5 w-6">#</th>
-                      <th className="pb-1.5">Pair</th>
-                      <th className="pb-1.5 text-right">{performerTab === 'By R-Multiple' ? 'Avg R' : 'Net P&L'}</th>
-                      <th className="pb-1.5 text-right">Win Rate</th>
-                      <th className="pb-1.5 text-right">Trades</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E7E0D6]/40 dark:divide-[#242D3D]">
-                    {pairStats.slice(0, 4).map((p, idx) => (
-                      <tr key={p.pair} className="hover:bg-[#F2ECE0]/60 dark:hover:bg-[#1C2331]/60 transition-colors">
-                        <td className="py-2 text-[10px] font-mono text-[#9E958C] dark:text-[#64748B]">{idx + 1}</td>
-                        <td className="py-2 font-bold font-mono text-[#1F1A16] dark:text-[#F0F4F8]">{p.pair}</td>
-                        <td className={`py-2 text-right font-mono font-bold ${
-                          (performerTab === 'By R-Multiple' ? p.avgR : p.totalPnl) >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-                        }`}>
-                          {performerTab === 'By R-Multiple' 
-                            ? `${p.avgR >= 0 ? '+' : ''}${p.avgR.toFixed(1)}R`
-                            : `${p.totalPnl >= 0 ? '+' : '-'}${currSymbol}${Math.abs(p.totalPnl).toFixed(2)}`}
-                        </td>
-                        <td className="py-2 text-right font-mono text-[#1F1A16] dark:text-[#F0F4F8]">{p.winRate}%</td>
-                        <td className="py-2 text-right font-mono text-[#786F66] dark:text-[#94A3B8]">{p.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Card 2: Mistakes & Insights */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="w-4 h-4 text-[#DB9F35]" />
-                <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
-                  Mistakes &amp; Insights
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('analytics')}
-                className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
-              >
-                <span>View Details</span>
-                <ArrowRight className="w-2.5 h-2.5" />
-              </button>
-            </div>
-
-            <div className="pt-2">
-              <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider block mb-2">
-                Biggest Leaks
-              </span>
-
-              {violationsList.length === 0 ? (
-                <div className="py-4 text-center text-[11px] text-[#10B981] font-medium">
-                  ✓ 100% Clean Execution! No rule leaks detected.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {violationsList.slice(0, 3).map((v, i) => (
-                    <div key={v.reason} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] font-bold text-[10px] flex items-center justify-center">
-                          {i + 1}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-md bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] font-bold text-[11px]">
-                          {v.reason}
-                        </span>
-                      </div>
-                      <span className="text-[#786F66] dark:text-[#94A3B8] text-[11px]">{v.count} occurrence{v.count === 1 ? '' : 's'}</span>
-                      <span className="font-bold font-mono text-xs text-[#DC2626]">
-                        -{v.lossR.toFixed(1)}R
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Focus This Week Highlight Callout */}
-          <div className="mt-3 p-3 rounded-xl bg-[#FAF2E6] dark:bg-[#1A2230] border border-[#E8DCC8] dark:border-[#2E384D] flex items-start gap-2 text-xs">
-            <Target className="w-4 h-4 text-[#DB9F35] shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8] block text-[11px]">
-                Focus This Week
-              </span>
-              <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8] mt-0.5 leading-snug">
-                Avoid FOMO after strong market moves. Protect capital and wait patiently for valid setups.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Discipline & Behavior */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <Brain className="w-4 h-4 text-[#DB9F35]" />
-                <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
-                  Discipline &amp; Behavior
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('analytics')}
-                className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
-              >
-                <span>View Details</span>
-                <ArrowRight className="w-2.5 h-2.5" />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-4 py-3">
-              {/* Donut Indicator */}
-              <div className="relative w-18 h-18 shrink-0 flex items-center justify-center">
-                <svg className="w-18 h-18 -rotate-90" viewBox="0 0 36 36">
-                  <path className="text-[#E7E0D6] dark:text-[#242D3D]" stroke="currentColor" strokeWidth="3.5" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                  <path className="text-[#10B981]" stroke="currentColor" strokeWidth="3.5" strokeDasharray={`${trades.length > 0 ? discipline.disciplineScore : 100}, 100`} strokeLinecap="round" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                </svg>
-                <div className="absolute text-center">
-                  <span className="text-sm font-black text-[#1F1A16] dark:text-[#F0F4F8] leading-none block">
-                    {trades.length > 0 ? discipline.disciplineScore : 100}%
-                  </span>
-                  <span className="text-[8px] text-[#786F66] dark:text-[#94A3B8] font-mono leading-none block mt-0.5">
-                    {discipline.cleanTradesCount}/{trades.length} Clean
-                  </span>
-                </div>
-              </div>
-
-              {/* Rule Violations breakdown */}
-              <div className="space-y-1.5 flex-1 text-[11px]">
-                <div className="pb-1 mb-1 border-b border-[#E7E0D6]/50 dark:border-[#242D3D]">
-                  <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] block">
-                    Rule Violations
-                  </span>
-                  <span className="text-sm font-black text-[#1F1A16] dark:text-[#F0F4F8] font-mono">
-                    {discipline.violationTradesCount} <span className="text-[9px] font-normal text-[#786F66] dark:text-[#94A3B8]">
-                      {trades.length > 0 ? `${Math.round((discipline.violationTradesCount / trades.length) * 100)}% of total trades` : '0%'}
-                    </span>
-                  </span>
-                </div>
-
-                {violationsList.length === 0 ? (
-                  <div className="text-[11px] text-[#10B981] font-medium py-1">
-                    Zero rule violations recorded
-                  </div>
-                ) : (
-                  violationsList.slice(0, 3).map((v) => (
-                    <div key={v.reason} className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 text-[#786F66] dark:text-[#94A3B8]">
-                        <span className="w-2 h-2 rounded-full bg-[#DC2626]" /> {v.reason}
-                      </span>
-                      <span className="font-bold text-[#DC2626] font-mono">{v.count}</span>
-                    </div>
-                  ))
-                )}
+            {/* Focus This Week Highlight Callout */}
+            <div className="mt-2 p-3 rounded-xl bg-[#FAF2E6] dark:bg-[#1A2230] border border-[#E8DCC8] dark:border-[#2E384D] flex items-start gap-2 text-xs">
+              <Target className="w-4 h-4 text-[#DB9F35] shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8] block text-[11px]">
+                  Focus Target
+                </span>
+                <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8] mt-0.5 leading-snug">
+                  Strict 0.01 lot ceiling &amp; avoid impulsive entries around 11:00 or high-impact news spikes.
+                </p>
               </div>
             </div>
           </div>

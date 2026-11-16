@@ -59,6 +59,7 @@ interface NotesViewProps {
   settings?: AppSettings;
   onSelectDateForJournal?: (dateStr: string) => void;
   onTabChange?: (tab: TabType) => void;
+  selectedDate?: string;
 }
 
 export const NotesView: React.FC<NotesViewProps> = ({
@@ -66,6 +67,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   settings,
   onSelectDateForJournal,
   onTabChange,
+  selectedDate,
 }) => {
   const [notes, setNotes] = useState<TraderNote[]>(() => {
     try {
@@ -83,6 +85,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'notebook' | 'trade_notes'>('notebook');
+  const [filterByDate, setFilterByDate] = useState<boolean>(false);
 
   // Modal State
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -108,23 +111,25 @@ export const NotesView: React.FC<NotesViewProps> = ({
     return notes
       .filter((n) => {
         const matchesCat = activeCategory === 'All' || n.category === activeCategory;
+        const matchesDate = !filterByDate || !selectedDate || n.date === selectedDate;
         const q = searchQuery.toLowerCase().trim();
         const matchesQuery = !q || n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
-        return matchesCat && matchesQuery;
+        return matchesCat && matchesDate && matchesQuery;
       })
       .sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;
         if (!a.isPinned && b.isPinned) return 1;
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
-  }, [notes, activeCategory, searchQuery]);
+  }, [notes, activeCategory, searchQuery, filterByDate, selectedDate]);
 
   // Notes from actual trades in Journal
   const tradeNotesList = useMemo(() => {
     return trades
       .filter((t) => t.notes && t.notes.trim().length > 0)
+      .filter((t) => !filterByDate || !selectedDate || t.date === selectedDate)
       .sort((a, b) => (b.tradeNumber || 0) - (a.tradeNumber || 0));
-  }, [trades]);
+  }, [trades, filterByDate, selectedDate]);
 
   const handleOpenNewNote = () => {
     setEditingNote(null);
@@ -148,7 +153,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
     e.preventDefault();
     if (!noteTitle.trim() && !noteContent.trim()) return;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = selectedDate || new Date().toISOString().split('T')[0];
 
     if (editingNote) {
       setNotes((prev) =>
@@ -227,31 +232,53 @@ export const NotesView: React.FC<NotesViewProps> = ({
       {/* 2. Mode Selector & Filters Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Notebook vs Trade Notes Tabs */}
-        <div className="flex items-center bg-[#FAF6EE] dark:bg-[#131822] p-1 rounded-xl border border-[#E7E0D6] dark:border-[#242D3D] text-xs font-bold w-fit">
-          <button
-            type="button"
-            onClick={() => setViewMode('notebook')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-              viewMode === 'notebook'
-                ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
-                : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Playbook Notes ({notes.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('trade_notes')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-              viewMode === 'trade_notes'
-                ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
-                : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            Trade Notes Feed ({tradeNotesList.length})
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-[#FAF6EE] dark:bg-[#131822] p-1 rounded-xl border border-[#E7E0D6] dark:border-[#242D3D] text-xs font-bold w-fit">
+            <button
+              type="button"
+              onClick={() => setViewMode('notebook')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                viewMode === 'notebook'
+                  ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
+                  : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Playbook Notes ({notes.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('trade_notes')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                viewMode === 'trade_notes'
+                  ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
+                  : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              Trade Notes Feed ({tradeNotesList.length})
+            </button>
+          </div>
+
+          {selectedDate && (
+            <button
+              type="button"
+              onClick={() => setFilterByDate(!filterByDate)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                filterByDate
+                  ? 'bg-[#10B981] text-white border-[#10B981] shadow-2xs'
+                  : 'bg-[#FAF6EE] dark:bg-[#131822] border-[#E7E0D6] dark:border-[#242D3D] text-[#786F66] dark:text-[#94A3B8] hover:border-[#10B981]'
+              }`}
+              title="Toggle to filter notes by the selected top date"
+            >
+              <span>📅 {selectedDate}</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                filterByDate ? 'bg-black/25 text-white' : 'bg-[#E7E0D6] dark:bg-[#242D3D]'
+              }`}>
+                {filterByDate ? 'Filtered' : 'Filter by Day'}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Search Bar */}

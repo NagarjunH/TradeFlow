@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Search, 
   Calendar as CalendarIcon, 
   Sun, 
   Moon,
@@ -14,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { DayStatus } from '../utils/TradingEngine';
 import { DatePickerDropdown } from './DatePickerDropdown';
+import { HighImpactMarquee } from './HighImpactMarquee';
 import { useTheme } from '../contexts/ThemeContext';
 import { onInstallAvailabilityChange, promptPWAInstall } from '../registerServiceWorker';
 
@@ -90,8 +90,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     <div className="bg-[#FAF7F2] dark:bg-[#121722] border-b border-[#E7E0D6] dark:border-[#232B3A] sticky top-0 z-30 transition-colors">
       {/* Upper Header Bar */}
       <div className="px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
-        {/* Left: Hamburger on mobile + Search Bar */}
-        <div className="flex items-center gap-2 flex-1 max-w-md">
+        {/* Left: Hamburger on mobile + High Impact Economic Events Marquee (IST) */}
+        <div className="flex items-center gap-2 flex-1 min-w-0 max-w-2xl">
           {/* Mobile Hamburger Button */}
           <button
             onClick={onOpenMobileSidebar}
@@ -101,18 +101,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <Menu className="w-5 h-5 text-[#10B981]" />
           </button>
 
-          {/* Search Bar */}
-          <div className="relative flex-1 hidden sm:block">
-            <Search className="w-3.5 h-3.5 text-[#9E958C] absolute left-3.5 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search trades, pairs, notes, setups..."
-              className="w-full pl-9 pr-12 py-1.5 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] placeholder-[#9E958C] dark:placeholder-[#64748B] focus:border-[#10B981] outline-none shadow-2xs transition-colors"
-            />
-            <kbd className="absolute right-2.5 top-2 px-1.5 py-0.5 rounded bg-[#F6F1EA] dark:bg-[#121722] border border-[#E7E0D6] dark:border-[#283244] text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8]">
-              ⌘ K
-            </kbd>
-          </div>
+          {/* High Impact Events Marquee Ticker (IST) */}
+          <HighImpactMarquee currentDate={currentDate} />
         </div>
 
         {/* Right Controls */}

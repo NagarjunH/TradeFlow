@@ -23,6 +23,7 @@ import { AnalyticsInsightsTab } from './analytics/AnalyticsInsightsTab';
 interface AnalyticsViewProps {
   trades: Trade[];
   settings: AppSettings;
+  selectedDate?: string;
 }
 
 export type MarketType = 'All' | 'Forex' | 'Crypto' | 'Stocks' | 'Futures' | 'Commodities';
@@ -40,6 +41,7 @@ export const getMarketForPair = (pair: string = ''): MarketType => {
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   trades = [],
   settings,
+  selectedDate,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<AnalyticsSubTab>('overview');
   const [performanceMode, setPerformanceMode] = useState<PerformanceMode>('STRATEGY');
@@ -47,15 +49,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [marketFilter, setMarketFilter] = useState<MarketType>('All');
   const [tableResultFilter, setTableResultFilter] = useState<'All' | 'Win' | 'Loss'>('All');
   const [tablePage, setTablePage] = useState<number>(0);
+  const [filterBySelectedDate, setFilterBySelectedDate] = useState<boolean>(false);
 
   const currSymbol = settings?.currency === 'USD' ? '$' : '₹';
 
-  // 1. Filter trades by Timeframe and Market
+  // 1. Filter trades by Timeframe, Market, and optional active date
   const filteredTrades = useMemo(() => {
     let list = [...trades];
 
-    // Filter by Timeframe
-    if (timeframe !== 'ALL') {
+    // Optional single-day lock if user clicks the date filter pill
+    if (filterBySelectedDate && selectedDate) {
+      list = list.filter((t) => t.date === selectedDate);
+    } else if (timeframe !== 'ALL') {
       const now = new Date();
       let daysAgo = 30;
       if (timeframe === '7D') daysAgo = 7;
@@ -75,7 +80,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
     // Chronological order for curve and calculations
     return list.sort((a, b) => new Date(`${a.date}T${a.time || '00:00'}`).getTime() - new Date(`${b.date}T${b.time || '00:00'}`).getTime());
-  }, [trades, timeframe, marketFilter]);
+  }, [trades, timeframe, marketFilter, filterBySelectedDate, selectedDate]);
 
   // 2. Centralized Performance Intelligence Report
   const intelligenceReport = useMemo(() => {
@@ -284,23 +289,49 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
         {/* Filters Row: Timeframe Pills + Market Dropdown */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <div className="flex items-center gap-1 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] p-1 rounded-xl shadow-2xs text-xs font-semibold">
-            {(['7D', '30D', '90D', '1Y', 'ALL'] as const).map((tf) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] p-1 rounded-xl shadow-2xs text-xs font-semibold">
+              {(['7D', '30D', '90D', '1Y', 'ALL'] as const).map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => {
+                    setFilterBySelectedDate(false);
+                    setTimeframe(tf);
+                    setTablePage(0);
+                  }}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    !filterBySelectedDate && timeframe === tf
+                      ? 'bg-[#DB9F35] text-white font-bold shadow-2xs'
+                      : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+
+            {selectedDate && (
               <button
-                key={tf}
+                type="button"
                 onClick={() => {
-                  setTimeframe(tf);
+                  setFilterBySelectedDate(!filterBySelectedDate);
                   setTablePage(0);
                 }}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  timeframe === tf
-                    ? 'bg-[#DB9F35] text-white font-bold shadow-2xs'
-                    : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                  filterBySelectedDate
+                    ? 'bg-[#10B981] text-white border-[#10B981]'
+                    : 'bg-white dark:bg-[#131822] border-[#E7E0D6] dark:border-[#242D3D] text-[#786F66] dark:text-[#94A3B8] hover:border-[#10B981]'
                 }`}
+                title="Filter analytics to the active top date"
               >
-                {tf}
+                <span>📅 {selectedDate}</span>
+                <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                  filterBySelectedDate ? 'bg-black/25 text-white' : 'bg-[#E7E0D6] dark:bg-[#242D3D]'
+                }`}>
+                  {filterBySelectedDate ? 'Filtered' : 'Filter by Day'}
+                </span>
               </button>
-            ))}
+            )}
           </div>
 
           <div className="flex items-center gap-2">
