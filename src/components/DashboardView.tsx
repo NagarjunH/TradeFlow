@@ -1217,7 +1217,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Interactive Ultra HD Glowing SVG Curve Area (1000 x 320) */}
-        <div className="relative pt-2 pb-1 w-full overflow-hidden">
+        <div className="relative pt-2 pb-1 w-full overflow-visible z-10">
           <svg 
             className="w-full h-auto block" 
             viewBox="0 0 1000 320" 
@@ -1459,29 +1459,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             ))}
           </svg>
 
-          {/* Interactive Floating Hover Tooltip */}
-          {hoveredPoint && (
-            <div 
-              style={{
-                left: `${Math.max(14, Math.min(86, (hoveredPoint.x / 1000) * 100))}%`,
-                top: `${Math.max(8, (hoveredPoint.y / 320) * 100 - 16)}%`,
-                transform: 'translate(-50%, -100%)',
-              }}
-              className="absolute pointer-events-none bg-white dark:bg-[#0B0F17] rounded-xl p-3 text-xs shadow-xl border border-[#E7E0D6] dark:border-[#1E293B] z-30 min-w-[140px] text-[#1F1A16] dark:text-white"
-            >
-              <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8] font-mono">
-                {hoveredPoint.date} {hoveredPoint.time ? `· ${hoveredPoint.time}` : ''}
+          {/* Interactive Floating Hover Tooltip (Smart vertical flip so it is NEVER clipped at the top) */}
+          {hoveredPoint && (() => {
+            const isNearTop = hoveredPoint.y < 120; // top 37.5% of chart
+            const topPct = (hoveredPoint.y / 320) * 100;
+            const leftPct = Math.max(16, Math.min(84, (hoveredPoint.x / 1000) * 100));
+
+            return (
+              <div 
+                style={{
+                  left: `${leftPct}%`,
+                  top: `${topPct}%`,
+                  transform: isNearTop ? 'translate(-50%, 14px)' : 'translate(-50%, -100%)',
+                }}
+                className="absolute pointer-events-none bg-white dark:bg-[#0B0F17] rounded-xl p-3 text-xs shadow-2xl border border-[#E7E0D6] dark:border-[#242D3D] z-50 min-w-[145px] text-[#1F1A16] dark:text-white transition-transform duration-75"
+              >
+                <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8] font-mono">
+                  {hoveredPoint.date} {hoveredPoint.time ? `· ${hoveredPoint.time}` : ''}
+                </div>
+                <div className="text-sm font-black font-mono text-[#1F1A16] dark:text-white mt-0.5">
+                  {currSymbol}{hoveredPoint.balance.toFixed(2)}
+                </div>
+                <div className={`text-[10px] font-mono font-bold mt-0.5 ${
+                  hoveredPoint.pnl >= 0 ? 'text-[#15803D] dark:text-[#00FF88]' : 'text-[#DC2626] dark:text-[#FF3B30]'
+                }`}>
+                  {hoveredPoint.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(hoveredPoint.pnl).toFixed(2)} ({hoveredPoint.roi >= 0 ? '+' : ''}{hoveredPoint.roi.toFixed(1)}%)
+                </div>
               </div>
-              <div className="text-sm font-black font-mono text-[#1F1A16] dark:text-white mt-0.5">
-                {currSymbol}{hoveredPoint.balance.toFixed(2)}
-              </div>
-              <div className={`text-[10px] font-mono font-bold mt-0.5 ${
-                hoveredPoint.pnl >= 0 ? 'text-[#15803D] dark:text-[#00FF88]' : 'text-[#DC2626] dark:text-[#FF3B30]'
-              }`}>
-                {hoveredPoint.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(hoveredPoint.pnl).toFixed(2)} ({hoveredPoint.roi >= 0 ? '+' : ''}{hoveredPoint.roi.toFixed(1)}%)
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Empty state overlay if no trades */}
           {!equityChartData.hasData && (
@@ -2084,7 +2090,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Left Column: 7 Days Columns */}
           <div className="lg:col-span-9 xl:col-span-10 flex flex-col justify-between">
             {/* 7-Col Days Header: SUN, MON, TUE, WED, THU, FRI, SAT */}
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2 text-center pb-2 text-[10px] sm:text-xs font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider border-b border-[#E7E0D6]/40 dark:border-[#242D3D]">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center pb-2 text-[10px] sm:text-xs font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider border-b border-[#E7E0D6]/40 dark:border-[#242D3D]">
               <span>Sun</span>
               <span>Mon</span>
               <span>Tue</span>
@@ -2095,15 +2101,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Weeks Container */}
-            <div className="space-y-1.5 sm:space-y-2 pt-2">
+            <div className="space-y-1 sm:space-y-2 pt-2">
               {calendarWeeksData.weeks.map((week, wIdx) => (
-                <div key={`wrow-${wIdx}`} className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                <div key={`wrow-${wIdx}`} className="grid grid-cols-7 gap-1 sm:gap-2">
                   {week.days.map((c, dIdx) => {
                     if (!c.day) {
                       return (
                         <div
                           key={`empty-${dIdx}`}
-                          className="min-h-[64px] sm:min-h-[82px] rounded-xl bg-transparent"
+                          className="min-h-[56px] sm:min-h-[82px] rounded-lg sm:rounded-xl bg-transparent"
                         />
                       );
                     }
@@ -2140,7 +2146,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             ? `${c.dateStr}: ${c.pnl && c.pnl >= 0 ? '+' : '-'}${currSymbol}${Math.abs(c.pnl || 0).toFixed(2)} (${c.count} trades)`
                             : `${c.dateStr}: No trades recorded`
                         }
-                        className={`p-1.5 sm:p-2 rounded-xl border min-h-[64px] sm:min-h-[82px] flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] ${
+                        className={`p-1 sm:p-2 rounded-lg sm:rounded-xl border min-h-[56px] sm:min-h-[82px] flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] ${
                           isSelected ? 'ring-2 ring-[#DB9F35] dark:ring-[#F59E0B] border-[#DB9F35] dark:border-[#F59E0B] shadow-md' : ''
                         } ${tileStyle}`}
                       >

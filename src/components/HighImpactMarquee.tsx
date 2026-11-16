@@ -4,20 +4,21 @@ import { getEventsForDate, type EconomicEvent } from '../services/economicCalend
 
 interface HighImpactMarqueeProps {
   currentDate?: string;
+  isMobile?: boolean;
 }
 
-export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDate }) => {
+export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDate, isMobile = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const events: EconomicEvent[] = getEventsForDate(currentDate);
 
   const highImpactCount = events.filter((e) => e.impact === 'HIGH').length;
 
   return (
-    <div className="relative flex-1 min-w-0 max-w-xl">
+    <div className={`relative min-w-0 ${isMobile ? 'w-full' : 'flex-1 max-w-xl'}`}>
       {/* Marquee Pill Strip */}
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] hover:border-[#DC2626]/50 shadow-2xs transition-all cursor-pointer group overflow-hidden"
+        className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] hover:border-[#DC2626]/50 shadow-2xs transition-all cursor-pointer group overflow-hidden w-full"
         title="Click to view full economic calendar for today (IST)"
       >
         {/* Red Icon / Volatility Indicator */}
@@ -36,30 +37,32 @@ export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDat
           </span>
           <span className="text-[10px] font-black uppercase tracking-wider text-[#DC2626] flex items-center gap-1">
             <Flame className="w-3 h-3 text-[#DC2626]" />
-            <span className="hidden sm:inline">HIGH IMPACT (IST)</span>
+            <span className="text-[9px] sm:text-[10px] whitespace-nowrap">
+              {isMobile ? 'HIGH IMPACT' : 'HIGH IMPACT (IST)'}
+            </span>
           </span>
           <span className="text-[#9E958C] text-[10px]">|</span>
         </div>
 
         {/* Marquee Scrolling Content */}
-        <div className="flex-1 overflow-hidden relative whitespace-nowrap">
+        <div className="flex-1 overflow-hidden relative whitespace-nowrap min-w-0">
           {events.length === 0 ? (
             <div className="flex items-center gap-1.5 text-xs text-[#10B981] font-semibold">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Clean Market Session · No High-Impact Events Today</span>
             </div>
           ) : (
-            <div className="inline-flex items-center gap-6 animate-marquee group-hover:[animation-play-state:paused]">
+            <div className="inline-flex items-center gap-5 sm:gap-6 animate-marquee group-hover:[animation-play-state:paused]">
               {[...events, ...events].map((ev, i) => (
                 <div key={`${ev.id}_${i}`} className="inline-flex items-center gap-2 text-xs shrink-0">
-                  <span className="px-1.5 py-0.2 rounded font-mono text-[10px] font-bold bg-[#FAF2E6] dark:bg-[#1C2331] text-[#786F66] dark:text-[#94A3B8] border border-[#E8DCC8] dark:border-[#2E384D]">
+                  <span className="px-1.5 py-0.2 rounded font-mono text-[9px] sm:text-[10px] font-bold bg-[#FAF2E6] dark:bg-[#1C2331] text-[#786F66] dark:text-[#94A3B8] border border-[#E8DCC8] dark:border-[#2E384D]">
                     {ev.timeIst}
                   </span>
-                  <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+                  <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8] text-[11px] sm:text-xs">
                     [{ev.currency}] {ev.event}
                   </span>
                   <span
-                    className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                    className={`px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-bold ${
                       ev.impact === 'HIGH'
                         ? 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626]'
                         : 'bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35]'
@@ -76,19 +79,19 @@ export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDat
 
         {/* Details Dropdown Indicator */}
         <div className="shrink-0 flex items-center gap-1 text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] group-hover:text-[#1F1A16] dark:group-hover:text-white">
-          <span className="hidden md:inline">{events.length} Events</span>
+          <span className="hidden sm:inline">{events.length} Events</span>
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
-      {/* Popover: Full Day Economic Calendar Modal/Dropdown */}
+      {/* Popover: Full Day Economic Calendar Modal/Dropdown (Responsive for mobile & desktop) */}
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute left-0 top-full mt-2 w-full max-w-lg bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xl z-50 animate-fade-in text-[#1F1A16] dark:text-[#F0F4F8]">
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D]">
+          <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-2xs" onClick={() => setIsOpen(false)} />
+          <div className="fixed inset-x-3 top-20 sm:absolute sm:top-full sm:mt-2 sm:inset-x-auto sm:left-0 w-auto sm:w-[480px] sm:max-w-lg bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 shadow-2xl z-50 animate-fade-in text-[#1F1A16] dark:text-[#F0F4F8] max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between pb-2.5 border-b border-[#E7E0D6]/60 dark:border-[#242D3D] shrink-0">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center">
+                <div className="w-7 h-7 rounded-lg bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] flex items-center justify-center shrink-0">
                   <Flame className="w-4 h-4" />
                 </div>
                 <div>
@@ -103,13 +106,13 @@ export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDat
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1 rounded-lg hover:bg-[#E7E0D6] dark:hover:bg-[#242D3D] text-[#786F66] dark:text-[#94A3B8]"
+                className="p-1 rounded-lg hover:bg-[#E7E0D6] dark:hover:bg-[#242D3D] text-[#786F66] dark:text-[#94A3B8] cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="divide-y divide-[#E7E0D6]/50 dark:divide-[#242D3D] mt-2 max-h-64 overflow-y-auto">
+            <div className="divide-y divide-[#E7E0D6]/50 dark:divide-[#242D3D] mt-2 overflow-y-auto flex-1 pr-1">
               {events.length === 0 ? (
                 <div className="py-6 text-center text-xs text-[#786F66] dark:text-[#94A3B8]">
                   No major economic releases scheduled for this date.
@@ -117,19 +120,19 @@ export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDat
               ) : (
                 events.map((ev) => (
                   <div key={ev.id} className="py-2.5 flex items-center justify-between text-xs gap-3">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <span className="font-mono text-[11px] font-bold text-[#DC2626] bg-[#FEECEB] dark:bg-[#321B1B] px-2 py-0.5 rounded-md shrink-0">
                         {ev.timeIst}
                       </span>
-                      <div>
-                        <div className="flex items-center gap-1.5 font-bold">
-                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] font-mono border border-[#E8DCC8] dark:border-[#2E384D]">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 font-bold truncate">
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] font-mono border border-[#E8DCC8] dark:border-[#2E384D] shrink-0">
                             {ev.currency}
                           </span>
-                          <span>{ev.event}</span>
+                          <span className="truncate">{ev.event}</span>
                         </div>
                         {(ev.forecast || ev.previous) && (
-                          <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8] font-mono mt-0.5">
+                          <div className="text-[10px] text-[#786F66] dark:text-[#94A3B8] font-mono mt-0.5 truncate">
                             Forecast: <b className="text-[#1F1A16] dark:text-white">{ev.forecast || '--'}</b> · Prior:{' '}
                             <b>{ev.previous || '--'}</b>
                           </div>
@@ -150,7 +153,7 @@ export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDat
               )}
             </div>
 
-            <div className="pt-2.5 mt-2 border-t border-[#E7E0D6]/60 dark:border-[#242D3D] flex items-center justify-between text-[10px] text-[#786F66] dark:text-[#94A3B8]">
+            <div className="pt-2.5 mt-2 border-t border-[#E7E0D6]/60 dark:border-[#242D3D] flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] text-[#786F66] dark:text-[#94A3B8] shrink-0">
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3 text-[#10B981]" /> All times displayed in Indian Standard Time (IST)
               </span>

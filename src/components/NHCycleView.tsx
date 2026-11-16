@@ -461,15 +461,15 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
             </div>
 
             {/* Weeks Container */}
-            <div className="space-y-1.5 sm:space-y-2 pt-2">
+            <div className="space-y-1 sm:space-y-2 pt-2">
               {calendarWeeksData.weeks.map((week, wIdx) => (
-                <div key={`wrow-${wIdx}`} className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                <div key={`wrow-${wIdx}`} className="grid grid-cols-7 gap-1 sm:gap-2">
                   {week.days.map((c, dIdx) => {
                     if (!c.day) {
                       return (
                         <div
                           key={`empty-${wIdx}-${dIdx}`}
-                          className="min-h-[72px] sm:min-h-[92px] rounded-xl bg-transparent border border-dashed border-[#E7E0D6]/40 dark:border-[#1E2533]/40 opacity-30"
+                          className="min-h-[58px] sm:min-h-[92px] rounded-lg sm:rounded-xl bg-transparent border border-dashed border-[#E7E0D6]/40 dark:border-[#1E2533]/40 opacity-30"
                         />
                       );
                     }
@@ -528,7 +528,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                             setModalReason(c.dayRecord?.noTradeReason || 'No Setup');
                           }
                         }}
-                        className={`relative rounded-xl border p-2 sm:p-2.5 flex flex-col justify-between min-h-[72px] sm:min-h-[92px] transition-all group ${
+                        className={`relative rounded-lg sm:rounded-xl border p-1 sm:p-2.5 flex flex-col justify-between min-h-[58px] sm:min-h-[92px] transition-all group ${
                           hasTrades || !isWeekend ? 'cursor-pointer hover:scale-[1.02] hover:shadow-md' : 'cursor-default'
                         } ${tileBg}`}
                       >

@@ -11,6 +11,7 @@ import { getDayStatus, calculatePerformance, generateEquityCurve } from './utils
 
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
+import { getLocalDateIso } from './components/DatePickerDropdown';
 import type { TabType } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 
@@ -57,7 +58,21 @@ function AppInner() {
     title: '',
   });
   const [journalDateFilter, setJournalDateFilter] = useState<string | undefined>(undefined);
-  const [systemDate, setSystemDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [isManualDateSelected, setIsManualDateSelected] = useState<boolean>(false);
+  const [systemDate, setSystemDate] = useState<string>(() => getLocalDateIso());
+
+  // Automatically keep systemDate updated with current local time when in Live Mode
+  useEffect(() => {
+    const syncWithLocalClock = () => {
+      if (!isManualDateSelected) {
+        const todayStr = getLocalDateIso();
+        setSystemDate((prev) => (prev !== todayStr ? todayStr : prev));
+      }
+    };
+    syncWithLocalClock();
+    const interval = setInterval(syncWithLocalClock, 3000);
+    return () => clearInterval(interval);
+  }, [isManualDateSelected]);
 
   // ── Cloud & Local data state (SWR reactive data) ──────────────────────
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -248,10 +263,14 @@ function AppInner() {
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         <TopHeader
           currentDate={systemDate}
-          onDateChange={(newDate) => {
+          onDateChange={(newDate, isLive) => {
+            const todayStr = getLocalDateIso();
+            const shouldBeLive = isLive || newDate === todayStr;
+            setIsManualDateSelected(!shouldBeLive);
             setSystemDate(newDate);
             setJournalDateFilter(newDate);
           }}
+          isLiveDate={!isManualDateSelected}
           dayStatus={dayStatus}
           isDayClosedToday={isDayClosedToday}
           onOpenQuickTrade={() => {
@@ -273,6 +292,8 @@ function AppInner() {
               settings={settings}
               selectedDate={systemDate}
               onSelectDate={(newDate) => {
+                const todayStr = getLocalDateIso();
+                setIsManualDateSelected(newDate !== todayStr);
                 setSystemDate(newDate);
                 setJournalDateFilter(newDate);
               }}
