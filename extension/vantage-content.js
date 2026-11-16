@@ -295,7 +295,7 @@
     let currency = null;
 
     // Strategy 1: Scan all compact label nodes across DOM + Shadow DOM (header, top bar, or bottom account bar)
-    const candidates = queryAllDeep('span, div, p, td, th, dt, dd, label, strong, b, button');
+    const candidates = queryAllDeep('span, div, p, td, th, dt, dd, label, strong, b, button, a, h1, h2, h3, h4, h5');
 
     const inspectLabel = (el, labelRegex) => {
       const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();

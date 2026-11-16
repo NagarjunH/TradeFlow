@@ -3,7 +3,6 @@ import {
   LayoutDashboard, 
   BookOpen, 
   CalendarCheck,
-  Trophy,
   BarChart2,
   FileText,
   Settings as SettingsIcon,
@@ -28,7 +27,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'journal' as TabType, label: 'Trading Journal', icon: BookOpen },
     { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarCheck },
-    { id: 'challenge21' as TabType, label: '21 Days Challenge', icon: Trophy },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart2 },
     { id: 'notes' as TabType, label: 'Notes', icon: FileText },
     { id: 'settings' as TabType, label: 'Settings', icon: SettingsIcon },
@@ -80,7 +78,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
-            const isChallenge = item.id === 'challenge21';
 
             return (
               <button
@@ -88,27 +85,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => handleNavClick(item.id)}
                 className={`relative w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] sm:text-sm font-semibold transition-all cursor-pointer text-left overflow-hidden ${
                   isActive
-                    ? isChallenge
-                      ? 'bg-[#FCEFD8] dark:bg-[#342416] text-[#6E3C12] dark:text-[#FBBF24] font-bold shadow-2xs'
-                      : 'bg-[#F4ECE1] dark:bg-[#1E2638] text-[#1F1A16] dark:text-[#F0F4F8] font-bold shadow-2xs'
+                    ? 'bg-[#F4ECE1] dark:bg-[#1E2638] text-[#1F1A16] dark:text-[#F0F4F8] font-bold shadow-2xs'
                     : 'text-[#624E3D] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] hover:bg-[#F3EDE2]/70 dark:hover:bg-[#1A2230]'
                 }`}
               >
-                {/* Left orange accent bar indicator */}
+                {/* Left green accent bar indicator */}
                 {isActive && (
-                  <span
-                    className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-md ${
-                      isChallenge ? 'bg-[#E08A2B]' : 'bg-[#10B981]'
-                    }`}
-                  />
+                  <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-md bg-[#10B981]" />
                 )}
                 <Icon
                   className={`w-4 h-4 shrink-0 ${
-                    isActive
-                      ? isChallenge
-                        ? 'text-[#C8681A] dark:text-[#F59E0B]'
-                        : 'text-[#10B981]'
-                      : 'text-[#6E5845] dark:text-[#78869E]'
+                    isActive ? 'text-[#10B981]' : 'text-[#6E5845] dark:text-[#78869E]'
                   }`}
                 />
                 <span className="truncate">{item.label}</span>

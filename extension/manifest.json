@@ -41,7 +41,8 @@
       "matches": [
         "https://secure.vantagemarkets.com/web-trade*",
         "https://*.vantagemarkets.com/web-trade*",
-        "https://secure.vantagemarkets.com/*"
+        "https://secure.vantagemarkets.com/*",
+        "https://*.vantagemarkets.com/*"
       ],
       "js": [
         "vantage-content.js"

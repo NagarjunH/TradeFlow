@@ -19,7 +19,6 @@ const JournalView = lazy(() => import('./components/JournalView').then((m) => ({
 const NHCycleView = lazy(() => import('./components/NHCycleView').then((m) => ({ default: m.NHCycleView })));
 const EquityChart = lazy(() => import('./components/EquityChart').then((m) => ({ default: m.EquityChart })));
 const AnalyticsView = lazy(() => import('./components/AnalyticsView').then((m) => ({ default: m.AnalyticsView })));
-const Challenge21View = lazy(() => import('./components/Challenge21View').then((m) => ({ default: m.Challenge21View })));
 const NotesView = lazy(() => import('./components/NotesView').then((m) => ({ default: m.NotesView })));
 const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
 const QuickTradeModal = lazy(() => import('./components/QuickTradeModal').then((m) => ({ default: m.QuickTradeModal })));
@@ -315,16 +314,6 @@ function AppInner() {
                   setQuickTradeInitialDate(dateStr);
                   setIsQuickTradeOpen(true);
                 }}
-              />
-            )}
-
-            {currentTab === 'challenge21' && (
-              <Challenge21View
-                trades={trades}
-                days={days}
-                settings={settings}
-                onSelectDate={handleSelectDateForJournal}
-                onTabChange={setCurrentTab}
               />
             )}
 

@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, 
   Download, 
-  ShieldAlert, 
-  Lock, 
   Check, 
   Database,
   History,
@@ -15,7 +13,6 @@ import {
   Zap
 } from 'lucide-react';
 import { type AppSettings } from '../db/db';
-import { settingsApi } from '../lib/api/settingsApi';
 import { auditApi } from '../lib/api/auditApi';
 import { supabase } from '../lib/supabase';
 import { onInstallAvailabilityChange, promptPWAInstall } from '../registerServiceWorker';
@@ -33,8 +30,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   userId,
   onOpenVantageSync,
 }) => {
-  const [formData, setFormData] = useState<AppSettings>(settings);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [auditLogs, setAuditLogs] = useState<{ id: string; action: string; details: string; created_at: string }[]>([]);
   const [canInstall, setCanInstall] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
@@ -54,7 +49,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   }, []);
 
   useEffect(() => {
-    setFormData(settings);
     if (userId) loadAuditLogs();
   }, [settings, userId]);
 
@@ -68,26 +62,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId) return;
-    await settingsApi.save(userId, { ...formData, currentBalance: settings.currentBalance });
-    await auditApi.add(
-      userId,
-      'UPDATE',
-      `Updated settings (Currency: ${formData.currency}, Risk: ${formData.riskPerTradePercent}%, Limit: ${formData.dailyLossLimitR}R, Mode: ${formData.protectionMode})`
-    );
-    setSaveSuccess(true);
-    onSettingsUpdated();
-    setTimeout(() => setSaveSuccess(false), 2500);
-  };
-
   const handleExportBackup = () => {
     const backupData = {
       version: 2,
       exportedAt: new Date().toISOString(),
       appName: 'TradeFlow Cloud Database',
-      settings: formData,
+      settings,
       note: 'Your data is securely stored in Supabase cloud PostgreSQL.',
     };
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -132,7 +112,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       // 3. Reset profile balance to initial capital
       await supabase
         .from('profiles')
-        .update({ current_balance: formData.initialCapital } as never)
+        .update({ current_balance: settings.initialCapital } as never)
         .eq('id', userId);
 
       // 4. Log the reset event & clear local challenge storage
@@ -142,7 +122,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         console.warn('Could not write reset audit log:', logErr);
       }
 
-      // Clear 21-day challenge keys so new user/reset state is 100% clean and unchecked
+      // Clear legacy storage keys so reset state is 100% clean
       [
         'nh_traders_21day_challenge_config_v2',
         'nh_traders_21day_challenge_overrides_v2',
@@ -183,145 +163,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
           <div>
             <h2 className="text-base font-bold uppercase tracking-wide">
-              Account & Risk Configuration
+              Account &amp; Sync Settings
             </h2>
             <p className="text-xs text-[#786F66] dark:text-[#94A3B8] mt-0.5">
-              Customize risk parameters, base currency, loss limits, and cloud data controls
+              Manage broker sync, cloud data controls, app installation, and audit logs
             </p>
           </div>
         </div>
       </div>
 
-      {/* 2. Trading Parameters Form */}
-      <form onSubmit={handleSave} className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 space-y-5 shadow-2xs transition-colors">
-        <div className="border-b border-[#E7E0D6] dark:border-[#242D3D] pb-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-[#10B981]">
-            Trading Parameters
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-          <div>
-            <label className="block font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1.5">
-              Started Balance (Initial Capital)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={formData.initialCapital}
-              onChange={(e) => setFormData({ ...formData, initialCapital: parseFloat(e.target.value) || 0 })}
-              className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-[#1F1A16] dark:text-[#F0F4F8] font-mono focus:border-[#10B981] outline-none transition-colors"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1.5">
-              Base Currency
-            </label>
-            <div className="flex gap-2">
-              {(['USD', 'INR'] as const).map((curr) => (
-                <button
-                  key={curr}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, currency: curr })}
-                  className={`flex-1 py-2 rounded-xl font-bold border transition-all cursor-pointer ${
-                    formData.currency === curr
-                      ? 'bg-[#10B981]/15 text-[#059669] dark:text-[#34D399] border-[#10B981]'
-                      : 'bg-[#FAF7F2] dark:bg-[#0E121B] border-[#E7E0D6] dark:border-[#242D3D] text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
-                  }`}
-                >
-                  {curr}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1.5">
-              Risk Per Trade (%)
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              value={formData.riskPerTradePercent}
-              onChange={(e) => setFormData({ ...formData, riskPerTradePercent: parseFloat(e.target.value) || 0 })}
-              className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-[#1F1A16] dark:text-[#F0F4F8] font-mono focus:border-[#10B981] outline-none transition-colors"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1.5">
-              Daily Loss Limit (R)
-            </label>
-            <input
-              type="number"
-              step="0.5"
-              value={formData.dailyLossLimitR}
-              onChange={(e) => setFormData({ ...formData, dailyLossLimitR: parseFloat(e.target.value) || 0 })}
-              className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-[#1F1A16] dark:text-[#F0F4F8] font-mono focus:border-[#10B981] outline-none transition-colors"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1.5">
-              Default Instrument
-            </label>
-            <input
-              type="text"
-              value={formData.defaultPair}
-              onChange={(e) => setFormData({ ...formData, defaultPair: e.target.value })}
-              className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#0E121B] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-[#1F1A16] dark:text-[#F0F4F8] focus:border-[#10B981] outline-none transition-colors"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-[#786F66] dark:text-[#94A3B8] uppercase mb-1.5">
-              Circuit Breaker Protection Mode
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, protectionMode: 'HARD_LOCK' })}
-                className={`flex-1 py-2 px-2 rounded-xl text-[11px] font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  formData.protectionMode === 'HARD_LOCK'
-                    ? 'bg-[#DC2626]/10 text-[#DC2626] border-[#DC2626]'
-                    : 'bg-[#FAF7F2] dark:bg-[#0E121B] border-[#E7E0D6] dark:border-[#242D3D] text-[#786F66] dark:text-[#94A3B8]'
-                }`}
-              >
-                <Lock className="w-3 h-3" /> Hard Lock
-              </button>
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, protectionMode: 'SOFT_WARNING' })}
-                className={`flex-1 py-2 px-2 rounded-xl text-[11px] font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  formData.protectionMode === 'SOFT_WARNING'
-                    ? 'bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]'
-                    : 'bg-[#FAF7F2] dark:bg-[#0E121B] border-[#E7E0D6] dark:border-[#242D3D] text-[#786F66] dark:text-[#94A3B8]'
-                }`}
-              >
-                <ShieldAlert className="w-3 h-3" /> Soft Warning
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-[#E7E0D6] dark:border-[#242D3D] flex items-center justify-between">
-          {saveSuccess ? (
-            <span className="text-xs font-semibold text-[#10B981] flex items-center gap-1.5 animate-fade-in">
-              <Check className="w-4 h-4" /> Settings updated successfully!
-            </span>
-          ) : <span />}
-
-          <button
-            type="submit"
-            className="px-6 py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-          >
-            Save Settings
-          </button>
-        </div>
-      </form>
-
-      {/* 2B. Vantage Web-Trade Auto-Sync & Broker Bridge */}
+      {/* 2. Vantage Web-Trade Auto-Sync & Broker Bridge */}
       {onOpenVantageSync && (
         <div className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 space-y-4 shadow-2xs transition-colors">
           <div className="flex items-center justify-between border-b border-[#E7E0D6] dark:border-[#242D3D] pb-3">

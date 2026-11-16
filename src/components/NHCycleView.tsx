@@ -52,8 +52,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
     'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
   ];
 
-  const [challengeMode, setChallengeMode] = useState<'21_DAY' | '31_DAY'>('31_DAY');
-  const daysInCycle = challengeMode === '21_DAY' ? 21 : 31;
+  const daysInCycle = 31;
 
   // Selected day for the action dialog / modal
   const [selectedDayModal, setSelectedDayModal] = useState<{
@@ -149,44 +148,18 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
             <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-[#1F1A16] dark:text-[#F0F4F8] uppercase">
               TRADE<span className="text-[#DB9F35]">FLOW</span>{' '}
               <span className="text-[#9B671B] dark:text-[#F59E0B]">
-                {challengeMode === '21_DAY' ? '21-DAY CHALLENGE' : `${monthNames[cycleMonth - 1]} ${cycleYear}`}
+                {monthNames[cycleMonth - 1]} {cycleYear}
               </span>
             </h1>
             <div className="flex items-center gap-2 text-xs text-[#786F66] dark:text-[#94A3B8] font-medium tracking-wide">
-              <span>{challengeMode === '21_DAY' ? 'DISCIPLINE CHALLENGE' : 'MONTHLY TRADING CYCLE'}</span>
+              <span>MONTHLY TRADING CYCLE</span>
               <span>|</span>
               <span className="text-[#1F1A16] dark:text-[#F0F4F8] font-bold">DISCIPLINE TODAY • PROFITS TOMORROW</span>
             </div>
           </div>
 
-          {/* Mode Selector & Month Selector */}
+          {/* Month Selector */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* 21-Day Challenge vs 31-Day Cycle Mode Toggle */}
-            <div className="flex items-center bg-[#F2ECE0] dark:bg-[#1A2230] border border-[#DFD5C6] dark:border-[#283244] p-1 rounded-xl text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setChallengeMode('21_DAY')}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  challengeMode === '21_DAY'
-                    ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
-                    : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
-                }`}
-              >
-                🔥 21-Day Challenge
-              </button>
-              <button
-                type="button"
-                onClick={() => setChallengeMode('31_DAY')}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  challengeMode === '31_DAY'
-                    ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
-                    : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
-                }`}
-              >
-                📅 31-Day Cycle
-              </button>
-            </div>
-
             <select
               value={cycleMonth}
               onChange={(e) => setCycleMonth(Number(e.target.value))}

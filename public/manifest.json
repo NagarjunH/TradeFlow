@@ -1,7 +1,7 @@
 {
   "name": "TradeFlow - Trading Journal & Analytics",
   "short_name": "TradeFlow",
-  "description": "Professional Trading Journal, 21-Day Challenge, Rule Tracker, and Performance Analytics",
+  "description": "Professional Trading Journal, 31-Day Cycle, Rule Tracker, and Performance Analytics",
   "id": "/?source=pwa",
   "start_url": "/",
   "scope": "/",
@@ -80,10 +80,10 @@
       ]
     },
     {
-      "name": "21 Days Challenge",
-      "short_name": "Challenge",
-      "description": "Track daily discipline rules and progress",
-      "url": "/?tab=challenge21",
+      "name": "31-Day Cycle",
+      "short_name": "Cycle",
+      "description": "Track monthly trading cycle and discipline rules",
+      "url": "/?tab=cycle",
       "icons": [
         {
           "src": "/pwa-192x192.png",

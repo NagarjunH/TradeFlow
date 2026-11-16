@@ -848,7 +848,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-2.5">
-            <div className="text-2xl sm:text-[26px] font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight">
+            <div className="text-xl sm:text-2xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight" title={`${currSymbol}${perf.currentBalance.toFixed(2)}`}>
               {currSymbol}{perf.currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className={`text-xs font-bold font-mono flex items-center gap-1 mt-1 ${
@@ -856,7 +856,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             }`}>
               <span>{perf.netPnl >= 0 ? '↑' : '↓'}</span>
               <span>
-                {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)} ({perf.netPnl >= 0 ? '+' : ''}{perf.roiPercent.toFixed(1)}%)
+                {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)} ({perf.netPnl >= 0 ? '+' : ''}{(initialCapital > 0 ? (perf.netPnl / initialCapital) * 100 : 0).toFixed(1)}%)
               </span>
             </div>
             <div className="text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-1">
@@ -884,7 +884,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           </div>
           <div className="mt-2.5">
-            <div className="text-2xl sm:text-[26px] font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight">
+            <div className="text-xl sm:text-2xl font-black font-mono text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight truncate leading-tight" title={`${currSymbol}${initialCapital.toFixed(2)}`}>
               {currSymbol}{initialCapital.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="flex items-center justify-between mt-1 text-[10px] font-mono">
@@ -914,9 +914,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-2.5">
-            <div className={`text-2xl sm:text-[26px] font-black font-mono tracking-tight truncate leading-tight ${
+            <div className={`text-xl sm:text-2xl font-black font-mono tracking-tight truncate leading-tight ${
               perf.netPnl >= 0 ? 'text-[#10B981]' : 'text-[#DC2626]'
-            }`}>
+            }`} title={`${perf.netPnl >= 0 ? '+' : '-'}${currSymbol}${Math.abs(perf.netPnl).toFixed(2)}`}>
               {perf.netPnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(perf.netPnl).toFixed(2)}
             </div>
             <div className={`text-xs font-bold font-mono mt-1 ${
@@ -2374,7 +2374,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => navigate('challenge21')}
+                onClick={() => navigate('analytics')}
                 className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
               >
                 <span>View Details</span>
@@ -2440,7 +2440,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => navigate('challenge21')}
+                onClick={() => navigate('analytics')}
                 className="text-[10px] font-bold text-[#DB9F35] hover:underline flex items-center gap-0.5 cursor-pointer"
               >
                 <span>View Details</span>
