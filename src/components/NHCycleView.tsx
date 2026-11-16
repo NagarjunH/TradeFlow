@@ -481,20 +481,28 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                     const isLoss = Boolean(c.isLoss);
                     const dayTrades = c.dayTrades || [];
 
-                    // Solid styling matching institutional screenshot
-                    let tileBg = 'bg-[#F2ECE0]/50 dark:bg-[#161D2B]/50 border-[#E7E0D6] dark:border-[#242D3D]';
+                    // Theme-aligned styling
+                    let tileBg = 'bg-white dark:bg-[#151C28]/60 border-[#E7E0D6] dark:border-[#242D3D] text-[#786F66] dark:text-[#94A3B8]';
                     let pnlColor = 'text-[#786F66] dark:text-[#94A3B8]';
+                    let dayNumColor = 'text-[#786F66] dark:text-[#94A3B8]';
+                    let tradesColor = 'text-[#786F66] dark:text-[#94A3B8]';
 
                     if (hasTrades) {
                       if (isWin) {
-                        tileBg = 'bg-[#E8F8EE] dark:bg-[#0D281E] border-[#B7ECC8] dark:border-[#10B981]/40 shadow-xs';
+                        tileBg = 'bg-[#E8F8EE] dark:bg-[#0D281E] border-[#B7ECC8] dark:border-[#10B981]/40 shadow-2xs hover:border-[#10B981]';
                         pnlColor = 'text-[#15803D] dark:text-[#34D399]';
+                        dayNumColor = 'text-[#15803D] dark:text-white/80';
+                        tradesColor = 'text-[#15803D]/80 dark:text-[#94A3B8]';
                       } else if (isLoss) {
-                        tileBg = 'bg-[#FEECEB] dark:bg-[#2A1316] border-[#FBC5C2] dark:border-[#EF4444]/40 shadow-xs';
+                        tileBg = 'bg-[#FEECEB] dark:bg-[#2A1316] border-[#FBC5C2] dark:border-[#EF4444]/40 shadow-2xs hover:border-[#EF4444]';
                         pnlColor = 'text-[#DC2626] dark:text-[#F87171]';
+                        dayNumColor = 'text-[#DC2626] dark:text-white/80';
+                        tradesColor = 'text-[#DC2626]/80 dark:text-[#94A3B8]';
                       } else {
-                        tileBg = 'bg-[#FFFBEB] dark:bg-[#252013] border-[#FDE68A] dark:border-[#F59E0B]/40 shadow-xs';
+                        tileBg = 'bg-[#FFFBEB] dark:bg-[#252013] border-[#FDE68A] dark:border-[#F59E0B]/40 shadow-2xs hover:border-[#F59E0B]';
                         pnlColor = 'text-[#D97706] dark:text-[#FBBF24]';
+                        dayNumColor = 'text-[#D97706] dark:text-white/80';
+                        tradesColor = 'text-[#D97706]/80 dark:text-[#94A3B8]';
                       }
                     } else if (isWeekend) {
                       tileBg = 'bg-[#F2ECE1]/60 dark:bg-[#0D121B] border-[#DFD5C6] dark:border-[#1F2738] opacity-75';
@@ -526,7 +534,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                       >
                         {/* Day Number (Top Left) & Flame/Badges (Top Right) */}
                         <div className="flex items-center justify-between leading-none">
-                          <span className="text-[11px] sm:text-xs font-mono font-bold text-[#786F66] dark:text-[#94A3B8]">
+                          <span className={`text-[11px] sm:text-xs font-mono font-bold ${dayNumColor}`}>
                             {c.day}
                           </span>
                           {isLoss && (
@@ -551,7 +559,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                               <div className={`text-xs sm:text-sm md:text-base font-black font-mono tracking-tight leading-tight ${pnlColor}`}>
                                 {(c.dayPnl || 0) >= 0 ? '+' : '-'}{currSymbol}{Math.abs(c.dayPnl || 0).toFixed(0)}
                               </div>
-                              <div className="text-[9px] sm:text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8] mt-0.5">
+                              <div className={`text-[9px] sm:text-[10px] font-mono mt-0.5 ${tradesColor}`}>
                                 {dayTrades.length} trade{dayTrades.length === 1 ? '' : 's'}
                               </div>
                             </div>
