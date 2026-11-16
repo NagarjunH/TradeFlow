@@ -65,7 +65,13 @@ export async function testGeminiApiKey(key: string): Promise<{ success: boolean;
     return { success: false, message: 'API key is empty.' };
   }
 
-  const models = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+  const models = [
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-2.5-flash-lite',
+    'gemini-1.5-flash'
+  ];
 
   for (const model of models) {
     try {
@@ -79,7 +85,7 @@ export async function testGeminiApiKey(key: string): Promise<{ success: boolean;
       });
 
       if (res.ok) {
-        return { success: true, message: `Connected successfully to Google ${model}!` };
+        return { success: true, message: `Connected successfully to Google Gemini (${model})!` };
       }
 
       const errData = await res.json().catch(() => ({}));
@@ -176,7 +182,13 @@ YOUR AUDIT MUST COVER THESE 5 SPECIFIC SECTIONS:
     },
   };
 
-  const models = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+  const models = [
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-2.5-flash-lite',
+    'gemini-1.5-flash'
+  ];
 
   for (const model of models) {
     try {
