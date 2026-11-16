@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Download, 
   ChevronLeft, 
@@ -49,7 +49,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [marketFilter, setMarketFilter] = useState<MarketType>('All');
   const [tableResultFilter, setTableResultFilter] = useState<'All' | 'Win' | 'Loss'>('All');
   const [tablePage, setTablePage] = useState<number>(0);
-  const [filterBySelectedDate, setFilterBySelectedDate] = useState<boolean>(false);
+  const [filterBySelectedDate, setFilterBySelectedDate] = useState<boolean>(Boolean(selectedDate));
+
+  // Automatically sync when selectedDate changes from TopHeader
+  useEffect(() => {
+    if (selectedDate) {
+      setFilterBySelectedDate(true);
+    }
+  }, [selectedDate]);
 
   const currSymbol = settings?.currency === 'USD' ? '$' : '₹';
 

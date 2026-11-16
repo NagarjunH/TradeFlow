@@ -85,7 +85,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'notebook' | 'trade_notes'>('notebook');
-  const [filterByDate, setFilterByDate] = useState<boolean>(false);
+  const [filterByDate, setFilterByDate] = useState<boolean>(Boolean(selectedDate));
+
+  // Automatically sync when selectedDate changes from TopHeader
+  useEffect(() => {
+    if (selectedDate) {
+      setFilterByDate(true);
+    }
+  }, [selectedDate]);
 
   // Modal State
   const [isEditorOpen, setIsEditorOpen] = useState(false);

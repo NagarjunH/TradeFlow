@@ -177,6 +177,7 @@ function AppInner() {
   }, [isQuickTradeOpen]);
 
   const handleSelectDateForJournal = (dateStr: string) => {
+    setSystemDate(dateStr);
     setJournalDateFilter(dateStr);
     setCurrentTab('journal');
   };
@@ -237,7 +238,6 @@ function AppInner() {
       <Sidebar
         currentTab={currentTab}
         onTabChange={(tab) => {
-          if (tab !== 'journal') setJournalDateFilter(undefined);
           setCurrentTab(tab);
         }}
         isOpen={isMobileSidebarOpen}
@@ -299,7 +299,7 @@ function AppInner() {
                   setIsQuickTradeOpen(true);
                 }}
                 onViewImage={handleViewImage}
-                selectedDateFilter={journalDateFilter || systemDate}
+                selectedDateFilter={journalDateFilter}
                 onClearDateFilter={() => setJournalDateFilter(undefined)}
                 onTabChange={setCurrentTab}
                 onOpenVantageSync={() => setIsVantageSyncOpen(true)}
