@@ -32,7 +32,8 @@ import {
   Camera,
   Upload,
   X,
-  ArrowUpDown
+  ArrowUpDown,
+  Download
 } from 'lucide-react';
 import type { Trade, AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
@@ -548,6 +549,100 @@ export const JournalView: React.FC<JournalViewProps> = ({
     (filterSuccessRate !== 'ALL' ? 1 : 0) +
     (selectedDateFilter ? 1 : 0);
 
+  // Export ALL Trades CSV Handler (Always exports the full trade history)
+  const handleExportAllTradesCSV = () => {
+    if (dbMappedTrades.length === 0) {
+      alert('No trades available to export.');
+      return;
+    }
+
+    // Sort oldest trade first so CSV reads chronologically
+    const allTradesChronological = [...dbMappedTrades].sort((a, b) => {
+      const dtA = `${a.rawDate} ${a.time}`;
+      const dtB = `${b.rawDate} ${b.time}`;
+      if (dtA !== dtB) return dtA.localeCompare(dtB);
+      return (Number(a.num) || 0) - (Number(b.num) || 0);
+    });
+
+    const headers = [
+      'Trade #',
+      'Date',
+      'Time',
+      'Pair',
+      'Direction',
+      'Lot Size',
+      'Entry Price',
+      'Exit Price',
+      'SL Price',
+      'TP Price',
+      'Net PnL ($)',
+      'R:R',
+      'Pips Captured',
+      'Outcome Classification',
+      'Execution Quality',
+      'Violation Reason',
+      'Session',
+      'Broker Ticket ID',
+      'Broker Source',
+      'Open Time',
+      'Close Time',
+      'Notes / Lessons'
+    ];
+
+    const rows = allTradesChronological.map((t) => {
+      const raw = t.rawTrade;
+      return [
+        t.num,
+        t.rawDate,
+        t.time,
+        t.pair,
+        t.order,
+        t.lot,
+        t.entryPrice != null ? t.entryPrice : '',
+        t.exitPrice != null ? t.exitPrice : '',
+        t.slPrice != null ? t.slPrice : '',
+        t.tpPrice != null ? t.tpPrice : '',
+        t.pnlNum.toFixed(2),
+        t.riskReward,
+        t.pips,
+        t.tradeSuccessRate,
+        raw?.execution || (t.pnlNum <= -50 ? 'VIOLATION' : 'CLEAN'),
+        raw?.violationReason || (t.pnlNum <= -50 ? 'Over-risk' : 'None'),
+        t.session,
+        t.brokerTicketId || '',
+        t.brokerSource || (t.brokerTicketId ? 'Vantage Web-Trade' : 'Manual'),
+        t.openTimeRaw || '',
+        t.closeTimeRaw || '',
+        raw?.notes || ''
+      ];
+    });
+
+    const escapeCsv = (cell: any) => {
+      if (cell === null || cell === undefined) return '';
+      const str = String(cell);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvContent = [
+      headers.map(escapeCsv).join(','),
+      ...rows.map((row) => row.map(escapeCsv).join(','))
+    ].join('\r\n');
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const today = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `TradeFlow_All_Trades_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleResetFilters = () => {
     setSearchQuery('');
     setFilterSource('ALL');
@@ -593,6 +688,15 @@ export const JournalView: React.FC<JournalViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportAllTradesCSV}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#FAF2E6] dark:bg-[#1C2331] hover:bg-[#F2ECE0] dark:hover:bg-[#252E40] text-[#9B671B] dark:text-[#F3D784] border border-[#E7E0D6] dark:border-[#242D3D] text-xs font-bold shadow-xs transition-all cursor-pointer"
+            title="Download full CSV of all trades"
+          >
+            <Download className="w-3.5 h-3.5 text-[#DB9F35]" />
+            <span>Export CSV</span>
+          </button>
           {onOpenVantageSync && (
             <button
               type="button"
