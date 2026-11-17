@@ -94,8 +94,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return generateIntelligenceReport(filteredTrades, settings, performanceMode);
   }, [filteredTrades, settings, performanceMode]);
 
-  // 3. Deep-Dive Breakdowns (Setup, Emotion, HTF Context, Exit Type)
-  const calculateGroupStats = (field: 'setupType' | 'emotion' | 'htfContext' | 'exitType') => {
+  // 3. Deep-Dive Breakdowns (Setup, HTF Context, Exit Type)
+  const calculateGroupStats = (field: 'setupType' | 'htfContext' | 'exitType') => {
     const groups: { [key: string]: { count: number; totalR: number; pnl: number; wins: number } } = {};
 
     intelligenceReport.activeTrades.forEach((t: Trade) => {
@@ -121,12 +121,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   };
 
   const setupStats = useMemo(() => calculateGroupStats('setupType'), [intelligenceReport]);
-  const emotionStats = useMemo(() => calculateGroupStats('emotion'), [intelligenceReport]);
   const htfStats = useMemo(() => calculateGroupStats('htfContext'), [intelligenceReport]);
   const exitStats = useMemo(() => calculateGroupStats('exitType'), [intelligenceReport]);
 
   const maxSetupR = Math.max(...setupStats.map((s) => Math.abs(s.totalR)), 1);
-  const maxEmotionR = Math.max(...emotionStats.map((s) => Math.abs(s.totalR)), 1);
   const maxHtfR = Math.max(...htfStats.map((s) => Math.abs(s.totalR)), 1);
 
   // 4. Trade History Table Filtering & Pagination
@@ -562,8 +560,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </div>
       </div>
 
-      {/* 5. Deep-Dive Performance Tables (Setup, Emotion, HTF Context, Exit Type) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
+      {/* 5. Deep-Dive Performance Tables (Setup, HTF Context, Exit Type) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
         {/* Table 1: Setup */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
           <div>
@@ -607,50 +605,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
         </div>
 
-        {/* Table 2: Emotion */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-                  <ShieldAlert className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">Performance by Emotion</h3>
-                  <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Psychological state impact</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 mt-4">
-              {emotionStats.length === 0 ? (
-                <p className="text-xs text-[#786F66] dark:text-[#94A3B8] italic text-center py-4">No emotion data logged yet.</p>
-              ) : (
-                emotionStats.map((e) => (
-                  <div key={e.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8]">{e.name}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] text-[#786F66] dark:text-[#94A3B8] font-mono">{e.count} trades ({e.winRate.toFixed(0)}%)</span>
-                        <span className={`font-bold font-mono text-xs ${e.pnl >= 0 ? 'text-[#15803D] dark:text-[#34D399]' : 'text-[#DC2626] dark:text-[#F87171]'}`}>
-                          {e.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(e.pnl).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-[#FAF7F2] dark:bg-[#1A2230] h-2 rounded-full overflow-hidden flex border border-[#E7E0D6]/60 dark:border-[#283244]">
-                      <div
-                        className={`h-full rounded-full transition-all ${e.totalR >= 0 ? 'bg-[#16A34A]' : 'bg-[#DC2626]'}`}
-                        style={{ width: `${Math.min(100, (Math.abs(e.totalR) / maxEmotionR) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Table 3: HTF Context */}
+        {/* Table 2: HTF Context */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
@@ -693,7 +648,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
         </div>
 
-        {/* Table 4: Exit Type */}
+        {/* Table 3: Exit Type */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
