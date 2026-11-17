@@ -17,7 +17,7 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
+export const Sidebar: React.FC<SidebarProps> = React.memo(({
   currentTab,
   onTabChange,
   isOpen = false,
@@ -175,4 +175,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
     </>
   );
-};
+});

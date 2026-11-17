@@ -54,6 +54,27 @@ const saveStoredIds = (key: string, ids: string[]) => {
   }
 };
 
+// Self-contained ticking clock so TopHeader does NOT re-render every second
+const LiveClock: React.FC = React.memo(() => {
+  const [time, setTime] = useState(() =>
+    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+  );
+
+  useEffect(() => {
+    const updateTime = () => {
+      setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }));
+    };
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <span className="font-mono text-[#786F66] dark:text-[#94A3B8] text-[10px] sm:text-[11px] whitespace-nowrap">
+      {time}
+    </span>
+  );
+});
+
 interface TopHeaderProps {
   currentDate?: string;
   onDateChange?: (newDate: string, isLive?: boolean) => void;
@@ -68,7 +89,7 @@ interface TopHeaderProps {
   isSyncing?: boolean;
 }
 
-export const TopHeader: React.FC<TopHeaderProps> = ({
+export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
   currentDate = getLocalDateIso(),
   onDateChange,
   isLiveDate = true,
@@ -82,7 +103,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   isSyncing = false,
 }) => {
   const { theme, toggleTheme } = useTheme();
-  const [timeStr, setTimeStr] = useState('');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [canInstall, setCanInstall] = useState(false);
@@ -99,23 +119,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     });
   }, []);
 
-  // Live time ticker & automatic day rollover check
+  // Periodic day rollover check (every 10 seconds instead of every 1s)
   useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setTimeStr(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }));
+    if (!isLiveDate || !onDateChange) return;
 
-      // If user is in live mode, ensure currentDate automatically updates when midnight passes
-      if (isLiveDate) {
-        const todayIso = getLocalDateIso(now);
-        if (currentDate !== todayIso && onDateChange) {
-          onDateChange(todayIso, true);
-        }
+    const checkMidnightRollover = () => {
+      const todayIso = getLocalDateIso(new Date());
+      if (currentDate !== todayIso) {
+        onDateChange(todayIso, true);
       }
     };
 
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
+    const interval = setInterval(checkMidnightRollover, 10000);
     return () => clearInterval(interval);
   }, [isLiveDate, currentDate, onDateChange]);
 
@@ -299,9 +314,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 {formatDateDisplay(currentDate)}
               </span>
               <span className="text-[#9E958C]">·</span>
-              <span className="font-mono text-[#786F66] dark:text-[#94A3B8] text-[10px] sm:text-[11px] whitespace-nowrap">
-                {timeStr || 'Live'}
-              </span>
+              <LiveClock />
               {isLiveDate && (
                 <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] shrink-0 animate-pulse" title="Live Clock Sync Active" />
               )}
@@ -552,4 +565,4 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       </div>
     </div>
   );
-};
+});

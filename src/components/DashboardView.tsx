@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Wallet, 
   TrendingUp, 
@@ -56,7 +56,7 @@ function generateSmoothPath(pts: { x: number; y: number }[]): string {
   return d;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({
+export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   trades = [],
   days = [],
   settings = defaultSettings,
@@ -112,14 +112,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return todayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
   }, [todayTrades]);
 
-  const todayWins = todayTrades.filter((t) => (Number(t.pnl) || 0) > 0.001).length;
-  const todayLosses = todayTrades.filter((t) => (Number(t.pnl) || 0) < -0.001).length;
-  const todayBE = todayTrades.filter((t) => Math.abs(Number(t.pnl) || 0) <= 0.001).length;
   const todayCount = todayTrades.length;
+  const { todayWins, todayLosses, todayBE } = useMemo(() => {
+    let w = 0;
+    let l = 0;
+    let be = 0;
+    for (let i = 0; i < todayTrades.length; i++) {
+      const p = Number(todayTrades[i].pnl) || 0;
+      if (p > 0.001) w++;
+      else if (p < -0.001) l++;
+      else be++;
+    }
+    return { todayWins: w, todayLosses: l, todayBE: be };
+  }, [todayTrades]);
 
   const currSymbol = settings.currency === 'USD' ? '$' : '₹';
   const initialCapital = settings.initialCapital > 0 ? settings.initialCapital : 1000;
-  const perf = calculatePerformance(trades, settings);
+  const perf = useMemo(() => calculatePerformance(trades, settings), [trades, settings]);
 
   const dailyTradesLimit = (settings as any)?.dailyTradesLimit || 3;
   const riskDollarPerTrade = ((settings?.riskPerTradePercent || 1) / 100) * initialCapital;
@@ -1682,7 +1691,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 4. Portfolio Performance & Breakdown (Ultra HD 4K Crisp Visualizations) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 [content-visibility:auto] [contain-intrinsic-size:1px_400px]">
         
         {/* Panel 1: Daily P&L Bar Chart */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col justify-between transition-colors">
@@ -2230,7 +2239,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 6. Recent Trades & Mistakes / Cycle Breakdown (2-Column Grid) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 [content-visibility:auto] [contain-intrinsic-size:1px_380px]">
         {/* Left: Recent Trades Table */}
         <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col justify-between transition-colors">
           <div>
@@ -2382,7 +2391,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 6. Footer */}
-      <footer className="pt-4 border-t border-[#E7E0D6] dark:border-[#242D3D] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#786F66] dark:text-[#94A3B8] transition-colors">
+      <footer className="pt-4 border-t border-[#E7E0D6] dark:border-[#242D3D] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#786F66] dark:text-[#94A3B8] transition-colors [content-visibility:auto]">
         <div className="flex items-center gap-2">
           <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8]">TradeFlow</span>
           <span>|</span>
@@ -2485,4 +2494,4 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )}
     </div>
   );
-};
+});

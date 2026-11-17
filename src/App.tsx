@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AuthPage } from './components/AuthPage';
@@ -80,11 +80,12 @@ function AppInner() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [_isDataLoaded, setIsDataLoaded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const lastCloudSyncRef = useRef<number>(0);
 
   // Load all data with Stale-While-Revalidate:
   // 1. Instant local read (<50ms)
-  // 2. Silent cloud fetch in background
-  const loadAllData = useCallback(async () => {
+  // 2. Silent cloud fetch in background (smartly throttled to 45s unless forced)
+  const loadAllData = useCallback(async (force = false) => {
     // Step 1: Fast local read
     try {
       const [localTrades, localDays, localSettings] = await Promise.all([
@@ -103,8 +104,15 @@ function AppInner() {
     if (!user) return;
     if (user.id === '00000000-0000-0000-0000-000000000000') return;
 
+    const now = Date.now();
+    // If recently synced from cloud within 45s, skip redundant roundtrip unless forced
+    if (!force && now - lastCloudSyncRef.current < 45000) {
+      return;
+    }
+
     // Step 2: Background cloud sync
     setIsSyncing(true);
+    lastCloudSyncRef.current = now;
     try {
       const [tradesRes, daysRes, settingsRes] = await Promise.allSettled([
         tradesApi.getAll(),
@@ -130,12 +138,12 @@ function AppInner() {
   }, [user]);
 
   useEffect(() => {
-    loadAllData();
+    loadAllData(true);
   }, [loadAllData]);
 
   useEffect(() => {
     const handleBrokerSync = () => {
-      loadAllData();
+      loadAllData(true);
     };
     window.addEventListener('tradeflow:broker-synced', handleBrokerSync);
 
@@ -151,7 +159,7 @@ function AppInner() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'trades', filter: `user_id=eq.${user.id}` },
         () => {
-          loadAllData();
+          loadAllData(true);
         }
       )
       .subscribe();
@@ -162,7 +170,7 @@ function AppInner() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
         () => {
-          loadAllData();
+          loadAllData(true);
         }
       )
       .subscribe();
@@ -239,12 +247,11 @@ function AppInner() {
     setImageModal({ isOpen: true, url, title });
   };
 
-  // Performance computations
-  const perf = calculatePerformance(trades, settings);
-  const dayStatus = getDayStatus(systemDate, trades, settings);
-  const equityPoints = generateEquityCurve(trades, settings);
-
-  const isDayClosedToday = days.some((d) => d.date === systemDate && d.isDayClosed);
+  // Performance computations (Memoized to prevent CPU lag on every render)
+  const perf = useMemo(() => calculatePerformance(trades, settings), [trades, settings]);
+  const dayStatus = useMemo(() => getDayStatus(systemDate, trades, settings), [systemDate, trades, settings]);
+  const equityPoints = useMemo(() => generateEquityCurve(trades, settings), [trades, settings]);
+  const isDayClosedToday = useMemo(() => days.some((d) => d.date === systemDate && d.isDayClosed), [days, systemDate]);
 
   return (
     <div className="flex h-screen bg-[#F6F1EA] dark:bg-[#0B0E14] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors overflow-hidden">
