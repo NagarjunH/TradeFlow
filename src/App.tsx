@@ -22,6 +22,7 @@ const EquityChart = lazy(() => import('./components/EquityChart').then((m) => ({
 const AnalyticsView = lazy(() => import('./components/AnalyticsView').then((m) => ({ default: m.AnalyticsView })));
 const NotesView = lazy(() => import('./components/NotesView').then((m) => ({ default: m.NotesView })));
 const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
+const EconomicCalendarView = lazy(() => import('./components/EconomicCalendarView').then((m) => ({ default: m.EconomicCalendarView })));
 const QuickTradeModal = lazy(() => import('./components/QuickTradeModal').then((m) => ({ default: m.QuickTradeModal })));
 const DailyCloseModal = lazy(() => import('./components/DailyCloseModal').then((m) => ({ default: m.DailyCloseModal })));
 const ImageViewerModal = lazy(() => import('./components/ImageViewerModal').then((m) => ({ default: m.ImageViewerModal })));
@@ -289,6 +290,7 @@ function AppInner() {
           onSignOut={signOut}
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
           isSyncing={isSyncing}
+          onNavigateToCalendar={() => setCurrentTab('calendar')}
         />
 
         <main className="flex-1 p-3 sm:p-6 lg:p-7 max-w-[1400px] w-full mx-auto">
@@ -375,6 +377,18 @@ function AppInner() {
                   />
                 </div>
               </div>
+            )}
+
+            {currentTab === 'calendar' && (
+              <EconomicCalendarView
+                selectedDate={systemDate}
+                onSelectDate={(newDate) => {
+                  const todayStr = getLocalDateIso();
+                  setIsManualDateSelected(newDate !== todayStr);
+                  setSystemDate(newDate);
+                  setJournalDateFilter(newDate);
+                }}
+              />
             )}
 
             {currentTab === 'settings' && (

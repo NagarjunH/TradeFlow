@@ -96,6 +96,7 @@ interface TopHeaderProps {
   onSignOut?: () => void;
   onOpenMobileSidebar?: () => void;
   isSyncing?: boolean;
+  onNavigateToCalendar?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
@@ -110,6 +111,7 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
   onSignOut,
   onOpenMobileSidebar,
   isSyncing = false,
+  onNavigateToCalendar,
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -346,7 +348,7 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
 
           {/* High Impact Events Marquee (Desktop & Landscape >= 768px) */}
           <div className="hidden md:block flex-1 min-w-[240px] max-w-xl">
-            <HighImpactMarquee currentDate={currentDate} isMobile={false} />
+            <HighImpactMarquee currentDate={currentDate} isMobile={false} onNavigateToCalendar={onNavigateToCalendar} />
           </div>
         </div>
 
@@ -721,7 +723,7 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
 
       {/* 2. Mobile-Only Dedicated High-Impact News Marquee Ticker Strip (< 768px) */}
       <div className="md:hidden px-3 py-1.5 border-t border-[#E7E0D6]/60 dark:border-[#232B3A] bg-[#F5EFE6]/40 dark:bg-[#0F141E]/40 w-full">
-        <HighImpactMarquee currentDate={currentDate} isMobile={true} />
+        <HighImpactMarquee currentDate={currentDate} isMobile={true} onNavigateToCalendar={onNavigateToCalendar} />
       </div>
     </div>
   );

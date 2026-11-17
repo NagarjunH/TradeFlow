@@ -4,6 +4,7 @@ import {
   BookOpen, 
   CalendarCheck,
   BarChart2,
+  Globe,
   FileText,
   Settings as SettingsIcon,
   X
@@ -28,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     { id: 'journal' as TabType, label: 'Trading Journal', icon: BookOpen },
     { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarCheck },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart2 },
+    { id: 'calendar' as TabType, label: 'Economic Calendar', icon: Globe },
     { id: 'notes' as TabType, label: 'Notes', icon: FileText },
     { id: 'settings' as TabType, label: 'Settings', icon: SettingsIcon },
   ];

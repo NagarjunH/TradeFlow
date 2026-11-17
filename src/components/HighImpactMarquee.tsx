@@ -1,13 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { Flame, Clock, ChevronDown, X, CheckCircle2, Zap, AlertTriangle } from 'lucide-react';
+import { Flame, Clock, ChevronDown, ChevronRight, X, CheckCircle2, Zap, AlertTriangle, Globe } from 'lucide-react';
 import { getEventsForDate, type EconomicEvent } from '../services/economicCalendarService';
 
 interface HighImpactMarqueeProps {
   currentDate?: string;
   isMobile?: boolean;
+  onNavigateToCalendar?: () => void;
 }
 
-export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDate, isMobile = false }) => {
+export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ 
+  currentDate, 
+  isMobile = false,
+  onNavigateToCalendar,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [impactFilter, setImpactFilter] = useState<'ALL' | 'HIGH' | 'MEDIUM'>('ALL');
   const [currencyFilter, setCurrencyFilter] = useState<string>('ALL');
@@ -305,6 +310,24 @@ export const HighImpactMarquee: React.FC<HighImpactMarqueeProps> = ({ currentDat
                 </span>
               </div>
             </div>
+
+            {/* Quick Link to Dedicated Page */}
+            {onNavigateToCalendar && (
+              <div className="pt-2 border-t border-[#E7E0D6]/70 dark:border-[#242D3D] shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onNavigateToCalendar();
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-[#DB9F35] hover:bg-[#C28B2B] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Open Full Economic Calendar &amp; Gold Analysis</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
