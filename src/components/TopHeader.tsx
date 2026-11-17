@@ -179,8 +179,12 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
   useEffect(() => {
     const todayEvents = getEventsForDate(currentDate);
     const highImpact = todayEvents.filter((e) => e.impact === 'HIGH');
+    const mediumImpact = todayEvents.filter((e) => e.impact === 'MEDIUM');
     const readIds = getStoredIds(STORAGE_KEY_READ_NOTIFS);
     const dismissedIds = getStoredIds(STORAGE_KEY_DISMISSED_NOTIFS);
+
+    const hasEvents = highImpact.length > 0 || mediumImpact.length > 0;
+    const topEvents = [...highImpact, ...mediumImpact];
 
     const generated: NotificationItem[] = [
       // 1. Risk & Circuit Breaker Notification
@@ -200,15 +204,21 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
         type: dayStatus?.status === 'LOCKED' ? 'danger' : dayStatus?.status === 'WARNING' ? 'warning' : 'info',
         read: false,
       },
-      // 2. High-Impact News Catalyst Notification
+      // 2. High & Medium Impact News Catalyst Notification
       {
-        id: `economic-${currentDate}-${highImpact.length}`,
-        title: highImpact.length > 0 ? `🔥 ${highImpact.length} High-Impact Release(s) Today` : '✅ Clean Economic Session',
-        message: highImpact.length > 0
-          ? `${highImpact.map((e) => `[${e.currency}] ${e.event} at ${e.timeIst}`).join(' · ')}. Avoid entries 10 minutes before news release.`
-          : 'No high-impact economic news scheduled for this date in Indian Standard Time.',
+        id: `economic-${currentDate}-${highImpact.length}-${mediumImpact.length}`,
+        title: highImpact.length > 0 && mediumImpact.length > 0
+          ? `🔥 ${highImpact.length} High & ⚡ ${mediumImpact.length} Medium Impact Releases Today`
+          : highImpact.length > 0
+          ? `🔥 ${highImpact.length} High-Impact Release(s) Today`
+          : mediumImpact.length > 0
+          ? `⚡ ${mediumImpact.length} Medium-Impact Release(s) Today`
+          : '✅ Clean Economic Session',
+        message: hasEvents
+          ? `${topEvents.slice(0, 4).map((e) => `[${e.currency}] ${e.event} (${e.timeIst})`).join(' · ')}${topEvents.length > 4 ? ` (+${topEvents.length - 4} more)` : ''}. Freeze entries 10m before Red and 5m before Orange releases.`
+          : 'No high or medium impact economic news scheduled for this date in Indian Standard Time.',
         time: 'IST',
-        type: highImpact.length > 0 ? 'warning' : 'success',
+        type: highImpact.length > 0 ? 'warning' : mediumImpact.length > 0 ? 'info' : 'success',
         read: false,
       },
       // 3. Daily Close Review Notification
