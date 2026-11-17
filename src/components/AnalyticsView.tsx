@@ -9,8 +9,7 @@ import {
   ShieldAlert,
   LayoutDashboard,
   Wallet,
-  ShieldCheck,
-  Award
+  ShieldCheck
 } from 'lucide-react';
 import type { Trade, AppSettings } from '../db/db';
 import { generateIntelligenceReport, type PerformanceMode } from '../services/analyticsService';
@@ -94,40 +93,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return generateIntelligenceReport(filteredTrades, settings, performanceMode);
   }, [filteredTrades, settings, performanceMode]);
 
-  // 3. Deep-Dive Breakdowns (Setup, HTF Context, Exit Type)
-  const calculateGroupStats = (field: 'setupType' | 'htfContext' | 'exitType') => {
-    const groups: { [key: string]: { count: number; totalR: number; pnl: number; wins: number } } = {};
-
-    intelligenceReport.activeTrades.forEach((t: Trade) => {
-      const val = (t as unknown as Record<string, unknown>)[field] as string || 'UNTAGGED';
-      if (!groups[val]) {
-        groups[val] = { count: 0, totalR: 0, pnl: 0, wins: 0 };
-      }
-      groups[val].count += 1;
-      groups[val].totalR += t.rMultiple || 0;
-      groups[val].pnl += t.pnl;
-      if ((t.rMultiple || 0) > 0) groups[val].wins += 1;
-    });
-
-    return Object.entries(groups)
-      .map(([name, data]) => ({
-        name,
-        count: data.count,
-        totalR: data.totalR,
-        pnl: data.pnl,
-        winRate: data.count > 0 ? (data.wins / data.count) * 100 : 0,
-      }))
-      .sort((a, b) => b.totalR - a.totalR);
-  };
-
-  const setupStats = useMemo(() => calculateGroupStats('setupType'), [intelligenceReport]);
-  const htfStats = useMemo(() => calculateGroupStats('htfContext'), [intelligenceReport]);
-  const exitStats = useMemo(() => calculateGroupStats('exitType'), [intelligenceReport]);
-
-  const maxSetupR = Math.max(...setupStats.map((s) => Math.abs(s.totalR)), 1);
-  const maxHtfR = Math.max(...htfStats.map((s) => Math.abs(s.totalR)), 1);
-
-  // 4. Trade History Table Filtering & Pagination
+  // 3. Trade History Table Filtering & Pagination
   const visibleTableTrades = useMemo(() => {
     let list = [...intelligenceReport.activeTrades].reverse(); // newest first
     if (tableResultFilter === 'Win') list = list.filter((t) => t.pnl > 0.001);
@@ -556,138 +522,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             >
               Next <ChevronRight className="w-3.5 h-3.5" />
             </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Deep-Dive Performance Tables (Setup, HTF Context, Exit Type) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-        {/* Table 1: Setup */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">Performance by Setup</h3>
-                  <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Expectancy by setup tag</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 mt-4">
-              {setupStats.length === 0 ? (
-                <p className="text-xs text-[#786F66] dark:text-[#94A3B8] italic text-center py-4">No setup data logged yet.</p>
-              ) : (
-                setupStats.map((s) => (
-                  <div key={s.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8]">{s.name}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] text-[#786F66] dark:text-[#94A3B8] font-mono">{s.count} trades ({s.winRate.toFixed(0)}%)</span>
-                        <span className={`font-bold font-mono text-xs ${s.pnl >= 0 ? 'text-[#15803D] dark:text-[#34D399]' : 'text-[#DC2626] dark:text-[#F87171]'}`}>
-                          {s.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(s.pnl).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-[#FAF7F2] dark:bg-[#1A2230] h-2 rounded-full overflow-hidden flex border border-[#E7E0D6]/60 dark:border-[#283244]">
-                      <div
-                        className={`h-full rounded-full transition-all ${s.totalR >= 0 ? 'bg-[#16A34A]' : 'bg-[#DC2626]'}`}
-                        style={{ width: `${Math.min(100, (Math.abs(s.totalR) / maxSetupR) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Table 2: HTF Context */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-                  <Award className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">Performance by HTF Context</h3>
-                  <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Higher timeframe alignment</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 mt-4">
-              {htfStats.length === 0 ? (
-                <p className="text-xs text-[#786F66] dark:text-[#94A3B8] italic text-center py-4">No HTF data logged yet.</p>
-              ) : (
-                htfStats.map((h) => (
-                  <div key={h.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[#1F1A16] dark:text-[#F0F4F8]">{h.name}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] text-[#786F66] dark:text-[#94A3B8] font-mono">{h.count} trades ({h.winRate.toFixed(0)}%)</span>
-                        <span className={`font-bold font-mono text-xs ${h.pnl >= 0 ? 'text-[#15803D] dark:text-[#34D399]' : 'text-[#DC2626] dark:text-[#F87171]'}`}>
-                          {h.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(h.pnl).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-[#FAF7F2] dark:bg-[#1A2230] h-2 rounded-full overflow-hidden flex border border-[#E7E0D6]/60 dark:border-[#283244]">
-                      <div
-                        className={`h-full rounded-full transition-all ${h.totalR >= 0 ? 'bg-[#16A34A]' : 'bg-[#DC2626]'}`}
-                        style={{ width: `${Math.min(100, (Math.abs(h.totalR) / maxHtfR) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Table 3: Exit Type */}
-        <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-colors">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6]/70 dark:border-[#242D3D]">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35] flex items-center justify-center">
-                  <Compass className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8]">Exit Type Breakdown</h3>
-                  <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Execution discipline</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 mt-4">
-              {exitStats.length === 0 ? (
-                <p className="text-xs text-[#786F66] dark:text-[#94A3B8] italic text-center py-4">No exit type data logged yet.</p>
-              ) : (
-                exitStats.map((ex) => (
-                  <div key={ex.name} className="flex items-center justify-between text-xs py-1 border-b border-[#E7E0D6]/40 dark:border-[#1E2638]">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        ex.name.includes('TARGET') || ex.name.includes('TP')
-                          ? 'bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399]'
-                          : ex.name.includes('STOP') || ex.name.includes('SL')
-                          ? 'bg-[#FEECEB] dark:bg-[#321B1B] text-[#DC2626] dark:text-[#F87171]'
-                          : 'bg-[#FAF2E6] dark:bg-[#1C2331] text-[#DB9F35]'
-                      }`}>
-                        {ex.name}
-                      </span>
-                      <span className="text-[#786F66] dark:text-[#94A3B8] text-[11px] font-mono">{ex.count} trades</span>
-                    </div>
-                    <span className={`font-bold font-mono text-xs ${ex.pnl >= 0 ? 'text-[#15803D] dark:text-[#34D399]' : 'text-[#DC2626] dark:text-[#F87171]'}`}>
-                      {ex.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(ex.pnl).toFixed(2)}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
         </div>
       </div>
