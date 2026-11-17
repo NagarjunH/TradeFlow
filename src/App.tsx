@@ -382,6 +382,7 @@ function AppInner() {
                 settings={settings}
                 onSettingsUpdated={loadAllData}
                 userId={user?.id}
+                userEmail={user?.email}
                 onOpenVantageSync={() => setIsVantageSyncOpen(true)}
               />
             )}

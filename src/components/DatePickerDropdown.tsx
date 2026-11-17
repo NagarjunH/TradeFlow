@@ -58,17 +58,18 @@ export const DatePickerDropdown: React.FC<DatePickerDropdownProps> = ({
     setViewMonth(p.month);
   }, [currentDate, isOpen]);
 
-  // Click outside to close
+  // Click outside to close & Escape key handler
   useEffect(() => {
-    const handleOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onClose();
-      }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
     };
+
     if (isOpen) {
-      document.addEventListener('mousedown', handleOutside);
+      window.addEventListener('keydown', handleKeyDown);
     }
-    return () => document.removeEventListener('mousedown', handleOutside);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -138,8 +139,14 @@ export const DatePickerDropdown: React.FC<DatePickerDropdownProps> = ({
 
   return (
     <>
-      {/* Mobile backdrop */}
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-2xs z-40 sm:hidden" onClick={onClose} />
+      {/* Universal backdrop across mobile and desktop for instant single-click dismiss */}
+      <div 
+        className="fixed inset-0 bg-black/40 backdrop-blur-2xs sm:bg-transparent sm:backdrop-blur-none z-40 cursor-default" 
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }} 
+      />
 
       <div
         ref={containerRef}

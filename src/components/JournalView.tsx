@@ -1390,10 +1390,18 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
                       {/* Dropdown Menu */}
                       {activeMenuId === t.id && (
-                        <div
-                          className="absolute right-2 top-8 z-30 w-44 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl shadow-lg py-1 text-left animate-fade-in"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <>
+                          <div
+                            className="fixed inset-0 z-20 cursor-default"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId(null);
+                            }}
+                          />
+                          <div
+                            className="absolute right-2 top-8 z-30 w-44 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl shadow-lg py-1 text-left animate-fade-in"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                           <button
                             type="button"
                             onClick={() => {
@@ -1446,7 +1454,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
                             <span>Delete Trade</span>
                           </button>
                         </div>
-                      )}
+                      </>
+                    )}
                     </td>
                   </tr>
                 ))

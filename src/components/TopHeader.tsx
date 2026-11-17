@@ -15,7 +15,9 @@ import {
   Flame,
   Zap,
   X,
-  CheckCheck
+  CheckCheck,
+  Camera,
+  Trash2
 } from 'lucide-react';
 import type { DayStatus } from '../utils/TradingEngine';
 import { DatePickerDropdown, getLocalDateIso } from './DatePickerDropdown';
@@ -23,6 +25,13 @@ import { HighImpactMarquee } from './HighImpactMarquee';
 import { useTheme } from '../contexts/ThemeContext';
 import { onInstallAvailabilityChange, promptPWAInstall } from '../registerServiceWorker';
 import { getEventsForDate } from '../services/economicCalendarService';
+import { 
+  getStoredAvatar, 
+  setStoredAvatar, 
+  removeStoredAvatar, 
+  subscribeAvatarChange, 
+  compressImageToAvatar 
+} from '../lib/avatarStorage';
 
 interface NotificationItem {
   id: string;
@@ -106,6 +115,38 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [canInstall, setCanInstall] = useState(false);
+
+  // Profile Avatar State & Ref
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(getStoredAvatar());
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Subscribe to avatar changes from settings or other tabs
+  useEffect(() => {
+    return subscribeAvatarChange((url) => {
+      setAvatarUrl(url);
+    });
+  }, []);
+
+  const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploadingPhoto(true);
+      const dataUrl = await compressImageToAvatar(file, 200);
+      setStoredAvatar(dataUrl);
+    } catch (err) {
+      console.error('Failed to upload profile photo:', err);
+      alert('Could not process selected image. Please choose a valid image file.');
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    removeStoredAvatar();
+  };
 
   // Notification State
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -305,7 +346,11 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
           <div className="relative">
             <button
               type="button"
-              onClick={() => setIsPickerOpen(!isPickerOpen)}
+              onClick={() => {
+                setIsPickerOpen((prev) => !prev);
+                setIsNotifOpen(false);
+                setShowUserMenu(false);
+              }}
               className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 bg-white dark:bg-[#1A2230] hover:bg-[#FAF6EE] dark:hover:bg-[#222C3E] border border-[#E7E0D6] dark:border-[#283244] hover:border-[#10B981] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] font-medium shadow-2xs transition-all cursor-pointer group"
               title="Click to select date or follow live time"
             >
@@ -364,7 +409,12 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
           {/* Dynamic Interactive Bell Notification Center (Now visible on mobile & desktop) */}
           <div className="relative" ref={notifRef}>
             <button 
-              onClick={() => setIsNotifOpen(!isNotifOpen)}
+              type="button"
+              onClick={() => {
+                setIsNotifOpen((prev) => !prev);
+                setIsPickerOpen(false);
+                setShowUserMenu(false);
+              }}
               className={`w-8 h-8 rounded-xl bg-white dark:bg-[#1A2230] border transition-colors flex items-center justify-center cursor-pointer shadow-2xs ${
                 isNotifOpen 
                   ? 'border-[#10B981] text-[#10B981]' 
@@ -383,7 +433,13 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
 
             {/* Notification Dropdown Popover */}
             {isNotifOpen && (
-              <div className="fixed inset-x-3 top-16 sm:absolute sm:top-10 sm:right-0 sm:inset-x-auto w-auto sm:w-96 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in text-[#1F1A16] dark:text-[#F0F4F8]">
+              <>
+                {/* Backdrop to dismiss on single click */}
+                <div 
+                  className="fixed inset-0 z-40 cursor-default" 
+                  onClick={() => setIsNotifOpen(false)} 
+                />
+                <div className="fixed inset-x-3 top-16 sm:absolute sm:top-10 sm:right-0 sm:inset-x-auto w-auto sm:w-96 bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in text-[#1F1A16] dark:text-[#F0F4F8]">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-[#E7E0D6]/60 dark:border-[#242D3D] flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -507,46 +563,140 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
                   </button>
                 </div>
               </div>
-            )}
-          </div>
+            </>
+          )}
+        </div>
 
-          {/* User Avatar + Dropdown Menu */}
-          <div className="relative">
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="w-8 h-8 rounded-full bg-gradient-to-br from-[#10B981] to-[#059669] text-white font-black text-xs flex items-center justify-center shadow-xs hover:opacity-90 transition-opacity cursor-pointer"
-              title={userEmail || 'TradeFlow Trader'}
-            >
-              {userInitial}
-            </button>
-            {showUserMenu && (
-              <div className="absolute right-0 top-10 w-52 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-xl shadow-xl z-50 overflow-hidden animate-fade-in">
-                {userEmail && (
-                  <div className="px-3 py-2.5 border-b border-[#E7E0D6] dark:border-[#283244]">
-                    <p className="text-[10px] text-[#786F66] dark:text-[#94A3B8]">Logged in as</p>
-                    <p className="text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] truncate">{userEmail}</p>
-                  </div>
-                )}
-                <button
-                  onClick={() => {
-                    setShowUserMenu(false);
-                    promptPWAInstall();
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-[#1F1A16] dark:text-[#F0F4F8] hover:bg-[#FAF7F2] dark:hover:bg-[#131822] transition-colors border-b border-[#E7E0D6]/60 dark:border-[#283244] font-medium cursor-pointer"
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-[#DB9F35]" />
-                  Install TradeFlow App
-                </button>
-                <button
-                  onClick={() => { setShowUserMenu(false); onSignOut?.(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-[#DC2626] dark:text-[#F87171] hover:bg-[#FEECEB] dark:hover:bg-[#321B1B] transition-colors font-semibold cursor-pointer"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  Sign Out
-                </button>
+        {/* User Avatar + Dropdown Menu */}
+        <div className="relative">
+          {/* Hidden Photo Upload Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoSelected}
+          />
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowUserMenu((prev) => !prev);
+              setIsNotifOpen(false);
+              setIsPickerOpen(false);
+            }}
+            className="w-8 h-8 rounded-full overflow-hidden border border-[#10B981]/60 shadow-xs hover:opacity-90 hover:scale-105 transition-all cursor-pointer flex items-center justify-center shrink-0 bg-[#E8F8EE] dark:bg-[#132A1C]"
+            title={userEmail || 'TradeFlow Trader'}
+            aria-label="User Profile & Settings"
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-[#10B981] to-[#059669] text-white font-black text-xs flex items-center justify-center">
+                {userInitial}
               </div>
             )}
-          </div>
+          </button>
+
+          {showUserMenu && (
+            <>
+              {/* Full-screen backdrop to dismiss instantly on single outside click */}
+              <div
+                className="fixed inset-0 z-40 cursor-default"
+                onClick={() => setShowUserMenu(false)}
+              />
+
+              <div className="absolute right-0 top-10 w-64 bg-white dark:bg-[#1A2230] border border-[#E7E0D6] dark:border-[#283244] rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in text-[#1F1A16] dark:text-[#F0F4F8]">
+                {/* User Profile Header Card */}
+                <div className="p-3.5 border-b border-[#E7E0D6] dark:border-[#283244] bg-[#FAF7F2] dark:bg-[#131822]">
+                  <div className="flex items-center gap-3">
+                    <div className="relative group shrink-0">
+                      <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#10B981] shadow-xs flex items-center justify-center bg-gradient-to-br from-[#10B981] to-[#059669] text-white font-black text-sm">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt="Avatar Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          userInitial
+                        )}
+                      </div>
+                      {/* Quick Camera overlay badge */}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="absolute -bottom-1 -right-1 p-1 rounded-full bg-[#10B981] text-white hover:bg-[#059669] shadow-sm cursor-pointer transition-transform hover:scale-110"
+                        title="Upload Profile Photo"
+                      >
+                        <Camera className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-[#786F66] dark:text-[#94A3B8]">
+                        Trader Profile
+                      </p>
+                      <p className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] truncate" title={userEmail}>
+                        {userEmail || 'Active Trader'}
+                      </p>
+                      <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-[#E8F8EE] dark:bg-[#10B981]/20 text-[#15803D] dark:text-[#10B981]">
+                        Cloud Synced
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Profile Photo Actions */}
+                <div className="py-1 border-b border-[#E7E0D6]/60 dark:border-[#283244]">
+                  <button
+                    type="button"
+                    disabled={isUploadingPhoto}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#1F1A16] dark:text-[#F0F4F8] hover:bg-[#FAF7F2] dark:hover:bg-[#131822] transition-colors font-medium cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-[#10B981]" />
+                    <span>{isUploadingPhoto ? 'Uploading...' : avatarUrl ? 'Change Profile Photo' : 'Upload Profile Photo'}</span>
+                  </button>
+
+                  {avatarUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#786F66] dark:text-[#94A3B8] hover:text-[#DC2626] dark:hover:text-[#F87171] hover:bg-[#FEECEB] dark:hover:bg-[#321B1B] transition-colors font-medium cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remove Photo</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* App Options */}
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      promptPWAInstall();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#1F1A16] dark:text-[#F0F4F8] hover:bg-[#FAF7F2] dark:hover:bg-[#131822] transition-colors border-b border-[#E7E0D6]/60 dark:border-[#283244] font-medium cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-[#DB9F35]" />
+                    <span>Install TradeFlow App</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onSignOut?.();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#DC2626] dark:text-[#F87171] hover:bg-[#FEECEB] dark:hover:bg-[#321B1B] transition-colors font-semibold cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
 
           {/* + Add Trade Button */}
           <button

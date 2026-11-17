@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Settings as SettingsIcon, 
   Download, 
@@ -10,17 +10,26 @@ import {
   X,
   Smartphone,
   CheckCircle2,
-  Zap
+  Zap,
+  Camera
 } from 'lucide-react';
 import { type AppSettings } from '../db/db';
 import { auditApi } from '../lib/api/auditApi';
 import { supabase } from '../lib/supabase';
 import { onInstallAvailabilityChange, promptPWAInstall } from '../registerServiceWorker';
+import { 
+  getStoredAvatar, 
+  setStoredAvatar, 
+  removeStoredAvatar, 
+  subscribeAvatarChange, 
+  compressImageToAvatar 
+} from '../lib/avatarStorage';
 
 interface SettingsViewProps {
   settings: AppSettings;
   onSettingsUpdated: () => void;
   userId?: string;
+  userEmail?: string;
   onOpenVantageSync?: () => void;
 }
 
@@ -28,11 +37,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
   onSettingsUpdated,
   userId,
+  userEmail,
   onOpenVantageSync,
 }) => {
   const [auditLogs, setAuditLogs] = useState<{ id: string; action: string; details: string; created_at: string }[]>([]);
   const [canInstall, setCanInstall] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
+
+  // Profile Avatar state
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(getStoredAvatar());
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const userInitial = userEmail ? userEmail[0].toUpperCase() : 'T';
+
+  useEffect(() => {
+    return subscribeAvatarChange((url) => {
+      setAvatarUrl(url);
+    });
+  }, []);
+
+  const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploadingPhoto(true);
+      const dataUrl = await compressImageToAvatar(file, 200);
+      setStoredAvatar(dataUrl);
+    } catch (err) {
+      console.error('Failed to upload profile photo:', err);
+      alert('Could not process selected image. Please choose a valid image file.');
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Reset Modal state
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -168,6 +207,73 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <p className="text-xs text-[#786F66] dark:text-[#94A3B8] mt-0.5">
               Manage broker sync, cloud data controls, app installation, and audit logs
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Trader Profile Photo & Avatar Card */}
+      <div className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 shadow-2xs transition-colors">
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="image/*"
+          className="hidden"
+          onChange={handlePhotoSelected}
+        />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div className="flex items-center gap-4">
+            <div className="relative group shrink-0">
+              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#10B981] shadow-md flex items-center justify-center bg-gradient-to-br from-[#10B981] to-[#059669] text-white font-black text-xl">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Trader Profile" className="w-full h-full object-cover" />
+                ) : (
+                  userInitial
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-[#10B981] text-white hover:bg-[#059669] shadow-sm cursor-pointer transition-transform hover:scale-110"
+                title="Change Photo"
+              >
+                <Camera className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[#1F1A16] dark:text-[#F0F4F8]">
+                Trader Profile Photo
+              </h3>
+              <p className="text-xs text-[#786F66] dark:text-[#94A3B8] mt-0.5">
+                {userEmail || 'Active TradeFlow Trader'}
+              </p>
+              <p className="text-[11px] text-[#9E958C] dark:text-[#64748B] mt-1">
+                Formats: JPG, PNG, WebP (auto-optimized for instant offline &amp; cloud load)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <button
+              type="button"
+              disabled={isUploadingPhoto}
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#052E16] text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+            >
+              <Camera className="w-4 h-4" />
+              <span>{isUploadingPhoto ? 'Uploading...' : avatarUrl ? 'Change Photo' : 'Upload Photo'}</span>
+            </button>
+
+            {avatarUrl && (
+              <button
+                type="button"
+                onClick={() => removeStoredAvatar()}
+                className="px-3.5 py-2 rounded-xl bg-[#FEECEB] dark:bg-[#321B1B] hover:bg-[#FCD8D6] dark:hover:bg-[#422020] border border-[#FCA5A5] dark:border-[#7F1D1D] text-[#DC2626] dark:text-[#F87171] text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
