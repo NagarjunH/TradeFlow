@@ -33,6 +33,27 @@ interface NotificationItem {
   read: boolean;
 }
 
+const STORAGE_KEY_READ_NOTIFS = 'tradeflow_notifications_read_v1';
+const STORAGE_KEY_DISMISSED_NOTIFS = 'tradeflow_notifications_dismissed_v1';
+
+const getStoredIds = (key: string): string[] => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveStoredIds = (key: string, ids: string[]) => {
+  try {
+    const trimmed = Array.from(new Set(ids)).slice(-100);
+    localStorage.setItem(key, JSON.stringify(trimmed));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 interface TopHeaderProps {
   currentDate?: string;
   onDateChange?: (newDate: string, isLive?: boolean) => void;
@@ -98,15 +119,17 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     return () => clearInterval(interval);
   }, [isLiveDate, currentDate, onDateChange]);
 
-  // Generate dynamic notifications based on real system state
+  // Generate dynamic notifications based on real system state with persistence
   useEffect(() => {
     const todayEvents = getEventsForDate(currentDate);
     const highImpact = todayEvents.filter((e) => e.impact === 'HIGH');
+    const readIds = getStoredIds(STORAGE_KEY_READ_NOTIFS);
+    const dismissedIds = getStoredIds(STORAGE_KEY_DISMISSED_NOTIFS);
 
     const generated: NotificationItem[] = [
       // 1. Risk & Circuit Breaker Notification
       {
-        id: 'circuit-breaker',
+        id: `circuit-breaker-${currentDate}-${dayStatus?.status || 'NORMAL'}`,
         title: dayStatus?.status === 'LOCKED' 
           ? '🚨 Circuit Breaker Triggered' 
           : dayStatus?.status === 'WARNING' 
@@ -123,7 +146,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       },
       // 2. High-Impact News Catalyst Notification
       {
-        id: 'economic-catalysts',
+        id: `economic-${currentDate}-${highImpact.length}`,
         title: highImpact.length > 0 ? `🔥 ${highImpact.length} High-Impact Release(s) Today` : '✅ Clean Economic Session',
         message: highImpact.length > 0
           ? `${highImpact.map((e) => `[${e.currency}] ${e.event} at ${e.timeIst}`).join(' · ')}. Avoid entries 10 minutes before news release.`
@@ -134,7 +157,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       },
       // 3. Daily Close Review Notification
       {
-        id: 'daily-close-review',
+        id: `daily-close-${currentDate}-${isDayClosedToday ? 'closed' : 'pending'}`,
         title: isDayClosedToday ? '🎉 Day Closed & Audited' : '📝 Daily Close Reminder',
         message: isDayClosedToday
           ? 'Your trading session has been formally locked. Great job executing discipline today.'
@@ -145,7 +168,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       },
       // 4. Vantage Terminal Sync Status
       {
-        id: 'vantage-bridge',
+        id: `vantage-bridge-${isSyncing ? 'syncing' : 'ready'}`,
         title: isSyncing ? '⚡ Vantage Bridge Syncing...' : '⚡ Vantage Terminal Bridge',
         message: isSyncing
           ? 'Importing latest closed orders and equity balance from your Vantage terminal...'
@@ -156,8 +179,16 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       },
     ];
 
-    setNotifications(generated);
-  }, [currentDate, dayStatus, isDayClosedToday, isSyncing]);
+    // Filter out dismissed notifications, and mark as read if in stored readIds
+    const activeNotifications = generated
+      .filter((n) => !dismissedIds.includes(n.id))
+      .map((n) => ({
+        ...n,
+        read: n.read || readIds.includes(n.id),
+      }));
+
+    setNotifications(activeNotifications);
+  }, [currentDate, dayStatus?.status, dayStatus?.remainingR, isDayClosedToday, isSyncing]);
 
   // Click outside to close notifications popover
   useEffect(() => {
@@ -175,11 +206,31 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const handleMarkAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }));
+      const readIds = getStoredIds(STORAGE_KEY_READ_NOTIFS);
+      const newReadIds = Array.from(new Set([...readIds, ...updated.map((n) => n.id)]));
+      saveStoredIds(STORAGE_KEY_READ_NOTIFS, newReadIds);
+      return updated;
+    });
+  };
+
+  const handleMarkSingleRead = (id: string) => {
+    setNotifications((prev) => {
+      const updated = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+      const readIds = getStoredIds(STORAGE_KEY_READ_NOTIFS);
+      saveStoredIds(STORAGE_KEY_READ_NOTIFS, [...readIds, id]);
+      return updated;
+    });
   };
 
   const handleDismissNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setNotifications((prev) => {
+      const updated = prev.filter((n) => n.id !== id);
+      const dismissedIds = getStoredIds(STORAGE_KEY_DISMISSED_NOTIFS);
+      saveStoredIds(STORAGE_KEY_DISMISSED_NOTIFS, [...dismissedIds, id]);
+      return updated;
+    });
   };
 
   // Format YYYY-MM-DD into "Tue, 17 Nov"
@@ -356,10 +407,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     notifications.map((item) => (
                       <div 
                         key={item.id} 
-                        className={`p-3 transition-colors flex items-start gap-2.5 ${
+                        onClick={() => handleMarkSingleRead(item.id)}
+                        className={`p-3 transition-colors flex items-start gap-2.5 cursor-pointer hover:bg-[#FAF6EE] dark:hover:bg-[#1A2230] ${
                           item.read 
                             ? 'bg-transparent opacity-75' 
-                            : 'bg-[#FAF6EE]/50 dark:bg-[#1A2230]/50'
+                            : 'bg-[#FAF6EE]/80 dark:bg-[#1A2230]/80'
                         }`}
                       >
                         {/* Icon */}
@@ -389,8 +441,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] truncate">
-                              {item.title}
+                            <span className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8] truncate flex items-center gap-1.5">
+                              {!item.read && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] shrink-0" />
+                              )}
+                              <span>{item.title}</span>
                             </span>
                             <span className="text-[9px] font-mono text-[#786F66] dark:text-[#94A3B8] shrink-0">
                               {item.time}
@@ -404,7 +459,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                         {/* Dismiss */}
                         <button
                           type="button"
-                          onClick={() => handleDismissNotification(item.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDismissNotification(item.id);
+                          }}
                           className="text-[#9E958C] hover:text-[#DC2626] p-0.5 rounded-sm transition-colors cursor-pointer shrink-0"
                           title="Dismiss"
                         >
