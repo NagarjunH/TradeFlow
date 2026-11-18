@@ -2169,8 +2169,8 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
 
                         {c.hasTrade ? (
                           <div className="pt-0.5">
-                            <span className={`text-[11px] sm:text-xs font-black font-mono block leading-tight truncate ${pnlColor}`}>
-                              {c.isWin ? '+' : c.isLoss ? '-' : ''}{currSymbol}{Math.abs(c.pnl || 0).toFixed(0)}
+                            <span className={`text-[10px] xs:text-[11px] sm:text-xs font-black font-mono block leading-tight truncate ${pnlColor}`}>
+                              {c.isWin ? '+' : c.isLoss ? '-' : ''}{currSymbol}{Math.abs(c.pnl || 0).toFixed(2)}
                             </span>
                             <span className={`text-[8px] sm:text-[9px] font-mono block mt-0.5 truncate ${tradesColor}`}>
                               {c.count} trade{c.count === 1 ? '' : 's'}
@@ -2212,7 +2212,7 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
                       <span className={`text-[11px] font-black font-mono ${
                         week.pnl > 0.001 ? 'text-[#15803D] dark:text-[#10B981]' : week.pnl < -0.001 ? 'text-[#DC2626] dark:text-[#EF4444]' : 'text-[#786F66] dark:text-[#94A3B8]'
                       }`}>
-                        {week.pnl > 0.001 ? '+' : week.pnl < -0.001 ? '-' : ''}{currSymbol}{Math.abs(week.pnl).toFixed(0)}
+                        {week.pnl > 0.001 ? '+' : week.pnl < -0.001 ? '-' : ''}{currSymbol}{Math.abs(week.pnl).toFixed(2)}
                       </span>
                     </div>
 

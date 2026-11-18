@@ -283,7 +283,7 @@ export const AnalyticsOverviewTab: React.FC<AnalyticsOverviewTabProps> = ({
               {core.profitFactor.toFixed(2)}
             </div>
             <div className="text-[11px] font-semibold text-[#786F66] dark:text-[#94A3B8] mt-1 font-mono">
-              +${core.grossProfit.toFixed(0)} / -${core.grossLoss.toFixed(0)}
+              +${core.grossProfit.toFixed(2)} / -${core.grossLoss.toFixed(2)}
             </div>
           </div>
         </div>

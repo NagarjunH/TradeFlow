@@ -531,6 +531,15 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                         className={`relative rounded-lg sm:rounded-xl border p-1 sm:p-2.5 flex flex-col justify-between min-h-[58px] sm:min-h-[92px] transition-all group ${
                           hasTrades || !isWeekend ? 'cursor-pointer hover:scale-[1.02] hover:shadow-md' : 'cursor-default'
                         } ${tileBg}`}
+                        title={
+                          hasTrades
+                            ? `${c.dateStr}: ${(c.dayPnl || 0) >= 0 ? '+' : '-'}${currSymbol}${Math.abs(c.dayPnl || 0).toFixed(2)} (${dayTrades.length} trades, ${(c.dayR || 0) >= 0 ? '+' : ''}${(c.dayR || 0).toFixed(1)}R)`
+                            : isWeekend
+                            ? 'Weekend Off'
+                            : isNoTrade
+                            ? `No Trade: ${c.dayRecord?.noTradeReason || 'No Setup'}`
+                            : `${c.dateStr}: No trades`
+                        }
                       >
                         {/* Day Number (Top Left) & Flame/Badges (Top Right) */}
                         <div className="flex items-center justify-between leading-none">
@@ -557,7 +566,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                           {hasTrades ? (
                             <div>
                               <div className={`text-xs sm:text-sm md:text-base font-black font-mono tracking-tight leading-tight ${pnlColor}`}>
-                                {(c.dayPnl || 0) >= 0 ? '+' : '-'}{currSymbol}{Math.abs(c.dayPnl || 0).toFixed(0)}
+                                {(c.dayPnl || 0) >= 0 ? '+' : '-'}{currSymbol}{Math.abs(c.dayPnl || 0).toFixed(2)}
                               </div>
                               <div className={`text-[9px] sm:text-[10px] font-mono mt-0.5 ${tradesColor}`}>
                                 {dayTrades.length} trade{dayTrades.length === 1 ? '' : 's'}
@@ -657,7 +666,7 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
                       <div className={`text-xs sm:text-sm font-black font-mono leading-tight ${
                         week.pnl > 0.001 ? 'text-[#10B981]' : week.pnl < -0.001 ? 'text-[#DC2626]' : 'text-[#786F66] dark:text-[#94A3B8]'
                       }`}>
-                        {week.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(week.pnl).toFixed(0)}
+                        {week.pnl >= 0 ? '+' : '-'}{currSymbol}{Math.abs(week.pnl).toFixed(2)}
                       </div>
                     </div>
 
