@@ -11,10 +11,13 @@ import {
   Smartphone,
   CheckCircle2,
   Zap,
-  Camera
+  Camera,
+  Shield,
+  Lock
 } from 'lucide-react';
 import { type AppSettings } from '../db/db';
 import { auditApi } from '../lib/api/auditApi';
+import { settingsApi } from '../lib/api/settingsApi';
 import { supabase } from '../lib/supabase';
 import { onInstallAvailabilityChange, promptPWAInstall } from '../registerServiceWorker';
 import { 
@@ -48,6 +51,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [avatarUrl, setAvatarUrl] = useState<string | null>(getStoredAvatar());
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Daily Trade Cap state (Enforcing max 5 cap)
+  const [dailyLimit, setDailyLimit] = useState<number>(() => {
+    return Math.min(5, Math.max(1, Number(settings?.dailyTradesLimit) || 5));
+  });
+  const [isSavingLimit, setIsSavingLimit] = useState(false);
+  const [limitSavedMsg, setLimitSavedMsg] = useState(false);
+
+  useEffect(() => {
+    if (settings?.dailyTradesLimit) {
+      setDailyLimit(Math.min(5, Math.max(1, Number(settings.dailyTradesLimit))));
+    }
+  }, [settings?.dailyTradesLimit]);
+
+  const handleUpdateDailyLimit = async (val: number) => {
+    const capped = Math.min(5, Math.max(1, val));
+    setDailyLimit(capped);
+    setIsSavingLimit(true);
+    try {
+      const updated: AppSettings = { ...settings, dailyTradesLimit: capped };
+      if (userId) {
+        await settingsApi.save(userId, updated);
+      } else {
+        await settingsApi.getLocal();
+      }
+      setLimitSavedMsg(true);
+      setTimeout(() => setLimitSavedMsg(false), 2000);
+      onSettingsUpdated();
+    } catch (err) {
+      console.error('Failed to update daily trades limit:', err);
+    } finally {
+      setIsSavingLimit(false);
+    }
+  };
 
   const userInitial = userEmail ? userEmail[0].toUpperCase() : 'T';
 
@@ -278,7 +315,63 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Vantage Web-Trade Auto-Sync & Broker Bridge */}
+      {/* 2. Daily Trading Discipline & Execution Limits (Enforcing Max 5) */}
+      <div className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 space-y-4 shadow-2xs transition-colors">
+        <div className="flex items-center justify-between border-b border-[#E7E0D6] dark:border-[#242D3D] pb-3">
+          <div className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-[#10B981]" />
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[#1F1A16] dark:text-[#F0F4F8]">
+                Daily Execution Cap &amp; Discipline Limits
+              </h3>
+              <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+                Hard discipline guardrails to prevent overtrading and protect psychological capital
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-full bg-[#E8F8EE] dark:bg-[#132A1C] text-[#15803D] dark:text-[#34D399] text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 border border-[#B7ECC8] dark:border-[#1E432A]">
+            <Lock className="w-3 h-3" /> Max 5 / Day Cap
+          </span>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h4 className="text-xs font-bold text-[#1F1A16] dark:text-[#F0F4F8]">
+              Maximum Trades Allowed Per Session
+            </h4>
+            <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8] mt-0.5 max-w-md">
+              Strictly capped at <b>maximum 5 trades per day</b>. Taking more than 5 trades triggers the red Circuit Breaker on the Dashboard.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {[1, 2, 3, 4, 5].map((num) => (
+              <button
+                key={num}
+                type="button"
+                disabled={isSavingLimit}
+                onClick={() => handleUpdateDailyLimit(num)}
+                className={`w-9 h-9 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer ${
+                  dailyLimit === num
+                    ? 'bg-[#10B981] text-white shadow-xs scale-105 ring-2 ring-[#10B981]/30'
+                    : 'bg-[#FAF7F2] dark:bg-[#1C2331] text-[#786F66] dark:text-[#94A3B8] hover:bg-[#E7E0D6] dark:hover:bg-[#283244]'
+                }`}
+                title={`Set daily cap to ${num} trades`}
+              >
+                {num}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {limitSavedMsg && (
+          <p className="text-xs text-[#10B981] font-bold flex items-center gap-1 animate-fade-in">
+            <Check className="w-3.5 h-3.5" /> Daily trade cap saved to {dailyLimit} trades/day!
+          </p>
+        )}
+      </div>
+
+      {/* 3. Vantage Web-Trade Auto-Sync & Broker Bridge */}
       {onOpenVantageSync && (
         <div className="bg-white dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl p-6 space-y-4 shadow-2xs transition-colors">
           <div className="flex items-center justify-between border-b border-[#E7E0D6] dark:border-[#242D3D] pb-3">

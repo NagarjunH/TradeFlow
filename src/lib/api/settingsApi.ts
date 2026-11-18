@@ -37,6 +37,7 @@ export const settingsApi = {
         defaultLot: Number(s.default_lot),
         riskPerTradePercent: Number(s.risk_per_trade),
         dailyLossLimitR: Number(s.daily_loss_limit_r),
+        dailyTradesLimit: Math.min(5, Math.max(1, Number((s as any)?.daily_trades_limit || (s as any)?.dailyTradesLimit) || 5)),
         protectionMode: s.protection_mode as AppSettings['protectionMode'],
         defaultSession: s.default_session as AppSettings['defaultSession'],
         theme: 'Dark',

@@ -79,6 +79,7 @@ export interface AppSettings {
   defaultLot: number;
   riskPerTradePercent: number;
   dailyLossLimitR: number;
+  dailyTradesLimit?: number; // Maximum trades allowed per day (capped at max 5)
   protectionMode: ProtectionMode;
   defaultSession: 'London' | 'New York' | 'Asian' | 'London/NY Overlap';
   theme: 'Dark';
@@ -120,6 +121,7 @@ export const defaultSettings: AppSettings = {
   defaultLot: 0.01,
   riskPerTradePercent: 1.0,
   dailyLossLimitR: 2.0,
+  dailyTradesLimit: 5,
   protectionMode: 'HARD_LOCK',
   defaultSession: 'London/NY Overlap',
   theme: 'Dark',

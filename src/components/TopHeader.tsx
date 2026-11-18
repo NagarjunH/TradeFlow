@@ -201,7 +201,7 @@ export const TopHeader: React.FC<TopHeaderProps> = React.memo(({
           ? 'Daily loss limit (-2R) reached. Trading locked to prevent revenge trading and protect capital.'
           : dayStatus?.status === 'WARNING'
           ? `Caution: Only ${dayStatus?.remainingR ?? 1}R risk buffer remaining under today's cap.`
-          : 'Discipline rules active. Max 3 trades per day. Stick to your A+ execution checklist.',
+          : 'Discipline rules active. Max 5 trades per day. Stick to your A+ execution checklist.',
         time: 'Live',
         type: dayStatus?.status === 'LOCKED' ? 'danger' : dayStatus?.status === 'WARNING' ? 'warning' : 'info',
         read: false,

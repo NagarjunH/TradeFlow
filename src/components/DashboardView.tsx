@@ -130,7 +130,8 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   const initialCapital = settings.initialCapital > 0 ? settings.initialCapital : 1000;
   const perf = useMemo(() => calculatePerformance(trades, settings), [trades, settings]);
 
-  const dailyTradesLimit = (settings as any)?.dailyTradesLimit || 3;
+  // Hard cap of 5 trades per day max ("Max 5 karo not more than that")
+  const dailyTradesLimit = Math.min(5, Math.max(1, Number((settings as any)?.dailyTradesLimit) || 5));
   const riskDollarPerTrade = ((settings?.riskPerTradePercent || 1) / 100) * initialCapital;
   const dailyLossLimit = Math.abs((settings as any)?.dailyLossLimit || ((settings?.dailyLossLimitR || 2) * (riskDollarPerTrade > 0 ? riskDollarPerTrade : 25)));
 
@@ -877,10 +878,10 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
             {todayCount === 0
               ? 'No trades executed yet for this date. Follow your A+ setup rules when entering.'
               : todayCount < dailyTradesLimit
-              ? `${dailyTradesLimit - todayCount} trade${dailyTradesLimit - todayCount === 1 ? '' : 's'} remaining under your daily limit.`
+              ? `${dailyTradesLimit - todayCount} trade${dailyTradesLimit - todayCount === 1 ? '' : 's'} remaining under your daily limit (Max ${dailyTradesLimit}/day).`
               : todayCount === dailyTradesLimit
-              ? 'Daily trade limit reached. Protect profits and preserve mental capital.'
-              : `Limit exceeded by ${todayCount - dailyTradesLimit} trade(s). Step away to prevent overtrading.`}
+              ? `Daily trade limit reached (${dailyTradesLimit} / ${dailyTradesLimit} trades). Protect profits and preserve mental capital.`
+              : `Limit exceeded by ${todayCount - dailyTradesLimit} trade(s). Maximum cap is ${dailyTradesLimit} trades/day. Step away to prevent overtrading.`}
           </p>
         </div>
 
