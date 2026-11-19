@@ -248,6 +248,22 @@ function AppInner() {
     setImageModal({ isOpen: true, url, title });
   };
 
+  const handleOpenQuickTradeForDate = useCallback((dateStr: string) => {
+    setEditTrade(null);
+    setQuickTradeInitialDate(dateStr);
+    setIsQuickTradeOpen(true);
+  }, []);
+
+  // Idle prefetch secondary views so tab switches happen with 0ms network latency
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      import('./components/NHCycleView');
+      import('./components/JournalView');
+      import('./components/EconomicCalendarView');
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Performance computations (Memoized to prevent CPU lag on every render)
   const perf = useMemo(() => calculatePerformance(trades, settings), [trades, settings]);
   const dayStatus = useMemo(() => getDayStatus(systemDate, trades, settings), [systemDate, trades, settings]);
@@ -344,11 +360,7 @@ function AppInner() {
                 onSelectDayForJournal={handleSelectDateForJournal}
                 userId={user?.id}
                 onDaysChange={setDays}
-                onOpenQuickTradeForDate={(dateStr) => {
-                  setEditTrade(null);
-                  setQuickTradeInitialDate(dateStr);
-                  setIsQuickTradeOpen(true);
-                }}
+                onOpenQuickTradeForDate={handleOpenQuickTradeForDate}
               />
             )}
 

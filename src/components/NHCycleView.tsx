@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
   Quote, 
   Lock, 
@@ -24,7 +24,7 @@ interface NHCycleViewProps {
   onOpenQuickTradeForDate?: (dateStr: string) => void;
 }
 
-export const NHCycleView: React.FC<NHCycleViewProps> = ({
+export const NHCycleView: React.FC<NHCycleViewProps> = React.memo(({
   trades,
   days,
   settings,
@@ -33,20 +33,30 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
   onDaysChange,
   onOpenQuickTradeForDate,
 }) => {
-  const [cycleYear, setCycleYear] = useState<number>(() => {
-    if (trades.length > 0) {
-      const dates = trades.map(t => t.date).sort();
-      return new Date(dates[dates.length - 1]).getFullYear();
+  // O(N) single-pass lookup for latest trade date without sorting whole array
+  const latestTradeDate = useMemo(() => {
+    if (!trades || trades.length === 0) return null;
+    let max = trades[0].date;
+    for (let i = 1; i < trades.length; i++) {
+      if (trades[i].date > max) max = trades[i].date;
     }
-    return 2026;
+    return max;
+  }, [trades]);
+
+  const [cycleYear, setCycleYear] = useState<number>(() => {
+    if (latestTradeDate) {
+      const y = parseInt(latestTradeDate.slice(0, 4), 10);
+      if (!isNaN(y)) return y;
+    }
+    return new Date().getFullYear();
   });
 
   const [cycleMonth, setCycleMonth] = useState<number>(() => {
-    if (trades.length > 0) {
-      const dates = trades.map(t => t.date).sort();
-      return new Date(dates[dates.length - 1]).getMonth() + 1;
+    if (latestTradeDate) {
+      const m = parseInt(latestTradeDate.slice(5, 7), 10);
+      if (!isNaN(m)) return m;
     }
-    return 10;
+    return new Date().getMonth() + 1;
   });
 
   const monthNames = [
@@ -70,46 +80,68 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
   const initialCap = settings.initialCapital > 0 ? settings.initialCapital : 1000;
 
   // Filter trades for the selected cycle month & year
-  const currentMonthStr = `${cycleYear}-${String(cycleMonth).padStart(2, '0')}`;
-  const daysInSelectedMonth = new Date(cycleYear, cycleMonth, 0).getDate();
+  const currentMonthStr = useMemo(() => `${cycleYear}-${String(cycleMonth).padStart(2, '0')}`, [cycleYear, cycleMonth]);
+  const daysInSelectedMonth = useMemo(() => new Date(cycleYear, cycleMonth, 0).getDate(), [cycleYear, cycleMonth]);
 
-  const cycleTrades = useMemo(() => {
-    return trades.filter((t) => {
-      const [y, m] = t.date.split('-').map(Number);
-      return y === cycleYear && m === cycleMonth;
-    });
-  }, [trades, cycleYear, cycleMonth]);
+  // Fast single-pass maps for O(1) daily lookups
+  const { monthTradesMap, daysMap, cycleTrades } = useMemo(() => {
+    const tMap = new Map<string, Trade[]>();
+    const cTrades: Trade[] = [];
 
-  const perf = calculatePerformance(cycleTrades, settings);
-  const disc = calculateDiscipline(cycleTrades);
+    for (let i = 0; i < trades.length; i++) {
+      const t = trades[i];
+      if (t.date && t.date.startsWith(currentMonthStr)) {
+        cTrades.push(t);
+        const list = tMap.get(t.date);
+        if (list) list.push(t);
+        else tMap.set(t.date, [t]);
+      }
+    }
+
+    const dMap = new Map<string, DayRecord>();
+    for (let i = 0; i < days.length; i++) {
+      const d = days[i];
+      if (d.date && d.date.startsWith(currentMonthStr)) {
+        dMap.set(d.date, d);
+      }
+    }
+
+    return { monthTradesMap: tMap, daysMap: dMap, cycleTrades: cTrades };
+  }, [trades, days, currentMonthStr]);
+
+  // Memoize performance & discipline metrics
+  const perf = useMemo(() => calculatePerformance(cycleTrades, settings), [cycleTrades, settings]);
+  const disc = useMemo(() => calculateDiscipline(cycleTrades), [cycleTrades]);
 
   // Month navigation helpers
-  const handlePrevMonth = () => {
-    if (cycleMonth === 1) {
-      setCycleMonth(12);
-      setCycleYear(prev => prev - 1);
-    } else {
-      setCycleMonth(prev => prev - 1);
-    }
-  };
+  const handlePrevMonth = useCallback(() => {
+    setCycleMonth((prevMonth) => {
+      if (prevMonth === 1) {
+        setCycleYear((y) => y - 1);
+        return 12;
+      }
+      return prevMonth - 1;
+    });
+  }, []);
 
-  const handleNextMonth = () => {
-    if (cycleMonth === 12) {
-      setCycleMonth(1);
-      setCycleYear(prev => prev + 1);
-    } else {
-      setCycleMonth(prev => prev + 1);
-    }
-  };
+  const handleNextMonth = useCallback(() => {
+    setCycleMonth((prevMonth) => {
+      if (prevMonth === 12) {
+        setCycleYear((y) => y + 1);
+        return 1;
+      }
+      return prevMonth + 1;
+    });
+  }, []);
 
-  const handleGoToToday = () => {
+  const handleGoToToday = useCallback(() => {
     const now = new Date();
     setCycleYear(now.getFullYear());
     setCycleMonth(now.getMonth() + 1);
-  };
+  }, []);
 
   // Toggle or set a day as No Trade Day / Skipped
-  const handleToggleSkipDay = async (dateStr: string, reason: DayRecord['noTradeReason'] = 'No Setup', targetState?: boolean) => {
+  const handleToggleSkipDay = useCallback(async (dateStr: string, reason: DayRecord['noTradeReason'] = 'No Setup', targetState?: boolean) => {
     const existing = days.find((d) => d.date === dateStr);
     const dayNum = parseInt(dateStr.split('-')[2], 10);
     const newIsNoTrade = targetState !== undefined ? targetState : !existing?.isNoTradeDay;
@@ -146,13 +178,13 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
         console.error('Failed to sync skip day:', err);
       }
     }
-  };
+  }, [days, onDaysChange, userId]);
 
-  // Institutional Monthly Trading Calendar with Weekly P&L Data
+  // Institutional Monthly Trading Calendar with Weekly P&L Data (Single pass O(N) execution)
   const calendarWeeksData = useMemo(() => {
-    // Sunday is 0, matching standard TradeZella / TraderSync calendars
     const firstDayOfWeek = new Date(cycleYear, cycleMonth - 1, 1).getDay();
-    const offset = firstDayOfWeek; // 0 = Sun, 1 = Mon...
+    const offset = firstDayOfWeek;
+    const WEEKDAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
     interface DaySlot {
       day?: number;
@@ -175,37 +207,46 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
 
     const daysList: DaySlot[] = [];
 
-    // Pad prefix empty slots
     for (let i = 0; i < offset; i++) {
       daysList.push({});
     }
 
-    for (let d = 1; d <= daysInSelectedMonth; d++) {
-      const dateStr = `${currentMonthStr}-${String(d).padStart(2, '0')}`;
-      const dayTrades = trades.filter((t) => t.date === dateStr);
-      const dayRecord = days.find((dr) => dr.date === dateStr);
+    let tradingDaysCount = 0;
+    let noTradeDaysCount = 0;
+    let weekendDaysCount = 0;
 
-      const dateObj = new Date(cycleYear, cycleMonth - 1, d);
-      const dayOfWeekIndex = dateObj.getDay();
+    for (let d = 1; d <= daysInSelectedMonth; d++) {
+      const dateStr = `${currentMonthStr}-${d < 10 ? '0' + d : d}`;
+      const dayTrades = monthTradesMap.get(dateStr) || [];
+      const dayRecord = daysMap.get(dateStr);
+
+      const dayOfWeekIndex = (firstDayOfWeek + d - 1) % 7;
       const isWeekend = dayOfWeekIndex === 0 || dayOfWeekIndex === 6;
-      const dayOfWeekName = dateObj.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+      const dayOfWeekName = WEEKDAY_NAMES[dayOfWeekIndex];
+
+      if (isWeekend) weekendDaysCount++;
 
       let dayPnl = 0;
       let dayR = 0;
       let allClean = true;
       let hasViolation = false;
 
-      dayTrades.forEach((t) => {
+      for (let tIdx = 0; tIdx < dayTrades.length; tIdx++) {
+        const t = dayTrades[tIdx];
         dayPnl += (t.pnl || 0);
         dayR += (t.rMultiple || 0);
         if (t.execution === 'VIOLATION') {
           hasViolation = true;
           allClean = false;
         }
-      });
+      }
 
       const hasTrades = dayTrades.length > 0;
+      if (hasTrades) tradingDaysCount++;
+
       const isNoTrade = !hasTrades && !isWeekend && Boolean(dayRecord?.isNoTradeDay);
+      if (isNoTrade) noTradeDaysCount++;
+
       const isWin = hasTrades && dayPnl > 0.001;
       const isLoss = hasTrades && dayPnl < -0.001;
       const isBE = hasTrades && Math.abs(dayPnl) <= 0.001;
@@ -242,12 +283,10 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
       });
     }
 
-    // Pad end of list to complete the last week row
     while (daysList.length % 7 !== 0) {
       daysList.push({});
     }
 
-    // Group days into 7-day calendar weeks
     const weeks: {
       weekIndex: number;
       days: DaySlot[];
@@ -267,17 +306,19 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
       let losses = 0;
       let be = 0;
 
-      weekDays.forEach((d) => {
+      for (let wDayIdx = 0; wDayIdx < weekDays.length; wDayIdx++) {
+        const d = weekDays[wDayIdx];
         if (d.hasTrades && d.dayTrades) {
           pnl += d.dayPnl || 0;
           tradeCount += d.dayTrades.length;
-          d.dayTrades.forEach((t) => {
+          for (let tI = 0; tI < d.dayTrades.length; tI++) {
+            const t = d.dayTrades[tI];
             if ((t.pnl || 0) > 0.001) wins += 1;
             else if ((t.pnl || 0) < -0.001) losses += 1;
             else be += 1;
-          });
+          }
         }
-      });
+      }
 
       const totalDecided = wins + losses;
       const winRate = totalDecided > 0 ? Math.round((wins / totalDecided) * 100) : 0;
@@ -296,14 +337,11 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
 
     const maxWeeklyAbsPnl = Math.max(1, ...weeks.map((w) => Math.abs(w.pnl)));
 
-    // Calculate current winning streak for the month
+    // Streak
     let streak = 0;
-    const sortedTradingDays = daysList
-      .filter((d) => d.hasTrades)
-      .sort((a, b) => (a.day || 0) - (b.day || 0));
-
-    for (let i = sortedTradingDays.length - 1; i >= 0; i--) {
-      const d = sortedTradingDays[i];
+    for (let i = daysList.length - 1; i >= 0; i--) {
+      const d = daysList[i];
+      if (!d.day || !d.hasTrades) continue;
       if (d.isWin) {
         streak++;
       } else if (d.isBE) {
@@ -313,12 +351,18 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
       }
     }
 
-    // Month summary statistics
+    // Month stats
     const monthTradesCount = cycleTrades.length;
-    const monthPnl = cycleTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+    let monthPnl = 0;
+    let monthWins = 0;
+    let monthLosses = 0;
+    for (let i = 0; i < cycleTrades.length; i++) {
+      const p = cycleTrades[i].pnl || 0;
+      monthPnl += p;
+      if (p > 0.001) monthWins++;
+      else if (p < -0.001) monthLosses++;
+    }
     const monthReturnPct = initialCap > 0 ? (monthPnl / initialCap) * 100 : 0;
-    const monthWins = cycleTrades.filter((t) => (t.pnl || 0) > 0.001).length;
-    const monthLosses = cycleTrades.filter((t) => (t.pnl || 0) < -0.001).length;
     const monthWR = monthWins + monthLosses > 0 ? Math.round((monthWins / (monthWins + monthLosses)) * 100) : 0;
 
     return {
@@ -330,27 +374,13 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
       monthPnl,
       monthReturnPct,
       monthWR,
+      tradingDaysCount,
+      noTradeDaysCount,
+      weekendDaysCount,
     };
-  }, [cycleYear, cycleMonth, currentMonthStr, daysInSelectedMonth, trades, days, cycleTrades, initialCap]);
+  }, [cycleYear, cycleMonth, currentMonthStr, daysInSelectedMonth, monthTradesMap, daysMap, cycleTrades, initialCap]);
 
-  // Summary counts for this cycle
-  const tradingDaysCount = Array.from({ length: daysInSelectedMonth }, (_, i) => i + 1).filter((dayNum) => {
-    const dStr = `${currentMonthStr}-${String(dayNum).padStart(2, '0')}`;
-    return trades.some((t) => t.date === dStr);
-  }).length;
-
-  const noTradeDaysCount = Array.from({ length: daysInSelectedMonth }, (_, i) => i + 1).filter((dayNum) => {
-    const dStr = `${currentMonthStr}-${String(dayNum).padStart(2, '0')}`;
-    const dRec = days.find((d) => d.date === dStr);
-    const dObj = new Date(cycleYear, cycleMonth - 1, dayNum);
-    const isWk = dObj.getDay() === 0 || dObj.getDay() === 6;
-    return !trades.some((t) => t.date === dStr) && !isWk && dRec?.isNoTradeDay;
-  }).length;
-
-  const weekendDaysCount = Array.from({ length: daysInSelectedMonth }, (_, i) => i + 1).filter((dayNum) => {
-    const dObj = new Date(cycleYear, cycleMonth - 1, dayNum);
-    return dObj.getDay() === 0 || dObj.getDay() === 6;
-  }).length;
+  const { tradingDaysCount, noTradeDaysCount, weekendDaysCount } = calendarWeeksData;
 
   return (
     <div className="space-y-6 animate-fade-in pb-16 text-[#1F1A16] dark:text-[#F0F4F8]">
@@ -904,4 +934,4 @@ export const NHCycleView: React.FC<NHCycleViewProps> = ({
       )}
     </div>
   );
-};
+});

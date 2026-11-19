@@ -39,6 +39,15 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     onClose?.();
   };
 
+  const prefetchTab = (tabId: TabType) => {
+    if (tabId === 'cycle') import('./NHCycleView');
+    else if (tabId === 'journal') import('./JournalView');
+    else if (tabId === 'analytics') import('./AnalyticsView');
+    else if (tabId === 'calendar') import('./EconomicCalendarView');
+    else if (tabId === 'notes') import('./NotesView');
+    else if (tabId === 'settings') import('./SettingsView');
+  };
+
   const sidebarContent = (
     <div className="flex flex-col justify-between h-full select-none overflow-hidden bg-[#FAF7F2] dark:bg-[#121722] border-r border-[#E7E0D6] dark:border-[#232B3A] transition-colors">
       {/* Top Logo & Header */}
@@ -85,6 +94,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
+                onMouseEnter={() => prefetchTab(item.id)}
+                onTouchStart={() => prefetchTab(item.id)}
                 className={`relative w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] sm:text-sm font-semibold transition-all cursor-pointer text-left overflow-hidden ${
                   isActive
                     ? 'bg-[#F4ECE1] dark:bg-[#1E2638] text-[#1F1A16] dark:text-[#F0F4F8] font-bold shadow-2xs'
