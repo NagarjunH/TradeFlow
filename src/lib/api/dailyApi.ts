@@ -62,7 +62,9 @@ export const dailyApi = {
 
       if (!error && Array.isArray(data)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mapped = ((data ?? []) as any[]).map(rowToDayRecord);
+        const mapped = ((data ?? []) as any[])
+          .filter((row: any) => row.record_date !== '1970-01-01')
+          .map(rowToDayRecord);
         try {
           await db.days.clear();
           if (mapped.length > 0) {

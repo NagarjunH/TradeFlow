@@ -371,6 +371,7 @@ function AppInner() {
                 selectedDate={systemDate}
                 onSelectDateForJournal={handleSelectDateForJournal}
                 onTabChange={setCurrentTab}
+                userId={user?.id}
               />
             )}
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   FileText,
   Plus,
@@ -19,10 +19,15 @@ import {
   Eye,
   Minus,
   Check,
-  Calendar
+  Calendar,
+  Cloud,
+  CloudOff,
+  RefreshCw
 } from 'lucide-react';
 import type { Trade, AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
+import { supabase } from '../lib/supabase';
+import { notesApi, NOTES_SYNC_DATE } from '../lib/api/notesApi';
 
 export interface TraderNote {
   id: string;
@@ -34,35 +39,6 @@ export interface TraderNote {
   updatedAt?: string;
   linkedTradeId?: number;
 }
-
-const STORAGE_KEY = 'nh_traders_personal_notes_v1';
-
-const INITIAL_NOTES: TraderNote[] = [
-  {
-    id: 'note-1',
-    title: 'Post-Loss Protocol: Reset Nervous System',
-    content: 'Whenever a trade hits stop loss, do NOT immediately look for another entry. Step away from charts for at least 15 minutes. High emotions lead to revenge trading. Wait for clear HTF structure to re-establish.',
-    category: 'Mindset',
-    isPinned: true,
-    date: '2026-09-20',
-  },
-  {
-    id: 'note-2',
-    title: 'London Open SMC Confirmation Rules',
-    content: 'Only take trades after the Asian high or low has been swept. Look for M5 MSS (Market Structure Shift) with displacement leaving a clean Fair Value Gap (FVG). Stop loss must always be beyond the swing extreme.',
-    category: 'Strategy',
-    isPinned: true,
-    date: '2026-09-18',
-  },
-  {
-    id: 'note-3',
-    title: 'High-Impact Red Folder News Rule',
-    content: 'Do NOT hold open trades through CPI, NFP, or FOMC interest rate announcements. Spread widening can trigger stop loss prematurely. Wait 15 minutes post-release before assessing new setups.',
-    category: 'Rules',
-    isPinned: false,
-    date: '2026-09-15',
-  },
-];
 
 const getCategoryBadgeStyle = (category: TraderNote['category']) => {
   switch (category) {
@@ -351,6 +327,7 @@ interface NotesViewProps {
   onSelectDateForJournal?: (dateStr: string) => void;
   onTabChange?: (tab: TabType) => void;
   selectedDate?: string;
+  userId?: string;
 }
 
 export const NotesView: React.FC<NotesViewProps> = ({
@@ -359,19 +336,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
   onSelectDateForJournal,
   onTabChange,
   selectedDate,
+  userId,
 }) => {
-  const [notes, setNotes] = useState<TraderNote[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {
-      // ignore
-    }
-    return INITIAL_NOTES;
-  });
+  const [notes, setNotes] = useState<TraderNote[]>(() => notesApi.getLocal());
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('offline');
 
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -396,14 +364,85 @@ export const NotesView: React.FC<NotesViewProps> = ({
   const [notePinned, setNotePinned] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sync to localStorage
+  // 1. Initial Cloud Sync on mount / when userId changes
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-    } catch {
-      // ignore
+    let isMounted = true;
+
+    const performSync = async () => {
+      if (!userId || userId === '00000000-0000-0000-0000-000000000000') {
+        if (isMounted) setSyncStatus('offline');
+        return;
+      }
+
+      if (isMounted) setSyncStatus('syncing');
+      try {
+        const res = await notesApi.sync(userId);
+        if (isMounted) {
+          setNotes(res.notes);
+          setSyncStatus(res.synced ? 'synced' : 'offline');
+        }
+      } catch (err) {
+        console.warn('[NotesView] Cloud sync error:', err);
+        if (isMounted) setSyncStatus('offline');
+      }
+    };
+
+    performSync();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [userId]);
+
+  // 2. Realtime subscription: Laptop <-> Mobile live updates
+  useEffect(() => {
+    if (!userId || userId === '00000000-0000-0000-0000-000000000000') return;
+
+    const channel = supabase
+      .channel(`realtime-notes-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'daily_records',
+          filter: `record_date=eq.${NOTES_SYNC_DATE}`,
+        },
+        async () => {
+          try {
+            const cloudNotes = await notesApi.getCloud(userId);
+            if (cloudNotes && cloudNotes.length > 0) {
+              setNotes(cloudNotes);
+              notesApi.saveLocal(cloudNotes);
+              setSyncStatus('synced');
+            }
+          } catch (err) {
+            console.warn('[NotesView] Realtime sync error:', err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  // Manual sync trigger
+  const handleManualSync = useCallback(async () => {
+    if (!userId || userId === '00000000-0000-0000-0000-000000000000') {
+      alert('Sign in to your TradeFlow account to automatically sync notes across Laptop & Mobile.');
+      return;
     }
-  }, [notes]);
+    setSyncStatus('syncing');
+    try {
+      const res = await notesApi.sync(userId);
+      setNotes(res.notes);
+      setSyncStatus(res.synced ? 'synced' : 'offline');
+    } catch {
+      setSyncStatus('offline');
+    }
+  }, [userId]);
 
   // Escape key closes active modals
   useEffect(() => {
@@ -464,12 +503,13 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setIsEditorOpen(true);
   };
 
-  const handleSaveNote = (e: React.FormEvent) => {
+  const handleSaveNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!noteTitle.trim() && !noteContent.trim()) return;
 
     const today = selectedDate || new Date().toISOString().split('T')[0];
     let savedNote: TraderNote;
+    let nextNotes: TraderNote[];
 
     if (editingNote) {
       savedNote = {
@@ -480,9 +520,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
         isPinned: notePinned,
         updatedAt: today,
       };
-      setNotes((prev) =>
-        prev.map((n) => (n.id === savedNote.id ? savedNote : n))
-      );
+      nextNotes = notes.map((n) => (n.id === savedNote.id ? savedNote : n));
     } else {
       savedNote = {
         id: `note-${Date.now()}`,
@@ -492,32 +530,52 @@ export const NotesView: React.FC<NotesViewProps> = ({
         isPinned: notePinned,
         date: today,
       };
-      setNotes((prev) => [savedNote, ...prev]);
+      nextNotes = [savedNote, ...notes];
     }
 
+    setNotes(nextNotes);
+    notesApi.saveLocal(nextNotes);
     setIsEditorOpen(false);
     setViewingNote(savedNote);
+
+    // Push to Supabase Cloud
+    if (userId && userId !== '00000000-0000-0000-0000-000000000000') {
+      setSyncStatus('syncing');
+      const ok = await notesApi.saveCloud(userId, nextNotes);
+      setSyncStatus(ok ? 'synced' : 'offline');
+    }
   };
 
-  const handleDeleteNote = (id: string) => {
+  const handleDeleteNote = async (id: string) => {
     if (window.confirm('Delete this note?')) {
-      setNotes((prev) => prev.filter((n) => n.id !== id));
+      const nextNotes = notes.filter((n) => n.id !== id);
+      setNotes(nextNotes);
+      notesApi.saveLocal(nextNotes);
       if (viewingNote?.id === id) {
         setViewingNote(null);
+      }
+      if (userId && userId !== '00000000-0000-0000-0000-000000000000') {
+        setSyncStatus('syncing');
+        const ok = await notesApi.saveCloud(userId, nextNotes);
+        setSyncStatus(ok ? 'synced' : 'offline');
       }
     }
   };
 
-  const handleTogglePin = (id: string) => {
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isPinned: !n.isPinned } : n))
-    );
+  const handleTogglePin = async (id: string) => {
+    const nextNotes = notes.map((n) => (n.id === id ? { ...n, isPinned: !n.isPinned } : n));
+    setNotes(nextNotes);
+    notesApi.saveLocal(nextNotes);
     if (viewingNote?.id === id) {
       setViewingNote((prev) => prev ? { ...prev, isPinned: !prev.isPinned } : null);
     }
+    if (userId && userId !== '00000000-0000-0000-0000-000000000000') {
+      const ok = await notesApi.saveCloud(userId, nextNotes);
+      setSyncStatus(ok ? 'synced' : 'offline');
+    }
   };
 
-  const handleToggleViewingNoteTask = (lineIndex: number) => {
+  const handleToggleViewingNoteTask = async (lineIndex: number) => {
     if (!viewingNote) return;
 
     const lines = viewingNote.content.split('\n');
@@ -538,8 +596,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
       content: updatedContent,
     };
 
+    const nextNotes = notes.map((n) => (n.id === updatedNote.id ? updatedNote : n));
     setViewingNote(updatedNote);
-    setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
+    setNotes(nextNotes);
+    notesApi.saveLocal(nextNotes);
+
+    if (userId && userId !== '00000000-0000-0000-0000-000000000000') {
+      await notesApi.saveCloud(userId, nextNotes);
+    }
   };
 
   const insertFormat = (prefix: string, suffix: string = '', defaultText: string = '') => {
@@ -623,11 +687,41 @@ export const NotesView: React.FC<NotesViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+          {/* Cloud Sync Status */}
+          {syncStatus === 'syncing' && (
+            <span className="flex items-center gap-1.5 text-xs font-mono text-[#D97706] bg-[#FAF2E6] dark:bg-[#1C2433] px-3 py-2 rounded-xl border border-[#E7E0D6] dark:border-[#2E384D] animate-pulse">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>Syncing...</span>
+            </span>
+          )}
+          {syncStatus === 'synced' && (
+            <button
+              type="button"
+              onClick={handleManualSync}
+              className="flex items-center gap-1.5 text-xs font-mono text-[#10B981] bg-[#10B981]/10 px-3 py-2 rounded-xl border border-[#10B981]/25 hover:bg-[#10B981]/20 transition-all cursor-pointer"
+              title="Click to manually re-sync notes with Supabase cloud"
+            >
+              <Cloud className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Cloud Synced</span>
+            </button>
+          )}
+          {syncStatus === 'offline' && (
+            <button
+              type="button"
+              onClick={handleManualSync}
+              className="flex items-center gap-1.5 text-xs font-mono text-[#786F66] dark:text-[#94A3B8] bg-[#FAF2E6] dark:bg-[#1C2433] px-3 py-2 rounded-xl border border-[#E7E0D6] dark:border-[#2E384D] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] transition-all cursor-pointer"
+              title="Offline / Local storage. Click to sync if signed in"
+            >
+              <CloudOff className="w-3.5 h-3.5" />
+              <span>Local Mode</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleOpenNewNote}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white font-bold text-xs shadow-xs transition-all cursor-pointer shrink-0"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white font-bold text-xs shadow-xs transition-all cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             New Note

@@ -1,5 +1,5 @@
-// TradeFlow PWA Service Worker v1.0.1
-const CACHE_NAME = 'tradeflow-cache-v2';
+// TradeFlow PWA Service Worker v1.0.2
+const CACHE_NAME = 'tradeflow-cache-v3';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
