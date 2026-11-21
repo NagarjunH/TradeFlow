@@ -19,8 +19,7 @@ import {
   Eye,
   Minus,
   Check,
-  Calendar,
-  Clock
+  Calendar
 } from 'lucide-react';
 import type { Trade, AppSettings } from '../db/db';
 import type { TabType } from './Navbar';
@@ -142,81 +141,84 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   const lines = content.split('\n');
 
   if (isCompact) {
-    return (
-      <div className="space-y-1 text-xs text-[#5A5043] dark:text-[#CBD5E1] line-clamp-6 leading-relaxed">
-        {lines.map((line, idx) => {
-          const trimmed = line.trim();
-          if (!trimmed) return <div key={idx} className="h-1" />;
+    const validLines = lines.map((l) => l.trim()).filter((l) => l.length > 0);
+    const previewLines = validLines.slice(0, 5);
 
-          if (trimmed.startsWith('# ')) {
+    return (
+      <div className="relative space-y-1 text-xs text-[#5A5043] dark:text-[#CBD5E1] leading-relaxed max-h-32 sm:max-h-36 overflow-hidden">
+        {previewLines.map((line, idx) => {
+          if (line.startsWith('# ')) {
             return (
-              <p key={idx} className="font-black text-[#1F1A16] dark:text-[#F0F4F8] text-[13px] pt-0.5">
-                {renderInlineMarkdown(trimmed.replace(/^#\s+/, ''))}
+              <p key={idx} className="font-black text-[#1F1A16] dark:text-[#F0F4F8] text-[12px] sm:text-[13px] truncate">
+                {renderInlineMarkdown(line.replace(/^#\s+/, ''))}
               </p>
             );
           }
-          if (trimmed.startsWith('## ')) {
+          if (line.startsWith('## ')) {
             return (
-              <p key={idx} className="font-bold text-[#1F1A16] dark:text-[#F0F4F8] text-[12px] pt-0.5">
-                {renderInlineMarkdown(trimmed.replace(/^##\s+/, ''))}
+              <p key={idx} className="font-bold text-[#1F1A16] dark:text-[#F0F4F8] text-[11px] sm:text-[12px] truncate">
+                {renderInlineMarkdown(line.replace(/^##\s+/, ''))}
               </p>
             );
           }
-          if (trimmed.startsWith('### ')) {
+          if (line.startsWith('### ')) {
             return (
-              <p key={idx} className="font-bold text-[#D97706] text-[11px] pt-0.5">
-                {renderInlineMarkdown(trimmed.replace(/^###\s+/, ''))}
+              <p key={idx} className="font-bold text-[#D97706] text-[10px] sm:text-[11px] truncate">
+                {renderInlineMarkdown(line.replace(/^###\s+/, ''))}
               </p>
             );
           }
-          if (trimmed.startsWith('- [ ] ') || trimmed.startsWith('- [x] ') || trimmed.startsWith('- [X] ')) {
-            const isChecked = trimmed.startsWith('- [x] ') || trimmed.startsWith('- [X] ');
-            const taskText = trimmed.replace(/^- \[[ xX]\]\s+/, '');
+          if (line.startsWith('- [ ] ') || line.startsWith('- [x] ') || line.startsWith('- [X] ')) {
+            const isChecked = line.startsWith('- [x] ') || line.startsWith('- [X] ');
+            const taskText = line.replace(/^- \[[ xX]\]\s+/, '');
             return (
-              <div key={idx} className="flex items-center gap-1.5 text-[11px]">
+              <div key={idx} className="flex items-center gap-1.5 text-[11px] truncate">
                 <span className={`w-3 h-3 rounded-xs border flex items-center justify-center shrink-0 ${isChecked ? 'bg-[#10B981] border-[#10B981] text-white' : 'border-[#9E958C]'}`}>
                   {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                 </span>
-                <span className={isChecked ? 'line-through opacity-60' : ''}>
+                <span className={`truncate ${isChecked ? 'line-through opacity-60' : ''}`}>
                   {renderInlineMarkdown(taskText)}
                 </span>
               </div>
             );
           }
-          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          if (line.startsWith('- ') || line.startsWith('* ')) {
             return (
-              <div key={idx} className="flex items-start gap-1.5 text-[11px]">
+              <div key={idx} className="flex items-start gap-1.5 text-[11px] truncate">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#D97706] mt-1.5 shrink-0" />
-                <span>{renderInlineMarkdown(trimmed.replace(/^[-*]\s+/, ''))}</span>
+                <span className="truncate">{renderInlineMarkdown(line.replace(/^[-*]\s+/, ''))}</span>
               </div>
             );
           }
-          if (/^\d+\.\s+/.test(trimmed)) {
-            const num = trimmed.match(/^(\d+)\.\s+/)?.[1];
+          if (/^\d+\.\s+/.test(line)) {
+            const num = line.match(/^(\d+)\.\s+/)?.[1];
             return (
-              <div key={idx} className="flex items-start gap-1.5 text-[11px]">
+              <div key={idx} className="flex items-start gap-1.5 text-[11px] truncate">
                 <span className="font-mono font-bold text-[#D97706] shrink-0">{num}.</span>
-                <span>{renderInlineMarkdown(trimmed.replace(/^\d+\.\s+/, ''))}</span>
+                <span className="truncate">{renderInlineMarkdown(line.replace(/^\d+\.\s+/, ''))}</span>
               </div>
             );
           }
-          if (trimmed.startsWith('> ')) {
+          if (line.startsWith('> ')) {
             return (
-              <p key={idx} className="italic border-l-2 border-[#D97706] pl-2 text-[11px] text-[#786F66] dark:text-[#94A3B8]">
-                {renderInlineMarkdown(trimmed.replace(/^>\s+/, ''))}
+              <p key={idx} className="italic border-l-2 border-[#D97706] pl-2 text-[11px] text-[#786F66] dark:text-[#94A3B8] truncate">
+                {renderInlineMarkdown(line.replace(/^>\s+/, ''))}
               </p>
             );
           }
-          if (trimmed === '---' || trimmed === '***') {
+          if (line === '---' || line === '***') {
             return <div key={idx} className="border-t border-[#E7E0D6] dark:border-[#242D3D] my-1" />;
           }
 
           return (
-            <p key={idx}>
+            <p key={idx} className="truncate">
               {renderInlineMarkdown(line)}
             </p>
           );
         })}
+        {validLines.length > 3 && (
+          <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-[#FAF6EE] dark:from-[#131822] to-transparent pointer-events-none" />
+        )}
       </div>
     );
   }
@@ -606,14 +608,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
   return (
     <div className="space-y-6 animate-fade-in pb-16 text-[#1F1A16] dark:text-[#F0F4F8]">
       {/* 1. Header Banner */}
-      <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
+      <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-8 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono tracking-widest text-[#D97706] uppercase font-bold">
+            <span className="text-[11px] sm:text-xs font-mono tracking-widest text-[#D97706] uppercase font-bold">
               KNOWLEDGE • PLAYBOOK • JOURNAL
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-[#1F1A16] dark:text-[#F0F4F8] mt-1">
+          <h1 className="text-xl sm:text-3xl lg:text-4xl font-black tracking-tight text-[#1F1A16] dark:text-[#F0F4F8] mt-1">
             Trading Notes & Playbook
           </h1>
           <p className="text-xs sm:text-sm text-[#786F66] dark:text-[#94A3B8] mt-1">
@@ -625,7 +627,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
           <button
             type="button"
             onClick={handleOpenNewNote}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white font-bold text-xs shadow-xs transition-all cursor-pointer shrink-0"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white font-bold text-xs shadow-xs transition-all cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             New Note
@@ -634,33 +636,33 @@ export const NotesView: React.FC<NotesViewProps> = ({
       </div>
 
       {/* 2. Mode Selector & Filters Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         {/* Notebook vs Trade Notes Tabs */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center bg-[#FAF6EE] dark:bg-[#131822] p-1 rounded-xl border border-[#E7E0D6] dark:border-[#242D3D] text-xs font-bold w-fit">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto">
+          <div className="flex items-center bg-[#FAF6EE] dark:bg-[#131822] p-1 rounded-xl border border-[#E7E0D6] dark:border-[#242D3D] text-xs font-bold w-full sm:w-fit">
             <button
               type="button"
               onClick={() => setViewMode('notebook')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 viewMode === 'notebook'
                   ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
                   : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              Playbook Notes ({notes.length})
+              <span>Playbook ({notes.length})</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode('trade_notes')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 viewMode === 'trade_notes'
                   ? 'bg-[#DB9F35] text-[#1F1A16] font-black shadow-2xs'
                   : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16]'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              Trade Notes Feed ({tradeNotesList.length})
+              <span>Trade Feed ({tradeNotesList.length})</span>
             </button>
           </div>
 
@@ -668,7 +670,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
             <button
               type="button"
               onClick={() => setFilterByDate(!filterByDate)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer w-full sm:w-auto ${
                 filterByDate
                   ? 'bg-[#10B981] text-white border-[#10B981] shadow-2xs'
                   : 'bg-[#FAF6EE] dark:bg-[#131822] border-[#E7E0D6] dark:border-[#242D3D] text-[#786F66] dark:text-[#94A3B8] hover:border-[#10B981]'
@@ -686,11 +688,11 @@ export const NotesView: React.FC<NotesViewProps> = ({
         </div>
 
         {/* Search Bar */}
-        <div className="relative flex-1 max-w-md">
+        <div className="relative w-full md:max-w-xs lg:max-w-sm">
           <Search className="w-4 h-4 text-[#9E958C] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search notes, rules, psychological lessons..."
+            placeholder="Search notes, rules, lessons..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] placeholder-[#9E958C] outline-none focus:border-[#DB9F35] transition-colors"
@@ -698,15 +700,15 @@ export const NotesView: React.FC<NotesViewProps> = ({
         </div>
       </div>
 
-      {/* Category Pills (only in notebook mode) */}
+      {/* Category Pills (only in notebook mode, horizontally scrollable on mobile) */}
       {viewMode === 'notebook' && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 -mx-1 px-1">
           {categories.map((cat) => (
             <button
               key={cat}
               type="button"
               onClick={() => setActiveCategory(cat)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border shrink-0 ${
                 activeCategory === cat
                   ? 'bg-[#1F1A16] text-white border-[#1F1A16] dark:bg-[#F0F4F8] dark:text-[#1F1A16] dark:border-[#F0F4F8]'
                   : 'bg-[#FAF6EE] dark:bg-[#131822] text-[#786F66] dark:text-[#94A3B8] border-[#E7E0D6] dark:border-[#242D3D] hover:text-[#1F1A16]'
@@ -720,7 +722,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
       {/* 3. Main Content: Playbook Notes Grid */}
       {viewMode === 'notebook' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 items-start">
           {filteredNotes.length === 0 ? (
             <div className="col-span-full py-16 text-center bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl">
               <FileText className="w-10 h-10 text-[#9E958C] mx-auto mb-2 opacity-50" />
@@ -744,7 +746,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
               <div
                 key={note.id}
                 onClick={() => setViewingNote(note)}
-                className={`bg-[#FAF6EE] dark:bg-[#131822] border rounded-2xl p-5 shadow-2xs flex flex-col justify-between transition-all hover:shadow-md cursor-pointer hover:border-[#D97706]/70 group ${
+                className={`bg-[#FAF6EE] dark:bg-[#131822] border rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col transition-all hover:shadow-md cursor-pointer hover:border-[#D97706]/70 group ${
                   note.isPinned
                     ? 'border-[#DB9F35] ring-1 ring-[#DB9F35]/40'
                     : 'border-[#E7E0D6] dark:border-[#242D3D]'
@@ -909,8 +911,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
       {/* 5. Editor Modal */}
       {isEditorOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-3xl p-6 sm:p-7 max-w-xl w-full shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 animate-fade-in">
+          <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl sm:rounded-3xl p-4 sm:p-7 max-w-xl w-full max-h-[92vh] sm:max-h-[88vh] overflow-y-auto shadow-2xl space-y-3.5 sm:space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E7E0D6] dark:border-[#242D3D]">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-[#D97706]" />
@@ -921,13 +923,13 @@ export const NotesView: React.FC<NotesViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsEditorOpen(false)}
-                className="p-1 rounded-lg text-[#9E958C] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] cursor-pointer"
+                className="p-1.5 rounded-lg text-[#9E958C] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveNote} className="space-y-4">
+            <form onSubmit={handleSaveNote} className="space-y-3.5 sm:space-y-4">
               {/* Title */}
               <div>
                 <label className="block text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1">
@@ -944,7 +946,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
               </div>
 
               {/* Category & Pin */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-[#786F66] dark:text-[#94A3B8] uppercase tracking-wider mb-1">
                     Category
@@ -963,7 +965,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   </select>
                 </div>
 
-                <div className="flex items-end pb-1">
+                <div className="flex items-center sm:items-end pb-1">
                   <label className="flex items-center gap-2 text-xs font-semibold text-[#1F1A16] dark:text-[#F0F4F8] cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -1008,14 +1010,14 @@ export const NotesView: React.FC<NotesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Formatting Toolbar (Headlines, Bold, Lists, Checklists, etc.) */}
+                {/* Formatting Toolbar (Horizontal scroll on mobile so it stays on 1 clean row) */}
                 {editorTab === 'write' && (
-                  <div className="flex flex-wrap items-center gap-1 p-1.5 bg-[#FAF2E6] dark:bg-[#1C2433] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs">
+                  <div className="flex items-center gap-1 p-1.5 bg-[#FAF2E6] dark:bg-[#1C2433] border border-[#E7E0D6] dark:border-[#2E384D] rounded-xl text-xs overflow-x-auto no-scrollbar shrink-0">
                     {/* Headings */}
                     <button
                       type="button"
                       onClick={() => insertLinePrefix('# ', 'Heading 1')}
-                      className="px-2 py-1 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] font-black text-xs transition-colors cursor-pointer"
+                      className="px-2 py-1 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] font-black text-xs transition-colors cursor-pointer shrink-0"
                       title="Headline 1 (# Title)"
                     >
                       H1
@@ -1023,7 +1025,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     <button
                       type="button"
                       onClick={() => insertLinePrefix('## ', 'Heading 2')}
-                      className="px-2 py-1 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] font-bold text-xs transition-colors cursor-pointer"
+                      className="px-2 py-1 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] font-bold text-xs transition-colors cursor-pointer shrink-0"
                       title="Headline 2 (## Subheading)"
                     >
                       H2
@@ -1031,19 +1033,19 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     <button
                       type="button"
                       onClick={() => insertLinePrefix('### ', 'Heading 3')}
-                      className="px-2 py-1 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#D97706] font-bold text-xs transition-colors cursor-pointer"
+                      className="px-2 py-1 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#D97706] font-bold text-xs transition-colors cursor-pointer shrink-0"
                       title="Headline 3 (### Section)"
                     >
                       H3
                     </button>
 
-                    <div className="w-[1px] h-4 bg-[#E7E0D6] dark:bg-[#2E384D] mx-0.5" />
+                    <div className="w-[1px] h-4 bg-[#E7E0D6] dark:bg-[#2E384D] mx-0.5 shrink-0" />
 
                     {/* Inline Formatting */}
                     <button
                       type="button"
                       onClick={() => insertFormat('**', '**', 'bold text')}
-                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer shrink-0"
                       title="Bold (**text**)"
                     >
                       <Bold className="w-3.5 h-3.5" />
@@ -1051,19 +1053,19 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     <button
                       type="button"
                       onClick={() => insertFormat('*', '*', 'italic text')}
-                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer shrink-0"
                       title="Italic (*text*)"
                     >
                       <Italic className="w-3.5 h-3.5" />
                     </button>
 
-                    <div className="w-[1px] h-4 bg-[#E7E0D6] dark:bg-[#2E384D] mx-0.5" />
+                    <div className="w-[1px] h-4 bg-[#E7E0D6] dark:bg-[#2E384D] mx-0.5 shrink-0" />
 
                     {/* Lists & Checklists */}
                     <button
                       type="button"
                       onClick={() => insertLinePrefix('- ', 'List item')}
-                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer shrink-0"
                       title="Bullet List (- item)"
                     >
                       <List className="w-3.5 h-3.5" />
@@ -1071,7 +1073,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     <button
                       type="button"
                       onClick={() => insertLinePrefix('1. ', 'Numbered item')}
-                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer shrink-0"
                       title="Numbered List (1. item)"
                     >
                       <ListOrdered className="w-3.5 h-3.5" />
@@ -1079,19 +1081,19 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     <button
                       type="button"
                       onClick={() => insertLinePrefix('- [ ] ', 'Checklist task')}
-                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer shrink-0"
                       title="Checklist (- [ ] task)"
                     >
                       <CheckSquare className="w-3.5 h-3.5 text-[#10B981]" />
                     </button>
 
-                    <div className="w-[1px] h-4 bg-[#E7E0D6] dark:bg-[#2E384D] mx-0.5" />
+                    <div className="w-[1px] h-4 bg-[#E7E0D6] dark:bg-[#2E384D] mx-0.5 shrink-0" />
 
                     {/* Quote & Divider */}
                     <button
                       type="button"
                       onClick={() => insertLinePrefix('> ', 'Key takeaway or quote')}
-                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer shrink-0"
                       title="Quote (> quote)"
                     >
                       <Quote className="w-3.5 h-3.5" />
@@ -1099,7 +1101,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     <button
                       type="button"
                       onClick={() => insertFormat('\n---\n')}
-                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-white dark:hover:bg-[#242D3D] text-[#1F1A16] dark:text-[#F0F4F8] transition-colors cursor-pointer shrink-0"
                       title="Divider line (---)"
                     >
                       <Minus className="w-3.5 h-3.5" />
@@ -1110,7 +1112,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 {editorTab === 'write' ? (
                   <textarea
                     ref={textareaRef}
-                    rows={8}
+                    rows={7}
                     required
                     placeholder="Write your setup checklist, mental cues, emotional triggers, or playbook rules..."
                     value={noteContent}
@@ -1118,7 +1120,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     className="w-full px-3.5 py-2.5 bg-white dark:bg-[#1C2433] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl text-xs text-[#1F1A16] dark:text-[#F0F4F8] outline-none focus:border-[#D97706] resize-none leading-relaxed font-mono"
                   />
                 ) : (
-                  <div className="min-h-[190px] max-h-[260px] overflow-y-auto px-4 py-3 bg-white dark:bg-[#1C2433] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl">
+                  <div className="min-h-[170px] max-h-[240px] overflow-y-auto px-4 py-3 bg-white dark:bg-[#1C2433] border border-[#DFD5C6] dark:border-[#2E384D] rounded-xl">
                     {noteContent.trim() ? (
                       <MarkdownRenderer content={noteContent} isCompact={false} />
                     ) : (
@@ -1152,44 +1154,35 @@ export const NotesView: React.FC<NotesViewProps> = ({
       {/* 6. Note Reader Modal (Formatted typography with corner Edit button) */}
       {viewingNote && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 animate-fade-in"
           onClick={() => setViewingNote(null)}
         >
           <div
-            className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-3xl p-6 sm:p-8 max-w-2xl w-full max-h-[88vh] overflow-hidden flex flex-col shadow-2xl transition-colors"
+            className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl sm:rounded-3xl p-4 sm:p-7 max-w-2xl w-full max-h-[92vh] sm:max-h-[88vh] overflow-hidden flex flex-col shadow-2xl transition-colors"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Bar with Category, Dates, and Corner Edit / Close */}
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#E7E0D6] dark:border-[#242D3D] shrink-0">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${getCategoryBadgeStyle(
-                      viewingNote.category
-                    )}`}
-                  >
-                    {viewingNote.category}
+            <div className="flex items-center justify-between gap-2 pb-3.5 border-b border-[#E7E0D6] dark:border-[#242D3D] shrink-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${getCategoryBadgeStyle(
+                    viewingNote.category
+                  )}`}
+                >
+                  {viewingNote.category}
+                </span>
+                {viewingNote.isPinned && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-[#D97706] bg-[#FAF2E6] dark:bg-[#1C2433] px-1.5 py-0.5 rounded-md border border-[#E7E0D6] dark:border-[#2E384D]">
+                    <Pin className="w-3 h-3 fill-current" /> Pinned
                   </span>
-                  {viewingNote.isPinned && (
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#D97706] bg-[#FAF2E6] dark:bg-[#1C2433] px-2 py-0.5 rounded-md border border-[#E7E0D6] dark:border-[#2E384D]">
-                      <Pin className="w-3 h-3 fill-current" /> Pinned
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 text-[11px] font-mono text-[#786F66] dark:text-[#94A3B8]">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 opacity-70" /> {viewingNote.date}
-                  </span>
-                  {viewingNote.updatedAt && (
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 opacity-70" /> Updated {viewingNote.updatedAt}
-                    </span>
-                  )}
-                </div>
+                )}
+                <span className="flex items-center gap-1 text-[10px] font-mono text-[#786F66] dark:text-[#94A3B8]">
+                  <Calendar className="w-3 h-3 opacity-70" /> {viewingNote.date}
+                </span>
               </div>
 
               {/* Corner Actions */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1197,7 +1190,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     setViewingNote(null);
                     handleOpenEditNote(noteToEdit);
                   }}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                   title="Edit this note"
                 >
                   <Edit3 className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -1215,8 +1208,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
             </div>
 
             {/* Scrollable Note Content */}
-            <div className="overflow-y-auto py-5 pr-1 space-y-4 flex-1">
-              <h2 className="text-xl sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight">
+            <div className="overflow-y-auto py-4 sm:py-5 pr-1 space-y-3 sm:space-y-4 flex-1">
+              <h2 className="text-lg sm:text-2xl font-black text-[#1F1A16] dark:text-[#F0F4F8] tracking-tight">
                 {viewingNote.title}
               </h2>
               <div className="pt-2 border-t border-[#E7E0D6]/60 dark:border-[#242D3D]">
@@ -1230,8 +1223,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
             {/* Modal Bottom Bar */}
             <div className="pt-3 border-t border-[#E7E0D6] dark:border-[#242D3D] flex items-center justify-between text-xs text-[#786F66] dark:text-[#94A3B8] shrink-0">
-              <span className="text-[11px] font-mono">
-                Press Esc or click outside to close
+              <span className="text-[10px] sm:text-[11px] font-mono truncate">
+                {viewingNote.updatedAt ? `Edited ${viewingNote.updatedAt}` : `Created ${viewingNote.date}`}
               </span>
               <button
                 type="button"
