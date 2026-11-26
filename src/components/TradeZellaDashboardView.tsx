@@ -463,6 +463,43 @@ export const TradeZellaDashboardView: React.FC<TradeZellaDashboardViewProps> = (
   return (
     <div className="space-y-4 sm:space-y-5 animate-fade-in pb-16 text-[#1F1A16] dark:text-[#F0F4F8] transition-colors font-sans">
       
+      {/* Self Check Audit Alert Banner */}
+      <div 
+        onClick={() => onTabChange?.('self_check')}
+        className="bg-gradient-to-r from-[#FAF6EE] via-[#FAF2E6] to-[#F5EEDD] dark:from-[#131822] dark:via-[#1A2231] dark:to-[#1E273A] border border-[#D97706]/40 dark:border-[#D97706]/40 rounded-2xl p-3 sm:p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer group hover:border-[#D97706] transition-all"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#D97706] text-white flex items-center justify-center font-bold shadow-xs shrink-0 group-hover:scale-105 transition-transform text-sm sm:text-base">
+            🔍
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-bold text-[#1F1A16] dark:text-[#F0F4F8] group-hover:text-[#D97706] transition-colors">
+                Complete Trading Performance Audit (Self Check)
+              </span>
+              <span className="px-2 py-0.2 rounded-full text-[9px] font-black font-mono bg-[#D97706] text-white">
+                NEW
+              </span>
+            </div>
+            <p className="text-[11px] text-[#786F66] dark:text-[#94A3B8]">
+              202 Trades Analyzed · 0.01 Lot is +$7.99 profitable! Abnormal lot sizes &amp; 4+ trade days caused all losses.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTabChange?.('self_check');
+          }}
+          className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-[#D97706] text-white text-xs font-bold shadow-xs hover:bg-[#B45309] transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
+        >
+          <span>Open Self Check</span>
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
       {/* ======================================================== */}
       {/* 1. TOP ROW: 5 KPI Metric Cards with TradeZella Visual Gauges */}
       {/* ======================================================== */}

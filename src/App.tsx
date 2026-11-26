@@ -21,6 +21,7 @@ const NHCycleView = lazy(() => import('./components/NHCycleView').then((m) => ({
 const EquityChart = lazy(() => import('./components/EquityChart').then((m) => ({ default: m.EquityChart })));
 const AnalyticsView = lazy(() => import('./components/AnalyticsView').then((m) => ({ default: m.AnalyticsView })));
 const NotesView = lazy(() => import('./components/NotesView').then((m) => ({ default: m.NotesView })));
+const SelfCheckView = lazy(() => import('./components/SelfCheckView').then((m) => ({ default: m.SelfCheckView })));
 const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
 const EconomicCalendarView = lazy(() => import('./components/EconomicCalendarView').then((m) => ({ default: m.EconomicCalendarView })));
 const QuickTradeModal = lazy(() => import('./components/QuickTradeModal').then((m) => ({ default: m.QuickTradeModal })));
@@ -333,6 +334,14 @@ function AppInner() {
           )}
 
           <Suspense fallback={<TabSkeleton />}>
+            {currentTab === 'self_check' && (
+              <SelfCheckView
+                trades={trades}
+                settings={settings}
+                onTabChange={setCurrentTab}
+              />
+            )}
+
             {currentTab === 'journal' && (
               <JournalView
                 trades={trades}
