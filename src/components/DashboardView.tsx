@@ -20,7 +20,6 @@ import { defaultSettings, type Trade, type DayRecord, type AppSettings } from '.
 import type { TabType } from './Navbar';
 import { calculatePerformance, generateEquityCurve } from '../utils/TradingEngine';
 import { settingsApi } from '../lib/api/settingsApi';
-import { TradeZellaDashboardView } from './TradeZellaDashboardView';
 
 interface DashboardViewProps {
   trades?: Trade[];
@@ -71,13 +70,6 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   const [isEditStartedOpen, setIsEditStartedOpen] = useState(false);
   const [startedInput, setStartedInput] = useState<string>('');
   const [isSavingStarted, setIsSavingStarted] = useState(false);
-  const [dashboardLayout, setDashboardLayout] = useState<'zella' | 'classic'>(() => {
-    try {
-      return (localStorage.getItem('tradeflow_dashboard_layout') as 'zella' | 'classic') || 'zella';
-    } catch {
-      return 'zella';
-    }
-  });
 
   const [equityTab, setEquityTab] = useState<'$ P&L' | 'R-Multiple' | '% Return' | 'Drawdown'>('$ P&L');
   const [timeframe, setTimeframe] = useState<'7D' | '30D' | '90D' | '6M' | '1Y' | 'ALL'>('ALL');
@@ -794,8 +786,8 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   return (
     <div className="space-y-4 animate-fade-in pb-12 text-[#1F1A16] dark:text-[#F0F4F8] font-sans selection:bg-[#DB9F35]/30 transition-colors">
       
-      {/* 1. Greeting Banner & Layout Switcher */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1 pb-1">
+      {/* 1. Greeting Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 pb-1">
         <div className="flex items-center gap-3">
           <span className="text-3xl select-none" role="img" aria-label="Waving hand">
             👋
@@ -810,59 +802,15 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
           </div>
         </div>
 
-        {/* View Switcher: Option B (TradeZella Pro vs Classic) */}
-        <div className="flex items-center gap-2.5 self-start md:self-auto">
-          <div className="flex items-center bg-[#FAF2E6] dark:bg-[#1C2433] p-1 rounded-xl border border-[#E7E0D6] dark:border-[#2E384D] shadow-2xs">
-            <button
-              type="button"
-              onClick={() => {
-                setDashboardLayout('zella');
-                try {
-                  localStorage.setItem('tradeflow_dashboard_layout', 'zella');
-                } catch {}
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                dashboardLayout === 'zella'
-                  ? 'bg-[#D97706] text-white shadow-xs font-black'
-                  : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
-              }`}
-            >
-              <span>⚡ TradeZella Pro</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDashboardLayout('classic');
-                try {
-                  localStorage.setItem('tradeflow_dashboard_layout', 'classic');
-                } catch {}
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                dashboardLayout === 'classic'
-                  ? 'bg-[#D97706] text-white shadow-xs font-black'
-                  : 'text-[#786F66] dark:text-[#94A3B8] hover:text-[#1F1A16] dark:hover:text-[#F0F4F8]'
-              }`}
-            >
-              <span>📊 Classic View</span>
-            </button>
-          </div>
+        <div className="text-right hidden sm:block">
+          <p className="text-xs text-[#786F66] dark:text-[#94A3B8] italic font-serif leading-snug">
+            “Better decisions today, stronger results tomorrow.”
+          </p>
+          <span className="text-[10px] font-bold text-[#786F66] dark:text-[#94A3B8] tracking-wider block uppercase mt-0.5">
+            — TradeFlow
+          </span>
         </div>
       </div>
-
-      {dashboardLayout === 'zella' ? (
-        <TradeZellaDashboardView
-          trades={trades}
-          days={days}
-          settings={settings}
-          onSelectDate={onSelectDate}
-          onTabChange={onTabChange}
-          onOpenQuickTrade={_onOpenQuickTrade}
-          userId={userId}
-          onSettingsUpdated={onSettingsUpdated}
-          selectedDate={selectedDate}
-        />
-      ) : (
-        <>
 
       {/* 2. Today's Trading Status Card (Dynamic on Daily Vantage Trade Basis) */}
       <div className="bg-[#FAF6EE] dark:bg-[#131822] border border-[#E7E0D6] dark:border-[#242D3D] rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4 transition-colors">
@@ -2454,8 +2402,6 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
           Last updated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
       </footer>
-        </>
-      )}
 
       {/* Quick Edit Started Balance Modal */}
       {isEditStartedOpen && (

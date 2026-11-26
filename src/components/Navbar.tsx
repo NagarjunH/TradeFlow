@@ -14,7 +14,7 @@ import {
 import type { DayStatus } from '../utils/TradingEngine';
 import type { AppSettings } from '../db/db';
 
-export type TabType = 'dashboard' | 'journal' | 'rules' | 'cycle' | 'analytics' | 'calendar' | 'notes' | 'settings' | 'self_check';
+export type TabType = 'dashboard' | 'journal' | 'rules' | 'cycle' | 'analytics' | 'calendar' | 'notes' | 'settings';
 
 interface NavbarProps {
   currentTab: TabType;

@@ -7,7 +7,6 @@ import {
   Globe,
   FileText,
   Settings as SettingsIcon,
-  ShieldAlert,
   X
 } from 'lucide-react';
 import type { TabType } from './Navbar';
@@ -27,7 +26,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 }) => {
   const navItems = [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'self_check' as TabType, label: 'Self Check', icon: ShieldAlert, badge: 'AUDIT' },
     { id: 'journal' as TabType, label: 'Trading Journal', icon: BookOpen },
     { id: 'cycle' as TabType, label: '31-Day Cycle', icon: CalendarCheck },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart2 },
@@ -42,8 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   };
 
   const prefetchTab = (tabId: TabType) => {
-    if (tabId === 'self_check') import('./SelfCheckView');
-    else if (tabId === 'cycle') import('./NHCycleView');
+    if (tabId === 'cycle') import('./NHCycleView');
     else if (tabId === 'journal') import('./JournalView');
     else if (tabId === 'analytics') import('./AnalyticsView');
     else if (tabId === 'calendar') import('./EconomicCalendarView');
@@ -114,12 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                     isActive ? 'text-[#10B981]' : 'text-[#6E5845] dark:text-[#78869E]'
                   }`}
                 />
-                <span className="truncate flex-1">{item.label}</span>
-                {item.badge && (
-                  <span className="text-[9px] font-black font-mono px-1.5 py-0.5 rounded bg-[#D97706] text-white shadow-2xs shrink-0">
-                    {item.badge}
-                  </span>
-                )}
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}
